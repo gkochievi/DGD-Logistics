@@ -1,0 +1,387 @@
+from rest_framework import generics, status, permissions
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.contrib.auth import get_user_model
+from django.db.models import Count, Sum, Avg, F, Q
+from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
+from django.utils import timezone
+from datetime import timedelta
+
+from .serializers import (
+    RegisterSerializer, UserSerializer, ProfileUpdateSerializer,
+    ChangePasswordSerializer, AdminUserSerializer, AdminCreateUserSerializer,
+)
+from .permissions import IsAdmin
+
+User = get_user_model()
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Include user role and name in token response."""
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        data['user'] = UserSerializer(self.user).data
+        return data
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
+
+class RegisterView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = RegisterSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'user': UserSerializer(user).data,
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        }, status=status.HTTP_201_CREATED)
+
+
+class LogoutView(APIView):
+    def post(self, request):
+        try:
+            refresh_token = request.data.get('refresh')
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            return Response(status=status.HTTP_205_RESET_CONTENT)
+        except Exception:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+
+class ProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserSerializer
+
+    def get_object(self):
+        return self.request.user
+
+    def get_serializer_class(self):
+        if self.request.method in ('PUT', 'PATCH'):
+            return ProfileUpdateSerializer
+        return UserSerializer
+
+
+class ChangePasswordView(APIView):
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        request.user.set_password(serializer.validated_data['new_password'])
+        request.user.save()
+        return Response({'detail': 'Password updated successfully.'})
+
+
+class ProfileStatsView(APIView):
+    def get(self, request):
+        user = request.user
+        orders = user.orders.all()
+        return Response({
+            'total_orders': orders.count(),
+            'active_orders': orders.filter(
+                status__in=['new', 'under_review', 'approved', 'in_progress']
+            ).count(),
+            'completed_orders': orders.filter(status='completed').count(),
+            'cancelled_orders': orders.filter(status='cancelled').count(),
+        })
+
+
+# --- Admin views ---
+
+class AdminUserListView(generics.ListAPIView):
+    serializer_class = AdminUserSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    filterset_fields = ['role', 'is_active']
+    search_fields = ['email', 'first_name', 'last_name', 'phone_number']
+    ordering_fields = ['created_at', 'email', 'first_name']
+
+    def get_queryset(self):
+        return User.objects.annotate(order_count=Count('orders'))
+
+
+class AdminUserCreateView(generics.CreateAPIView):
+    serializer_class = AdminCreateUserSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+
+class AdminUserDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = AdminUserSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    queryset = User.objects.annotate(order_count=Count('orders'))
+
+
+class AdminDashboardStatsView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        from orders.models import Order
+        users = User.objects.all()
+        orders = Order.objects.all()
+        return Response({
+            'total_users': users.count(),
+            'active_users': users.filter(is_active=True).count(),
+            'new_orders': orders.filter(status='new').count(),
+            'active_orders': orders.filter(
+                status__in=['under_review', 'approved', 'in_progress']
+            ).count(),
+            'completed_orders': orders.filter(status='completed').count(),
+            'rejected_orders': orders.filter(status='rejected').count(),
+            'total_orders': orders.count(),
+        })
+
+
+class AdminAnalyticsView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        from orders.models import Order
+        from vehicles.models import Vehicle
+        from categories.models import TransportCategory
+
+        now = timezone.now()
+        today = now.date()
+        days_param = int(request.query_params.get('days', 30))
+        start_date = today - timedelta(days=days_param)
+
+        orders = Order.objects.all()
+        period_orders = orders.filter(created_at__date__gte=start_date)
+
+        # ── Daily order counts (last N days) ──
+        daily_orders = (
+            period_orders
+            .annotate(date=TruncDate('created_at'))
+            .values('date')
+            .annotate(
+                total=Count('id'),
+                completed=Count('id', filter=Q(status='completed')),
+                cancelled=Count('id', filter=Q(status='cancelled')),
+                rejected=Count('id', filter=Q(status='rejected')),
+            )
+            .order_by('date')
+        )
+        daily_list = []
+        for d in daily_orders:
+            daily_list.append({
+                'date': d['date'].isoformat(),
+                'total': d['total'],
+                'completed': d['completed'],
+                'cancelled': d['cancelled'],
+                'rejected': d['rejected'],
+            })
+
+        # ── Weekly order counts (last 12 weeks) ──
+        week_start = today - timedelta(weeks=12)
+        weekly_orders = (
+            orders.filter(created_at__date__gte=week_start)
+            .annotate(week=TruncWeek('created_at'))
+            .values('week')
+            .annotate(
+                total=Count('id'),
+                completed=Count('id', filter=Q(status='completed')),
+            )
+            .order_by('week')
+        )
+        weekly_list = [
+            {'week': w['week'].isoformat(), 'total': w['total'], 'completed': w['completed']}
+            for w in weekly_orders
+        ]
+
+        # ── Monthly order counts (last 12 months) ──
+        month_start = today - timedelta(days=365)
+        monthly_orders = (
+            orders.filter(created_at__date__gte=month_start)
+            .annotate(month=TruncMonth('created_at'))
+            .values('month')
+            .annotate(
+                total=Count('id'),
+                completed=Count('id', filter=Q(status='completed')),
+            )
+            .order_by('month')
+        )
+        monthly_list = [
+            {'month': m['month'].strftime('%Y-%m'), 'total': m['total'], 'completed': m['completed']}
+            for m in monthly_orders
+        ]
+
+        # ── Orders by category ──
+        by_category = (
+            period_orders
+            .filter(selected_category__isnull=False)
+            .values(name=F('selected_category__name'), color=F('selected_category__color'))
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+
+        # ── Orders by status (all time) ──
+        by_status = (
+            orders.values('status')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+
+        # ── Orders by urgency ──
+        by_urgency = (
+            period_orders.values('urgency')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+
+        # ── Vehicle fleet stats ──
+        vehicles = Vehicle.objects.all()
+        fleet_by_status = (
+            vehicles.values('status')
+            .annotate(count=Count('id'))
+        )
+        fleet_by_category = (
+            vehicles.filter(is_active=True)
+            .values(cat_name=F('category__name'), color=F('category__color'))
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+        fleet_by_category = [
+            {'name': f['cat_name'], 'color': f['color'], 'count': f['count']}
+            for f in fleet_by_category
+        ]
+
+        # ── Income / pricing analytics ──
+        # Estimated revenue from completed orders with assigned vehicles
+        completed_with_vehicle = orders.filter(
+            status='completed',
+            assigned_vehicle__isnull=False,
+        )
+        total_revenue_hourly = completed_with_vehicle.aggregate(
+            total=Sum('assigned_vehicle__price_per_hour')
+        )['total'] or 0
+
+        avg_price_per_hour = vehicles.filter(
+            is_active=True, price_per_hour__isnull=False
+        ).aggregate(avg=Avg('price_per_hour'))['avg'] or 0
+
+        avg_price_per_km = vehicles.filter(
+            is_active=True, price_per_km__isnull=False
+        ).aggregate(avg=Avg('price_per_km'))['avg'] or 0
+
+        # Revenue by category (estimated hourly rate per completed order)
+        revenue_by_category = (
+            completed_with_vehicle
+            .filter(assigned_vehicle__price_per_hour__isnull=False)
+            .values(name=F('selected_category__name'), color=F('selected_category__color'))
+            .annotate(
+                orders=Count('id'),
+                revenue=Sum('assigned_vehicle__price_per_hour'),
+            )
+            .order_by('-revenue')
+        )
+
+        # Daily revenue trend
+        daily_revenue = (
+            completed_with_vehicle
+            .filter(
+                assigned_vehicle__price_per_hour__isnull=False,
+                created_at__date__gte=start_date,
+            )
+            .annotate(date=TruncDate('created_at'))
+            .values('date')
+            .annotate(revenue=Sum('assigned_vehicle__price_per_hour'))
+            .order_by('date')
+        )
+        daily_revenue_list = [
+            {'date': d['date'].isoformat(), 'revenue': float(d['revenue'])}
+            for d in daily_revenue
+        ]
+
+        # ── Period comparison ──
+        prev_start = start_date - timedelta(days=days_param)
+        current_count = period_orders.count()
+        prev_count = orders.filter(
+            created_at__date__gte=prev_start,
+            created_at__date__lt=start_date,
+        ).count()
+        current_completed = period_orders.filter(status='completed').count()
+        prev_completed = orders.filter(
+            created_at__date__gte=prev_start,
+            created_at__date__lt=start_date,
+            status='completed',
+        ).count()
+
+        # ── Today's stats ──
+        today_orders = orders.filter(created_at__date=today).count()
+        this_week_orders = orders.filter(
+            created_at__date__gte=today - timedelta(days=today.weekday())
+        ).count()
+        this_month_orders = orders.filter(
+            created_at__date__year=today.year,
+            created_at__date__month=today.month,
+        ).count()
+
+        # ── New users trend ──
+        new_users_daily = (
+            User.objects.filter(created_at__date__gte=start_date)
+            .annotate(date=TruncDate('created_at'))
+            .values('date')
+            .annotate(count=Count('id'))
+            .order_by('date')
+        )
+        new_users_list = [
+            {'date': d['date'].isoformat(), 'count': d['count']}
+            for d in new_users_daily
+        ]
+
+        # ── Users by type (personal vs company) ──
+        all_users = User.objects.filter(role='customer')
+        users_by_type = list(
+            all_users.values('user_type')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+        total_personal = all_users.filter(user_type='personal').count()
+        total_company = all_users.filter(user_type='company').count()
+
+        # Orders by user type
+        orders_by_user_type = list(
+            period_orders
+            .values(user_type=F('user__user_type'))
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+
+        return Response({
+            'period_days': days_param,
+            'today_orders': today_orders,
+            'this_week_orders': this_week_orders,
+            'this_month_orders': this_month_orders,
+            'daily_orders': daily_list,
+            'weekly_orders': weekly_list,
+            'monthly_orders': monthly_list,
+            'by_category': list(by_category),
+            'by_status': list(by_status),
+            'by_urgency': list(by_urgency),
+            'fleet_by_status': list(fleet_by_status),
+            'fleet_by_category': list(fleet_by_category),
+            'revenue': {
+                'total_estimated': float(total_revenue_hourly),
+                'avg_price_per_hour': round(float(avg_price_per_hour), 2),
+                'avg_price_per_km': round(float(avg_price_per_km), 2),
+                'by_category': list(revenue_by_category),
+                'daily_trend': daily_revenue_list,
+            },
+            'comparison': {
+                'current_orders': current_count,
+                'previous_orders': prev_count,
+                'current_completed': current_completed,
+                'previous_completed': prev_completed,
+            },
+            'new_users_daily': new_users_list,
+            'users_by_type': users_by_type,
+            'total_personal_users': total_personal,
+            'total_company_users': total_company,
+            'orders_by_user_type': orders_by_user_type,
+        })

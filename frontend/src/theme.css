@@ -1,0 +1,236 @@
+/* ─── Light theme (default) ─── */
+:root,
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fc;
+  --bg-tertiary: #f1f3f9;
+  --bg-elevated: #ffffff;
+  --card-bg: #ffffff;
+  --text-primary: #1a1d2e;
+  --text-secondary: #5a5f7a;
+  --text-tertiary: #8e93ab;
+  --text-placeholder: #b4b8cc;
+  --border-color: #e8eaf2;
+  --border-light: #f0f1f7;
+  --shadow-sm: 0 1px 3px rgba(99,102,241,0.04), 0 1px 2px rgba(0,0,0,0.03);
+  --shadow-md: 0 4px 12px rgba(99,102,241,0.06), 0 2px 4px rgba(0,0,0,0.03);
+  --shadow-lg: 0 8px 28px rgba(99,102,241,0.08), 0 4px 8px rgba(0,0,0,0.03);
+  --shadow-xl: 0 16px 48px rgba(99,102,241,0.12), 0 8px 16px rgba(0,0,0,0.04);
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --accent-dark: #4f46e5;
+  --accent-bg: rgba(99,102,241,0.08);
+  --accent-bg-strong: rgba(99,102,241,0.14);
+  --stats-bg: #f8f9fc;
+  --header-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #7c3aed 100%);
+  --header-gradient-soft: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+  --overlay-bg: rgba(0,0,0,0.03);
+  --tab-bar-bg: rgba(255,255,255,0.92);
+  --tab-bar-border: rgba(232,234,242,0.8);
+  --tab-bar-shadow: 0 -4px 20px rgba(99,102,241,0.06);
+  --icon-bg-alpha: 12;
+  --input-bg: #f8f9fc;
+  --input-border: #e8eaf2;
+  --input-focus: #6366f1;
+  --badge-muted-bg: #f1f3f9;
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --info-color: #3b82f6;
+  --glass-bg: rgba(255,255,255,0.7);
+  --glass-border: rgba(255,255,255,0.5);
+  --glass-shadow: 0 8px 32px rgba(99,102,241,0.08);
+  --card-hover-shadow: 0 8px 24px rgba(99,102,241,0.1);
+  --card-active-shadow: 0 2px 8px rgba(99,102,241,0.08);
+  --fab-shadow: 0 6px 20px rgba(99,102,241,0.3);
+  --fab-gradient: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+  --skeleton-base: #e8eaf2;
+  --skeleton-shine: #f1f3f9;
+}
+
+/* ─── Dark theme ─── */
+[data-theme="dark"] {
+  --bg-primary: #0f1117;
+  --bg-secondary: #151823;
+  --bg-tertiary: #1a1e2e;
+  --bg-elevated: #1e2235;
+  --card-bg: #1e2235;
+  --text-primary: #e8eaf2;
+  --text-secondary: #a0a5bf;
+  --text-tertiary: #6b7094;
+  --text-placeholder: #4a4f6a;
+  --border-color: #2a2e42;
+  --border-light: #232738;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.25);
+  --shadow-lg: 0 8px 28px rgba(0,0,0,0.3);
+  --shadow-xl: 0 16px 48px rgba(0,0,0,0.35);
+  --accent: #818cf8;
+  --accent-light: #a5b4fc;
+  --accent-dark: #6366f1;
+  --accent-bg: rgba(129,140,248,0.12);
+  --accent-bg-strong: rgba(129,140,248,0.2);
+  --stats-bg: #1a1e2e;
+  --header-gradient: linear-gradient(135deg, #4f46e5 0%, #3730a3 50%, #6d28d9 100%);
+  --header-gradient-soft: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  --overlay-bg: rgba(255,255,255,0.03);
+  --tab-bar-bg: rgba(21,24,35,0.95);
+  --tab-bar-border: rgba(42,46,66,0.8);
+  --tab-bar-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+  --icon-bg-alpha: 18;
+  --input-bg: #1a1e2e;
+  --input-border: #2a2e42;
+  --input-focus: #818cf8;
+  --badge-muted-bg: #1a1e2e;
+  --danger-bg: #2c1215;
+  --danger-border: #5c2223;
+  --success-color: #34d399;
+  --warning-color: #fbbf24;
+  --info-color: #60a5fa;
+  --glass-bg: rgba(30,34,53,0.8);
+  --glass-border: rgba(42,46,66,0.6);
+  --glass-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  --card-hover-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  --card-active-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  --fab-shadow: 0 6px 20px rgba(99,102,241,0.4);
+  --fab-gradient: linear-gradient(135deg, #818cf8 0%, #6d28d9 100%);
+  --skeleton-base: #2a2e42;
+  --skeleton-shine: #1a1e2e;
+}
+
+/* ─── Global styles ─── */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: background 0.3s ease, color 0.3s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Smooth scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-placeholder);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #2a2e42;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #3a3e52;
+}
+
+/* ─── Utility animations ─── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out;
+}
+
+/* ─── Glassmorphism helper ─── */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+}
+
+/* ─── Card interaction ─── */
+.card-interactive {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--card-hover-shadow);
+}
+.card-interactive:active {
+  transform: translateY(0);
+  box-shadow: var(--card-active-shadow);
+}
+
+/* ─── App background helpers ─── */
+.app-bg {
+  background: var(--bg-secondary);
+}
+.app-bg-alt {
+  background: var(--bg-tertiary);
+}
+
+/* ─── Override Ant Design inputs for consistency ─── */
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-select-selector,
+.ant-picker {
+  transition: all 0.2s ease !important;
+}
+
+.ant-input:focus,
+.ant-input-affix-wrapper:focus,
+.ant-input-affix-wrapper-focused {
+  border-color: var(--input-focus) !important;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.1) !important;
+}
+
+[data-theme="dark"] .ant-input:focus,
+[data-theme="dark"] .ant-input-affix-wrapper:focus,
+[data-theme="dark"] .ant-input-affix-wrapper-focused {
+  box-shadow: 0 0 0 3px rgba(129,140,248,0.15) !important;
+}
