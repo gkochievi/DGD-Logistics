@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { Form, Input, Button, Select, DatePicker, TimePicker, Upload, Typography, message, Empty, Spin } from 'antd';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Form, Input, Button, Select, DatePicker, TimePicker, Upload, message, Spin } from 'antd';
 import {
-  ArrowLeftOutlined, RocketOutlined, EnvironmentOutlined,
+  ArrowLeftOutlined, EnvironmentOutlined,
   CalendarOutlined, UserOutlined, PhoneOutlined, CameraOutlined,
   CheckCircleOutlined, BulbOutlined, CloseOutlined, SearchOutlined,
-  SwapRightOutlined,
+  SwapRightOutlined, ClockCircleOutlined, InboxOutlined,
+  PlusOutlined, DeleteOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -13,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLang } from '../../contexts/LanguageContext';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 import MapPicker from '../../components/map/MapPicker';
+import LocationAutocomplete from '../../components/common/LocationAutocomplete';
 
 const { TextArea } = Input;
 
@@ -23,40 +25,42 @@ export default function NewOrderFlow() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  // Steps: 0=category, 1=vehicle, 2=details, 3=confirm
+  // Two steps: 0=form, 1=confirm
   const [step, setStep] = useState(0);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [vehicles, setVehicles] = useState([]);
-  const [selectedVehicle, setSelectedVehicle] = useState(null);
-  const [vehiclesLoading, setVehiclesLoading] = useState(false);
   const [suggestion, setSuggestion] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fileList, setFileList] = useState([]);
   const [formValues, setFormValues] = useState({});
   const [catSearch, setCatSearch] = useState('');
-  const [pickupCoords, setPickupCoords] = useState(null);
-  const [destCoords, setDestCoords] = useState(null);
-  const [showPickupMap, setShowPickupMap] = useState(false);
-  const [showDestMap, setShowDestMap] = useState(false);
+  const [showAllCategories, setShowAllCategories] = useState(false);
+
+  // Multi-stop route state
+  const [pickupStops, setPickupStops] = useState([{ text: '', coords: null }]);
+  const [destStops, setDestStops] = useState([{ text: '', coords: null }]);
+  const [activeStop, setActiveStop] = useState({ type: 'pickup', index: 0 });
+  const [totalDistance, setTotalDistance] = useState(null);
+  const [distanceLoading, setDistanceLoading] = useState(false);
+  const distanceTimerRef = useRef(null);
 
   const needsDest = selectedCategory?.requires_destination;
 
-  // Pre-fill from landing page location search
+  // Pre-fill from landing page
   useEffect(() => {
     const state = location.state;
     if (state) {
       if (state.pickup) {
-        form.setFieldsValue({ pickup_location: state.pickup.text || state.pickup.address || '' });
-        if (state.pickup.lat && state.pickup.lng) {
-          setPickupCoords({ lat: state.pickup.lat, lng: state.pickup.lng });
-        }
+        const text = state.pickup.text || state.pickup.address || '';
+        const coords = (state.pickup.lat && state.pickup.lng) ? { lat: state.pickup.lat, lng: state.pickup.lng } : null;
+        form.setFieldsValue({ pickup_location: text });
+        setPickupStops([{ text, coords }]);
       }
       if (state.destination) {
-        form.setFieldsValue({ destination_location: state.destination.text || state.destination.address || '' });
-        if (state.destination.lat && state.destination.lng) {
-          setDestCoords({ lat: state.destination.lat, lng: state.destination.lng });
-        }
+        const text = state.destination.text || state.destination.address || '';
+        const coords = (state.destination.lat && state.destination.lng) ? { lat: state.destination.lat, lng: state.destination.lng } : null;
+        form.setFieldsValue({ destination_location: text });
+        setDestStops([{ text, coords }]);
       }
     }
   }, [location.state]); // eslint-disable-line
@@ -70,41 +74,18 @@ export default function NewOrderFlow() {
         const found = cats.find((c) => String(c.id) === catId);
         if (found) {
           setSelectedCategory(found);
-          setStep(1);
-          fetchVehicles(found.id);
         }
       }
     });
   }, [searchParams]); // eslint-disable-line
 
-  const fetchVehicles = (categoryId) => {
-    setVehiclesLoading(true);
-    api.get(`/vehicles/?category=${categoryId}`).then(({ data }) => {
-      const list = Array.isArray(data) ? data : data.results || [];
-      setVehicles(list);
-    }).catch(() => setVehicles([]))
-      .finally(() => setVehiclesLoading(false));
-  };
-
   const handleCategorySelect = (cat) => {
     setSelectedCategory(cat);
-    setSelectedVehicle(null);
     form.setFieldsValue({
       selected_category: cat.id,
       contact_name: form.getFieldValue('contact_name') || `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
       contact_phone: form.getFieldValue('contact_phone') || user?.phone_number || '',
     });
-    fetchVehicles(cat.id);
-    setStep(1);
-  };
-
-  const handleVehicleSelect = (v) => {
-    setSelectedVehicle(selectedVehicle?.id === v.id ? null : v);
-  };
-
-  const skipVehicle = () => {
-    setSelectedVehicle(null);
-    setStep(2);
   };
 
   const handleDescriptionBlur = async () => {
@@ -127,10 +108,15 @@ export default function NewOrderFlow() {
   };
 
   const goToConfirm = async () => {
+    if (!selectedCategory) {
+      message.warning(t('newOrder.pleaseSelectCategory'));
+      return;
+    }
     try {
       const values = await form.validateFields();
       setFormValues(values);
-      setStep(3);
+      setStep(1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch { /* validation errors shown */ }
   };
 
@@ -139,18 +125,48 @@ export default function NewOrderFlow() {
     try {
       const values = formValues;
       const fd = new FormData();
-      fd.append('selected_category', selectedCategory.id);
-      fd.append('pickup_location', values.pickup_location);
-      if (pickupCoords) { fd.append('pickup_lat', pickupCoords.lat); fd.append('pickup_lng', pickupCoords.lng); }
-      fd.append('destination_location', values.destination_location || '');
-      if (destCoords) { fd.append('destination_lat', destCoords.lat); fd.append('destination_lng', destCoords.lng); }
+      if (selectedCategory.id !== 'admin_decide') {
+        fd.append('selected_category', selectedCategory.id);
+      }
+      // Primary pickup (first stop)
+      fd.append('pickup_location', pickupStops[0]?.text || values.pickup_location);
+      if (pickupStops[0]?.coords) {
+        fd.append('pickup_lat', pickupStops[0].coords.lat);
+        fd.append('pickup_lng', pickupStops[0].coords.lng);
+      }
+      // Primary destination (first stop)
+      fd.append('destination_location', destStops[0]?.text || values.destination_location || '');
+      if (destStops[0]?.coords) {
+        fd.append('destination_lat', destStops[0].coords.lat);
+        fd.append('destination_lng', destStops[0].coords.lng);
+      }
+      // All stops as JSON
+      const routeStopsData = {
+        pickups: pickupStops.filter(s => s.text).map(s => ({
+          address: s.text,
+          lat: s.coords?.lat || null,
+          lng: s.coords?.lng || null,
+        })),
+        destinations: destStops.filter(s => s.text).map(s => ({
+          address: s.text,
+          lat: s.coords?.lat || null,
+          lng: s.coords?.lng || null,
+        })),
+        distance: totalDistance?.distance || null,
+        duration: totalDistance?.duration || null,
+      };
+      fd.append('route_stops', JSON.stringify(routeStopsData));
       fd.append('requested_date', values.requested_date.format('YYYY-MM-DD'));
       if (values.requested_time) fd.append('requested_time', values.requested_time.format('HH:mm'));
       fd.append('contact_name', values.contact_name);
       fd.append('contact_phone', values.contact_phone);
       fd.append('description', values.description);
-      fd.append('cargo_details', values.cargo_details || '');
-      fd.append('urgency', values.urgency || 'normal');
+      const cargoParts = [];
+      if (values.cargo_length || values.cargo_width || values.cargo_height) {
+        cargoParts.push(`${values.cargo_length || '-'} × ${values.cargo_width || '-'} × ${values.cargo_height || '-'} cm`);
+      }
+      if (values.cargo_weight) cargoParts.push(`${values.cargo_weight} kg`);
+      fd.append('cargo_details', cargoParts.join(', '));
       fd.append('user_note', values.user_note || '');
       if (suggestion?.id) fd.append('suggested_category', suggestion.id);
       fileList.forEach((f) => fd.append('images', f.originFileObj));
@@ -167,245 +183,630 @@ export default function NewOrderFlow() {
     } finally { setLoading(false); }
   };
 
+  // ── Multi-stop helpers ──
+  const updateStop = (type, index, updates) => {
+    const setter = type === 'pickup' ? setPickupStops : setDestStops;
+    setter(prev => prev.map((s, i) => i === index ? { ...s, ...updates } : s));
+    // Sync first stop with form fields for validation
+    if (index === 0 && updates.text !== undefined) {
+      const field = type === 'pickup' ? 'pickup_location' : 'destination_location';
+      form.setFieldsValue({ [field]: updates.text });
+    }
+  };
+
+  const addStop = (type) => {
+    const setter = type === 'pickup' ? setPickupStops : setDestStops;
+    setter(prev => [...prev, { text: '', coords: null }]);
+    const list = type === 'pickup' ? pickupStops : destStops;
+    setActiveStop({ type, index: list.length });
+  };
+
+  const removeStop = (type, index) => {
+    const setter = type === 'pickup' ? setPickupStops : setDestStops;
+    setter(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      return next.length === 0 ? [{ text: '', coords: null }] : next;
+    });
+    // Fix active stop index
+    if (activeStop.type === type) {
+      if (activeStop.index >= index && activeStop.index > 0) {
+        setActiveStop({ type, index: activeStop.index - 1 });
+      }
+    }
+    // Re-sync first stop with form
+    if (index === 0) {
+      const list = type === 'pickup' ? pickupStops : destStops;
+      const newFirst = list[1] || { text: '' };
+      const field = type === 'pickup' ? 'pickup_location' : 'destination_location';
+      form.setFieldsValue({ [field]: newFirst.text });
+    }
+  };
+
+  // ── Distance calculation via OSRM ──
+  const calculateDistance = useCallback(async () => {
+    const allStops = [
+      ...pickupStops.filter(s => s.coords),
+      ...destStops.filter(s => s.coords),
+    ];
+    if (allStops.length < 2) {
+      setTotalDistance(null);
+      return;
+    }
+    setDistanceLoading(true);
+    try {
+      const coords = allStops.map(s => `${s.coords.lng},${s.coords.lat}`).join(';');
+      const res = await fetch(
+        `https://router.project-osrm.org/route/v1/driving/${coords}?overview=false`
+      );
+      const data = await res.json();
+      if (data.code === 'Ok' && data.routes?.[0]) {
+        setTotalDistance({
+          distance: data.routes[0].distance,
+          duration: data.routes[0].duration,
+        });
+      } else {
+        setTotalDistance(null);
+      }
+    } catch {
+      setTotalDistance(null);
+    } finally {
+      setDistanceLoading(false);
+    }
+  }, [pickupStops, destStops]);
+
+  // Recalculate distance when stops change (debounced)
+  useEffect(() => {
+    if (distanceTimerRef.current) clearTimeout(distanceTimerRef.current);
+    distanceTimerRef.current = setTimeout(calculateDistance, 800);
+    return () => clearTimeout(distanceTimerRef.current);
+  }, [calculateDistance]);
+
+  // Active stop helpers for map
+  const activeStopData = activeStop.type === 'pickup'
+    ? pickupStops[activeStop.index]
+    : destStops[activeStop.index];
+  const activePosition = activeStopData?.coords
+    ? [activeStopData.coords.lat, activeStopData.coords.lng]
+    : null;
+
+  // Build extra markers for map (all stops except the active one)
+  const extraMarkers = [
+    ...pickupStops.map((s, i) => ({ stop: s, color: 'green', type: 'pickup', index: i })),
+    ...destStops.filter(() => needsDest).map((s, i) => ({ stop: s, color: 'red', type: 'dest', index: i })),
+  ]
+    .filter(m => m.stop.coords && !(m.type === activeStop.type && m.index === activeStop.index))
+    .map(m => ({ position: [m.stop.coords.lat, m.stop.coords.lng], color: m.color }));
+
+  const formatDistance = (meters) => {
+    if (meters >= 1000) return `${(meters / 1000).toFixed(1)} ${t('newOrder.km')}`;
+    return `${Math.round(meters)} m`;
+  };
+
+  const formatDuration = (seconds) => {
+    if (seconds >= 3600) {
+      const hrs = Math.floor(seconds / 3600);
+      const mins = Math.round((seconds % 3600) / 60);
+      return `${hrs} ${t('newOrder.hr')} ${mins} ${t('newOrder.min')}`;
+    }
+    return `${Math.round(seconds / 60)} ${t('newOrder.min')}`;
+  };
+
+  const filteredCategories = categories.filter(
+    (c) => !catSearch || c.name.toLowerCase().includes(catSearch.toLowerCase()) || c.description?.toLowerCase().includes(catSearch.toLowerCase())
+  );
+
   const inputStyle = { height: 50, borderRadius: 14, fontSize: 15 };
 
-  const stepLabels = [
-    t('newOrder.selectService'),
-    t('newOrder.chooseVehicle'),
-    t('newOrder.orderDetails'),
-    t('newOrder.confirmOrder'),
-  ];
-
-  // ─── STEP 0: SELECT CATEGORY ───
+  // ─── STEP 0: SINGLE-PAGE ORDER FORM ───
   if (step === 0) {
     return (
-      <div style={{ minHeight: '100vh' }} className="app-bg">
-        <AppHeader title={t('newOrder.selectService')} onBack={() => navigate('/app')} />
-        <StepIndicator current={0} labels={stepLabels} />
-        <div style={{ padding: '8px 20px 24px' }}>
+      <div style={{ minHeight: '100vh', paddingBottom: 100 }} className="app-bg">
+        {/* Header */}
+        <div style={{
+          background: 'var(--header-gradient)',
+          padding: '0 0 28px',
+          borderRadius: '0 0 24px 24px',
+          position: 'relative',
+        }}>
           <div style={{
-            fontSize: 15, color: 'var(--text-secondary)', marginBottom: 14,
-            fontWeight: 500, letterSpacing: -0.1,
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '14px 16px', paddingTop: 'calc(14px + env(safe-area-inset-top, 0px))',
           }}>
-            {t('newOrder.whatService')}
+            <div onClick={() => navigate('/app')} style={{
+              width: 38, height: 38, borderRadius: 12, display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', fontSize: 16, color: '#fff',
+              background: 'rgba(255,255,255,0.18)',
+              WebkitTapHighlightColor: 'transparent',
+            }}>
+              <ArrowLeftOutlined />
+            </div>
+            <div style={{ flex: 1, fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: -0.3 }}>
+              {t('nav.newOrder')}
+            </div>
           </div>
-          <Input
-            prefix={<SearchOutlined style={{ color: 'var(--text-placeholder)' }} />}
-            placeholder={t('newOrder.searchService')}
-            value={catSearch}
-            onChange={(e) => setCatSearch(e.target.value)}
-            allowClear
-            style={{
-              marginBottom: 16, borderRadius: 14, height: 46,
-              background: 'var(--input-bg)',
-            }}
-          />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-            {categories
-              .filter((c) => !catSearch || c.name.toLowerCase().includes(catSearch.toLowerCase()) || c.description?.toLowerCase().includes(catSearch.toLowerCase()))
-              .map((cat, idx) => {
-                const color = cat.color || 'var(--accent)';
+
+          {/* Step indicator - minimal */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '0 24px', marginTop: 4,
+          }}>
+            <StepPill active label={`1. ${t('newOrder.orderDetails')}`} />
+            <div style={{ width: 20, height: 2, background: 'rgba(255,255,255,0.3)', borderRadius: 1 }} />
+            <StepPill label={`2. ${t('newOrder.confirmOrder')}`} />
+          </div>
+        </div>
+
+        <Form form={form} layout="vertical" requiredMark={false}
+          initialValues={{ selected_category: selectedCategory?.id }}>
+
+          {/* ── SECTION: Transport Type (Category pills) ── */}
+          <FormSection
+            icon={<InboxOutlined />}
+            title={t('newOrder.selectService')}
+            subtitle={t('newOrder.whatService')}
+            first
+          >
+            {/* Search bar for categories */}
+            {categories.length > 6 && (
+              <Input
+                prefix={<SearchOutlined style={{ color: 'var(--text-placeholder)' }} />}
+                placeholder={t('newOrder.searchService')}
+                value={catSearch}
+                onChange={(e) => setCatSearch(e.target.value)}
+                allowClear
+                style={{
+                  marginBottom: 12, borderRadius: 12, height: 42,
+                  background: 'var(--input-bg)', fontSize: 14,
+                }}
+              />
+            )}
+
+            {/* Category pills — single row scroll, expand on "Show All" */}
+            <div style={{
+              display: 'flex',
+              flexWrap: showAllCategories ? 'wrap' : 'nowrap',
+              gap: 8,
+              overflowX: showAllCategories ? 'visible' : 'auto',
+              paddingBottom: showAllCategories ? 0 : 4,
+              scrollSnapType: showAllCategories ? 'none' : 'x mandatory',
+              WebkitOverflowScrolling: 'touch',
+              msOverflowStyle: 'none', scrollbarWidth: 'none',
+            }}>
+              {/* "Not sure" option — let admin decide */}
+              {!catSearch && (() => {
+                const isActive = selectedCategory?.id === 'admin_decide';
                 return (
-                  <div key={cat.id} onClick={() => handleCategorySelect(cat)}
+                  <div
+                    onClick={() => {
+                      setSelectedCategory({ id: 'admin_decide', name: t('newOrder.adminWillDecide'), icon: 'question', color: 'var(--text-tertiary)', requires_destination: true });
+                      form.setFieldsValue({
+                        selected_category: null,
+                        contact_name: form.getFieldValue('contact_name') || `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
+                        contact_phone: form.getFieldValue('contact_phone') || user?.phone_number || '',
+                      });
+                    }}
                     className="card-interactive"
                     style={{
-                      borderRadius: 16, padding: '16px 8px 14px', cursor: 'pointer',
-                      border: '1px solid var(--border-color)',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-                      WebkitTapHighlightColor: 'transparent', background: 'var(--card-bg)',
-                      boxShadow: 'var(--shadow-sm)',
-                      animation: `fadeInUp 0.4s ease-out ${idx * 0.03}s both`,
-                    }}>
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '10px 16px', borderRadius: 14, cursor: 'pointer',
+                      flexShrink: 0, scrollSnapAlign: 'start',
+                      background: isActive ? 'var(--accent-bg)' : 'var(--card-bg)',
+                      border: isActive ? '2px solid var(--accent)' : '1px dashed var(--border-color)',
+                      boxShadow: isActive ? '0 0 0 3px var(--accent-bg)' : 'none',
+                      transition: 'all 0.2s ease',
+                      WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
                     <div style={{
-                      width: 50, height: 50, borderRadius: 15,
-                      background: `${color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 24, color,
-                      transition: 'transform 0.2s ease',
+                      width: 36, height: 36, borderRadius: 10,
+                      background: isActive ? 'var(--accent-bg)' : 'var(--bg-tertiary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 16, color: isActive ? 'var(--accent)' : 'var(--text-tertiary)',
+                    }}>?</div>
+                    <div style={{
+                      fontSize: 13, fontWeight: isActive ? 700 : 500,
+                      color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                      lineHeight: 1.2, whiteSpace: 'nowrap',
+                    }}>
+                      {t('newOrder.notSure')}
+                    </div>
+                  </div>
+                );
+              })()}
+              {(showAllCategories ? filteredCategories : filteredCategories).map((cat) => {
+                const isActive = selectedCategory?.id === cat.id;
+                const color = cat.color || 'var(--accent)';
+                return (
+                  <div
+                    key={cat.id}
+                    onClick={() => handleCategorySelect(cat)}
+                    className="card-interactive"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '10px 16px', borderRadius: 14, cursor: 'pointer',
+                      flexShrink: 0, scrollSnapAlign: 'start',
+                      background: isActive ? `${color}14` : 'var(--card-bg)',
+                      border: isActive ? `2px solid ${color}` : '1px solid var(--border-color)',
+                      boxShadow: isActive ? `0 0 0 3px ${color}10` : 'var(--shadow-xs)',
+                      transition: 'all 0.2s ease',
+                      WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: isActive ? `${color}20` : `${color}0a`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 18, color: isActive ? color : 'var(--text-secondary)',
+                      transition: 'all 0.2s ease',
                     }}>
                       {getCategoryIcon(cat.icon)}
                     </div>
-                    <div style={{
-                      fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
-                      textAlign: 'center', lineHeight: 1.3,
-                      overflow: 'hidden', display: '-webkit-box',
-                      WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                    }}>
-                      {cat.name}
-                    </div>
-                    {cat.requires_destination && (
+                    <div>
                       <div style={{
-                        fontSize: 9, color: 'var(--text-tertiary)',
-                        display: 'flex', alignItems: 'center', gap: 3,
-                        background: 'var(--badge-muted-bg)',
-                        padding: '2px 6px', borderRadius: 4,
+                        fontSize: 13, fontWeight: isActive ? 700 : 500,
+                        color: isActive ? color : 'var(--text-primary)',
+                        lineHeight: 1.2, whiteSpace: showAllCategories ? 'normal' : 'nowrap',
                       }}>
-                        <SwapRightOutlined /> {t('newOrder.transportBadge')}
+                        {cat.name}
+                      </div>
+                      {cat.requires_destination && (
+                        <div style={{
+                          fontSize: 10, color: 'var(--text-tertiary)',
+                          display: 'flex', alignItems: 'center', gap: 2, marginTop: 2,
+                        }}>
+                          <SwapRightOutlined style={{ fontSize: 10 }} /> {t('newOrder.transportBadge')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {filteredCategories.length > 4 && (
+              <div
+                onClick={() => setShowAllCategories(!showAllCategories)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  marginTop: 10, padding: '8px 0', borderRadius: 10, cursor: 'pointer',
+                  background: 'var(--bg-tertiary)',
+                  fontSize: 13, fontWeight: 600, color: 'var(--accent)',
+                  transition: 'background 0.2s',
+                }}
+              >
+                {showAllCategories ? t('newOrder.showLess') : `${t('newOrder.showAll')} (${filteredCategories.length})`}
+              </div>
+            )}
+          </FormSection>
+
+          {/* ── SECTION: Route (Multi-stop Origin / Destination) ── */}
+          <FormSection
+            icon={<EnvironmentOutlined />}
+            title={needsDest ? t('newOrder.fromTo') : t('newOrder.workLocation')}
+          >
+            {/* Location inputs card */}
+            <div style={{
+              background: 'var(--card-bg)', borderRadius: 16, padding: 16,
+              border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)',
+              marginBottom: 12,
+            }}>
+              {/* ── Pickup stops ── */}
+              {pickupStops.map((stop, idx) => (
+                <div key={`pickup-${idx}`}>
+                  <div
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      background: activeStop.type === 'pickup' && activeStop.index === idx
+                        ? 'var(--accent-bg)' : 'transparent',
+                      borderRadius: 10, padding: '2px 0',
+                      transition: 'background 0.2s ease',
+                    }}
+                    onClick={() => setActiveStop({ type: 'pickup', index: idx })}
+                  >
+                    <div style={{
+                      width: 10, height: 10, borderRadius: '50%',
+                      background: needsDest ? 'var(--success-color)' : 'var(--accent)',
+                      flexShrink: 0,
+                      boxShadow: `0 0 0 3px ${needsDest ? '#10b98120' : 'var(--accent-bg)'}`,
+                    }} />
+                    {idx === 0 ? (
+                      <Form.Item name="pickup_location" style={{ flex: 1, marginBottom: 0 }}
+                        rules={[{ required: true, message: needsDest ? t('newOrder.enterPickup') : t('newOrder.enterWork') }]}>
+                        <LocationAutocomplete
+                          value={stop.text}
+                          onChange={(val) => updateStop('pickup', idx, { text: val })}
+                          onSelect={({ address, lat, lng }) => {
+                            updateStop('pickup', idx, { text: address, coords: { lat, lng } });
+                          }}
+                          placeholder={needsDest
+                            ? (pickupStops.length > 1 ? `${t('newOrder.pickupFrom')} #${idx + 1}` : t('newOrder.pickupFrom'))
+                            : t('newOrder.workSiteAddress')}
+                          prefix={null}
+                          countryCode="ge"
+                          style={{ flex: 1 }}
+                        />
+                      </Form.Item>
+                    ) : (
+                      <LocationAutocomplete
+                        value={stop.text}
+                        onChange={(val) => updateStop('pickup', idx, { text: val })}
+                        onSelect={({ address, lat, lng }) => {
+                          updateStop('pickup', idx, { text: address, coords: { lat, lng } });
+                        }}
+                        placeholder={`${t('newOrder.pickupFrom')} #${idx + 1}`}
+                        prefix={null}
+                        countryCode="ge"
+                        style={{ flex: 1 }}
+                      />
+                    )}
+                    {pickupStops.length > 1 && (
+                      <div
+                        onClick={(e) => { e.stopPropagation(); removeStop('pickup', idx); }}
+                        style={{
+                          width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          cursor: 'pointer', color: 'var(--text-tertiary)',
+                          background: 'var(--bg-tertiary)', transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <DeleteOutlined style={{ fontSize: 12 }} />
                       </div>
                     )}
                   </div>
-                );
-              })}
-          </div>
-        </div>
-      </div>
-    );
-  }
+                  {/* Dashed connector */}
+                  {(idx < pickupStops.length - 1 || needsDest) && (
+                    <div style={{ paddingLeft: 3, margin: '2px 0' }}>
+                      <div style={{
+                        width: 4, height: idx < pickupStops.length - 1 ? 16 : 24,
+                        borderLeft: '2px dashed var(--border-color)',
+                        marginLeft: 2,
+                      }} />
+                    </div>
+                  )}
+                </div>
+              ))}
 
-  // ─── STEP 1: SELECT VEHICLE ───
-  if (step === 1) {
-    const catColor = selectedCategory?.color || 'var(--accent)';
-    return (
-      <div style={{ minHeight: '100vh', paddingBottom: 90 }} className="app-bg">
-        <AppHeader
-          title={t('newOrder.chooseVehicle')}
-          onBack={() => { setStep(0); setCatSearch(''); }}
-          right={
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              background: `${catColor}14`, padding: '5px 12px', borderRadius: 10,
-              fontSize: 12, color: catColor, fontWeight: 600,
-            }}>
-              {getCategoryIcon(selectedCategory?.icon)}
-              <span style={{ maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {selectedCategory?.name}
-              </span>
-            </div>
-          }
-        />
-        <StepIndicator current={1} labels={stepLabels} />
-        <div style={{ padding: '8px 20px 24px' }}>
-          <div style={{
-            fontSize: 15, color: 'var(--text-secondary)', marginBottom: 16,
-            fontWeight: 500, letterSpacing: -0.1,
-          }}>
-            {t('newOrder.availableVehicles')} <strong>{selectedCategory?.name}</strong>
-          </div>
+              {/* Add pickup button */}
+              <div
+                onClick={() => addStop('pickup')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 0 4px', cursor: 'pointer',
+                  color: 'var(--accent)', fontSize: 12, fontWeight: 600,
+                  marginLeft: 20,
+                }}
+              >
+                <PlusOutlined style={{ fontSize: 11 }} />
+                {t('newOrder.addPickupStop')}
+              </div>
 
-          {vehiclesLoading ? (
-            <div style={{ textAlign: 'center', padding: 50 }}><Spin size="large" /></div>
-          ) : vehicles.length === 0 ? (
-            <div style={{
-              textAlign: 'center', padding: '40px 20px',
-              background: 'var(--card-bg)', borderRadius: 16,
-              border: '1px solid var(--border-color)',
-            }}>
-              <Empty description={t('newOrder.noVehicles')} />
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {vehicles.map((v, idx) => {
-                const isSelected = selectedVehicle?.id === v.id;
-                return (
-                  <div key={v.id} onClick={() => handleVehicleSelect(v)}
-                    className="card-interactive"
+              {/* ── Separator between pickup and destination ── */}
+              {needsDest && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  margin: '8px 0', paddingLeft: 3,
+                }}>
+                  <SwapRightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 14 }} />
+                  <div style={{ flex: 1, height: 1, background: 'var(--border-color)' }} />
+                </div>
+              )}
+
+              {/* ── Destination stops ── */}
+              {needsDest && destStops.map((stop, idx) => (
+                <div key={`dest-${idx}`}>
+                  <div
                     style={{
-                      background: 'var(--card-bg)', borderRadius: 16, padding: '16px',
-                      border: isSelected ? `2px solid ${catColor}` : '1px solid var(--border-color)',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14,
-                      boxShadow: isSelected ? `0 0 0 3px ${catColor}18` : 'var(--shadow-sm)',
-                      animation: `fadeInUp 0.4s ease-out ${idx * 0.05}s both`,
-                      transition: 'all 0.2s ease',
-                    }}>
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      background: activeStop.type === 'dest' && activeStop.index === idx
+                        ? '#ef44440a' : 'transparent',
+                      borderRadius: 10, padding: '2px 0',
+                      transition: 'background 0.2s ease',
+                    }}
+                    onClick={() => setActiveStop({ type: 'dest', index: idx })}
+                  >
                     <div style={{
-                      width: 52, height: 52, borderRadius: 14,
-                      background: `${catColor}12`, display: 'flex',
-                      alignItems: 'center', justifyContent: 'center',
-                      fontSize: 24, color: catColor, flexShrink: 0,
-                    }}>
-                      {getCategoryIcon(selectedCategory?.icon)}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontSize: 15, fontWeight: 600, color: 'var(--text-primary)',
-                        letterSpacing: -0.1,
-                      }}>
-                        {v.name}
+                      width: 10, height: 10, borderRadius: '50%',
+                      background: '#ef4444', flexShrink: 0,
+                      boxShadow: '0 0 0 3px #ef444420',
+                    }} />
+                    {idx === 0 ? (
+                      <Form.Item name="destination_location" style={{ flex: 1, marginBottom: 0 }}
+                        rules={[{ required: true, message: t('newOrder.enterDestination') }]}>
+                        <LocationAutocomplete
+                          value={stop.text}
+                          onChange={(val) => updateStop('dest', idx, { text: val })}
+                          onSelect={({ address, lat, lng }) => {
+                            updateStop('dest', idx, { text: address, coords: { lat, lng } });
+                          }}
+                          placeholder={destStops.length > 1 ? `${t('newOrder.destinationTo')} #${idx + 1}` : t('newOrder.destinationTo')}
+                          prefix={null}
+                          countryCode="ge"
+                          style={{ flex: 1 }}
+                        />
+                      </Form.Item>
+                    ) : (
+                      <LocationAutocomplete
+                        value={stop.text}
+                        onChange={(val) => updateStop('dest', idx, { text: val })}
+                        onSelect={({ address, lat, lng }) => {
+                          updateStop('dest', idx, { text: address, coords: { lat, lng } });
+                        }}
+                        placeholder={`${t('newOrder.destinationTo')} #${idx + 1}`}
+                        prefix={null}
+                        countryCode="ge"
+                        style={{ flex: 1 }}
+                      />
+                    )}
+                    {destStops.length > 1 && (
+                      <div
+                        onClick={(e) => { e.stopPropagation(); removeStop('dest', idx); }}
+                        style={{
+                          width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          cursor: 'pointer', color: 'var(--text-tertiary)',
+                          background: 'var(--bg-tertiary)', transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <DeleteOutlined style={{ fontSize: 12 }} />
                       </div>
-                      <div style={{
-                        fontSize: 12, color: 'var(--text-secondary)', marginTop: 3,
-                        lineHeight: 1.3,
-                      }}>
-                        {v.capacity}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      {v.price_per_hour && (
-                        <div style={{
-                          fontSize: 18, fontWeight: 800, color: catColor,
-                          letterSpacing: -0.5,
-                        }}>
-                          ${v.price_per_hour}
-                        </div>
-                      )}
-                      <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 500 }}>
-                        {t('common.perHour')}
-                      </div>
-                    </div>
+                    )}
                   </div>
-                );
-              })}
+                  {/* Dashed connector between dest stops */}
+                  {idx < destStops.length - 1 && (
+                    <div style={{ paddingLeft: 3, margin: '2px 0' }}>
+                      <div style={{
+                        width: 4, height: 16,
+                        borderLeft: '2px dashed #ef444440',
+                        marginLeft: 2,
+                      }} />
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Add destination button */}
+              {needsDest && (
+                <div
+                  onClick={() => addStop('dest')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '8px 0 4px', cursor: 'pointer',
+                    color: '#ef4444', fontSize: 12, fontWeight: 600,
+                    marginLeft: 20,
+                  }}
+                >
+                  <PlusOutlined style={{ fontSize: 11 }} />
+                  {t('newOrder.addDestStop')}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Sticky bottom: skip or continue */}
-        <StickyBottom>
-          {selectedVehicle ? (
-            <Button block type="primary" onClick={() => setStep(2)}
-              style={{
-                height: 52, borderRadius: 14, fontSize: 16, fontWeight: 700,
-                background: 'var(--fab-gradient)', border: 'none',
-                boxShadow: '0 4px 14px rgba(0,184,86,0.3)',
-                letterSpacing: -0.2,
+            {/* ── Distance display ── */}
+            {totalDistance && (
+              <div style={{
+                background: 'var(--accent-bg)', borderRadius: 12, padding: '10px 14px',
+                marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12,
+                border: '1px solid var(--accent-bg-strong)',
+                animation: 'fadeInUp 0.3s ease-out both',
               }}>
-              {t('common.continue')} →
-            </Button>
-          ) : (
-            <Button block onClick={skipVehicle}
-              style={{
-                height: 52, borderRadius: 14, fontSize: 16, fontWeight: 700,
-                background: 'var(--fab-gradient)', border: 'none',
-                color: '#fff',
-                boxShadow: '0 4px 14px rgba(0,184,86,0.3)',
-                letterSpacing: -0.2,
+                <SwapRightOutlined style={{ color: 'var(--accent)', fontSize: 16 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {formatDistance(totalDistance.distance)}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                    ~ {formatDuration(totalDistance.duration)}
+                  </div>
+                </div>
+                {distanceLoading && <Spin size="small" />}
+              </div>
+            )}
+            {distanceLoading && !totalDistance && (
+              <div style={{
+                textAlign: 'center', padding: '8px 0', fontSize: 12,
+                color: 'var(--text-tertiary)',
               }}>
-              ✨ {t('newOrder.skipChoose')}
-            </Button>
-          )}
-        </StickyBottom>
-      </div>
-    );
-  }
+                <Spin size="small" style={{ marginRight: 8 }} />
+                {t('newOrder.calculating')}
+              </div>
+            )}
 
-  // ─── STEP 2: ENTER DETAILS ───
-  if (step === 2) {
-    return (
-      <div style={{ minHeight: '100vh', paddingBottom: 100 }} className="app-bg">
-        <AppHeader
-          title={t('newOrder.orderDetails')}
-          onBack={() => setStep(1)}
-          right={
+            {/* ── Map tab pills ── */}
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              background: `${selectedCategory?.color || 'var(--accent)'}14`,
-              padding: '5px 12px', borderRadius: 10,
-              fontSize: 12, color: selectedCategory?.color || 'var(--accent)', fontWeight: 600,
+              display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap',
             }}>
-              {getCategoryIcon(selectedCategory?.icon)}
-              <span style={{ maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {selectedCategory?.name}
-              </span>
+              {pickupStops.map((_, idx) => (
+                <button
+                  key={`pickup-tab-${idx}`}
+                  onClick={() => setActiveStop({ type: 'pickup', index: idx })}
+                  style={{
+                    padding: '5px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                    border: 'none', cursor: 'pointer',
+                    background: activeStop.type === 'pickup' && activeStop.index === idx
+                      ? 'var(--accent)' : 'var(--bg-tertiary)',
+                    color: activeStop.type === 'pickup' && activeStop.index === idx
+                      ? '#fff' : 'var(--text-secondary)',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <EnvironmentOutlined style={{ marginRight: 3, fontSize: 10 }} />
+                  {needsDest
+                    ? (pickupStops.length > 1 ? `${t('newOrder.pickupMap')} ${idx + 1}` : t('newOrder.pickupMap'))
+                    : (pickupStops.length > 1 ? `${t('newOrder.locationMap')} ${idx + 1}` : t('newOrder.locationMap'))
+                  }
+                </button>
+              ))}
+              {needsDest && destStops.map((_, idx) => (
+                <button
+                  key={`dest-tab-${idx}`}
+                  onClick={() => setActiveStop({ type: 'dest', index: idx })}
+                  style={{
+                    padding: '5px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                    border: 'none', cursor: 'pointer',
+                    background: activeStop.type === 'dest' && activeStop.index === idx
+                      ? '#ef4444' : 'var(--bg-tertiary)',
+                    color: activeStop.type === 'dest' && activeStop.index === idx
+                      ? '#fff' : 'var(--text-secondary)',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <EnvironmentOutlined style={{ marginRight: 3, fontSize: 10 }} />
+                  {destStops.length > 1 ? `${t('newOrder.destinationMap')} ${idx + 1}` : t('newOrder.destinationMap')}
+                </button>
+              ))}
             </div>
-          }
-        />
-        <StepIndicator current={2} labels={stepLabels} />
 
-        <div style={{ padding: '8px 20px 24px' }}>
-          <Form form={form} layout="vertical" requiredMark={false}
-            initialValues={{ urgency: 'normal', selected_category: selectedCategory?.id }}>
+            <div style={{ borderRadius: 14, overflow: 'hidden' }}>
+              <MapPicker
+                position={activePosition}
+                onSelect={({ lat, lng, address }) => {
+                  updateStop(activeStop.type === 'dest' ? 'dest' : 'pickup', activeStop.index, {
+                    text: address,
+                    coords: { lat, lng },
+                  });
+                }}
+                height={220}
+                markerColor={activeStop.type === 'dest' ? 'red' : 'green'}
+                placeholder={
+                  activeStop.type === 'dest'
+                    ? t('newOrder.tapDestination')
+                    : (needsDest ? t('newOrder.tapPickup') : t('newOrder.tapLocation'))
+                }
+                extraMarkers={extraMarkers}
+              />
+            </div>
+          </FormSection>
 
-            <SectionLabel text={t('newOrder.whatDone')} />
-            <Form.Item name="description" rules={[{ required: true, message: t('newOrder.describeJob') }]}>
+          {/* ── SECTION: Date & Time ── */}
+          <FormSection icon={<CalendarOutlined />} title={t('newOrder.when')}>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Form.Item name="requested_date" style={{ flex: 1, marginBottom: 0 }}
+                rules={[{ required: true, message: t('newOrder.selectDate') }]}>
+                <DatePicker
+                  style={{ width: '100%', height: 50, borderRadius: 14, fontSize: 15 }}
+                  placeholder={t('newOrder.selectDate')}
+                  disabledDate={(d) => d && d < dayjs().startOf('day')}
+                  inputReadOnly suffixIcon={<CalendarOutlined />}
+                />
+              </Form.Item>
+              <Form.Item name="requested_time" style={{ flex: 1, marginBottom: 0 }}>
+                <TimePicker
+                  format="HH:mm"
+                  style={{ width: '100%', height: 50, borderRadius: 14, fontSize: 15 }}
+                  placeholder={t('newOrder.preferredTime')}
+                  inputReadOnly suffixIcon={<ClockCircleOutlined />}
+                />
+              </Form.Item>
+            </div>
+          </FormSection>
+
+          {/* ── SECTION: Description & Cargo ── */}
+          <FormSection
+            icon={<SearchOutlined />}
+            title={t('newOrder.whatDone')}
+          >
+            <Form.Item name="description" rules={[{ required: true, message: t('newOrder.describeJob') }]}
+              style={{ marginBottom: 12 }}>
               <TextArea rows={3} placeholder={t('newOrder.describeNeed')} onBlur={handleDescriptionBlur}
                 style={{ borderRadius: 14, fontSize: 15, padding: '12px 14px' }} />
             </Form.Item>
@@ -413,7 +814,7 @@ export default function NewOrderFlow() {
             {suggestion && (
               <div style={{
                 background: 'var(--accent-bg)', borderRadius: 14, padding: '12px 14px',
-                marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10,
+                marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10,
                 border: '1px solid var(--accent-bg-strong)',
                 animation: 'fadeInUp 0.3s ease-out both',
               }}>
@@ -430,96 +831,73 @@ export default function NewOrderFlow() {
               </div>
             )}
 
-            <Form.Item name="cargo_details">
-              <TextArea rows={2} placeholder={t('newOrder.cargoDetails')}
-                style={{ borderRadius: 14, fontSize: 15, padding: '12px 14px' }} />
-            </Form.Item>
-            <Form.Item name="urgency">
-              <Select options={[
-                { value: 'low', label: t('urgency.low') },
-                { value: 'normal', label: t('urgency.normal') },
-                { value: 'high', label: t('urgency.high') },
-                { value: 'urgent', label: t('urgency.urgent') },
-              ]} style={{ width: '100%' }} size="large" />
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <Form.Item name="cargo_length" style={{ flex: 1, marginBottom: 0 }}>
+                <Input placeholder={t('newOrder.length')} suffix={t('newOrder.cm')}
+                  inputMode="decimal" style={{ borderRadius: 14, fontSize: 15, height: 46 }} />
+              </Form.Item>
+              <Form.Item name="cargo_width" style={{ flex: 1, marginBottom: 0 }}>
+                <Input placeholder={t('newOrder.width')} suffix={t('newOrder.cm')}
+                  inputMode="decimal" style={{ borderRadius: 14, fontSize: 15, height: 46 }} />
+              </Form.Item>
+              <Form.Item name="cargo_height" style={{ flex: 1, marginBottom: 0 }}>
+                <Input placeholder={t('newOrder.height')} suffix={t('newOrder.cm')}
+                  inputMode="decimal" style={{ borderRadius: 14, fontSize: 15, height: 46 }} />
+              </Form.Item>
+            </div>
+            <Form.Item name="cargo_weight" style={{ marginBottom: 12 }}>
+              <Input placeholder={t('newOrder.weight')} suffix={t('newOrder.kg')}
+                inputMode="decimal" style={{ borderRadius: 14, fontSize: 15, height: 46 }} />
             </Form.Item>
 
-            {/* Location section */}
-            <SectionLabel text={needsDest ? t('newOrder.fromTo') : t('newOrder.workLocation')} />
+          </FormSection>
 
-            <Form.Item name="pickup_location" rules={[{ required: true, message: needsDest ? t('newOrder.enterPickup') : t('newOrder.enterWork') }]}>
-              <Input
-                prefix={<EnvironmentOutlined style={{ color: needsDest ? 'var(--success-color)' : 'var(--accent)' }} />}
-                placeholder={needsDest ? t('newOrder.pickupFrom') : t('newOrder.workSiteAddress')}
-                style={inputStyle}
-                suffix={
-                  <span onClick={() => setShowPickupMap(!showPickupMap)}
-                    style={{ color: 'var(--accent)', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap', fontWeight: 500 }}>
-                    {showPickupMap ? t('newOrder.hide') : t('newOrder.map')}
-                  </span>
-                }
-              />
-            </Form.Item>
-            {showPickupMap && (
-              <div style={{ marginBottom: 16, marginTop: -8, borderRadius: 14, overflow: 'hidden' }}>
-                <MapPicker
-                  position={pickupCoords ? [pickupCoords.lat, pickupCoords.lng] : null}
-                  onSelect={({ lat, lng, address }) => { setPickupCoords({ lat, lng }); form.setFieldsValue({ pickup_location: address }); }}
-                  height={180} markerColor="green"
-                  placeholder={needsDest ? t('newOrder.tapPickup') : t('newOrder.tapLocation')}
-                />
+          {/* ── SECTION: Contact ── */}
+          <FormSection icon={<UserOutlined />} title={t('newOrder.contactPerson')}
+            extra={
+              <div
+                onClick={() => {
+                  const name = `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+                  form.setFieldsValue({
+                    contact_name: name,
+                    contact_phone: user?.phone_number || '',
+                  });
+                }}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '4px 12px', borderRadius: 20,
+                  background: 'var(--accent)', color: '#fff',
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  letterSpacing: 0.2,
+                  transition: 'opacity 0.2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              >
+                <UserOutlined style={{ fontSize: 11 }} />
+                {t('newOrder.fillMe')}
               </div>
-            )}
-
-            {needsDest && (
-              <>
-                <Form.Item name="destination_location" rules={[{ required: true, message: t('newOrder.enterDestination') }]}>
-                  <Input
-                    prefix={<EnvironmentOutlined style={{ color: '#ef4444' }} />}
-                    placeholder={t('newOrder.destinationTo')}
-                    style={inputStyle}
-                    suffix={
-                      <span onClick={() => setShowDestMap(!showDestMap)}
-                        style={{ color: 'var(--accent)', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap', fontWeight: 500 }}>
-                        {showDestMap ? t('newOrder.hide') : t('newOrder.map')}
-                      </span>
-                    }
-                  />
-                </Form.Item>
-                {showDestMap && (
-                  <div style={{ marginBottom: 16, marginTop: -8, borderRadius: 14, overflow: 'hidden' }}>
-                    <MapPicker
-                      position={destCoords ? [destCoords.lat, destCoords.lng] : null}
-                      onSelect={({ lat, lng, address }) => { setDestCoords({ lat, lng }); form.setFieldsValue({ destination_location: address }); }}
-                      height={180} markerColor="red" placeholder={t('newOrder.tapDestination')}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-
-            <SectionLabel text={t('newOrder.when')} />
-            <Form.Item name="requested_date" rules={[{ required: true, message: t('newOrder.selectDate') }]}>
-              <DatePicker style={{ width: '100%', ...inputStyle }} placeholder={t('newOrder.selectDate')}
-                disabledDate={(d) => d && d < dayjs().startOf('day')} inputReadOnly suffixIcon={<CalendarOutlined />} />
+            }
+          >
+            <Form.Item name="contact_name" rules={[{ required: true, message: t('newOrder.enterContact') }]}
+              style={{ marginBottom: 12 }}>
+              <Input prefix={<UserOutlined style={{ color: 'var(--text-placeholder)' }} />}
+                placeholder={t('newOrder.fullName')} autoComplete="name" style={inputStyle} />
             </Form.Item>
-            <Form.Item name="requested_time">
-              <TimePicker format="HH:mm" style={{ width: '100%', ...inputStyle }} placeholder={t('newOrder.preferredTime')} inputReadOnly />
+            <Form.Item name="contact_phone" rules={[{ required: true, message: t('newOrder.enterPhone') }]}
+              style={{ marginBottom: 0 }}>
+              <Input prefix={<PhoneOutlined style={{ color: 'var(--text-placeholder)' }} />}
+                placeholder={t('auth.phone')} inputMode="tel" autoComplete="tel" style={inputStyle} />
             </Form.Item>
+          </FormSection>
 
-            <SectionLabel text={t('newOrder.contactPerson')} />
-            <Form.Item name="contact_name" rules={[{ required: true, message: t('newOrder.enterContact') }]}>
-              <Input prefix={<UserOutlined style={{ color: 'var(--text-placeholder)' }} />} placeholder={t('newOrder.fullName')} autoComplete="name" style={inputStyle} />
-            </Form.Item>
-            <Form.Item name="contact_phone" rules={[{ required: true, message: t('newOrder.enterPhone') }]}>
-              <Input prefix={<PhoneOutlined style={{ color: 'var(--text-placeholder)' }} />} placeholder={t('auth.phone')} inputMode="tel" autoComplete="tel" style={inputStyle} />
-            </Form.Item>
-
-            <SectionLabel text={t('newOrder.additional')} />
-            <Form.Item name="user_note">
+          {/* ── SECTION: Additional ── */}
+          <FormSection icon={<CameraOutlined />} title={t('newOrder.additional')} last>
+            <Form.Item name="user_note" style={{ marginBottom: 12 }}>
               <TextArea rows={2} placeholder={t('newOrder.notesForUs')}
                 style={{ borderRadius: 14, fontSize: 15, padding: '12px 14px' }} />
             </Form.Item>
-            <Form.Item>
+            <Form.Item style={{ marginBottom: 0 }}>
               <Upload listType="picture" fileList={fileList} onChange={({ fileList: fl }) => setFileList(fl)}
                 beforeUpload={() => false} multiple accept="image/*">
                 <Button icon={<CameraOutlined />}
@@ -532,29 +910,60 @@ export default function NewOrderFlow() {
                 </Button>
               </Upload>
             </Form.Item>
-          </Form>
-        </div>
+          </FormSection>
+        </Form>
 
+        {/* Sticky CTA */}
         <StickyBottom>
           <Button type="primary" block onClick={goToConfirm}
             style={{
-              height: 52, borderRadius: 14, fontSize: 16, fontWeight: 600,
+              height: 54, borderRadius: 14, fontSize: 16, fontWeight: 700,
               background: 'var(--fab-gradient)', border: 'none',
-              boxShadow: 'var(--fab-shadow)',
+              boxShadow: 'var(--fab-shadow)', letterSpacing: -0.2,
             }}>
-            {t('newOrder.reviewOrder')}
+            {t('newOrder.reviewOrder')} →
           </Button>
         </StickyBottom>
       </div>
     );
   }
 
-  // ─── STEP 3: CONFIRM ───
+  // ─── STEP 1: CONFIRM ───
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: 100 }} className="app-bg">
-      <AppHeader title={t('newOrder.confirmOrder')} onBack={() => setStep(2)} />
-      <StepIndicator current={3} labels={stepLabels} />
-      <div style={{ padding: '8px 20px 24px' }}>
+    <div style={{ minHeight: '100vh', paddingBottom: 40 }} className="app-bg">
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '14px 16px', paddingTop: 'calc(14px + env(safe-area-inset-top, 0px))',
+        background: 'var(--glass-bg)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderBottom: '1px solid var(--glass-border)',
+        position: 'sticky', top: 0, zIndex: 50,
+      }}>
+        <div onClick={() => setStep(0)} style={{
+          width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', fontSize: 16, color: 'var(--text-primary)', WebkitTapHighlightColor: 'transparent',
+          background: 'var(--bg-tertiary)',
+        }}>
+          <ArrowLeftOutlined />
+        </div>
+        <div style={{ flex: 1, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: -0.2 }}>
+          {t('newOrder.confirmOrder')}
+        </div>
+      </div>
+
+      {/* Step indicator */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '14px 24px 6px',
+      }}>
+        <StepPill done label={`1. ${t('newOrder.orderDetails')}`} />
+        <div style={{ width: 20, height: 2, background: 'var(--accent)', borderRadius: 1 }} />
+        <StepPill active label={`2. ${t('newOrder.confirmOrder')}`} />
+      </div>
+
+      <div style={{ padding: '12px 20px 24px' }}>
         {/* Confirm header */}
         <div style={{
           textAlign: 'center', marginBottom: 20,
@@ -569,8 +978,7 @@ export default function NewOrderFlow() {
             <CheckCircleOutlined />
           </div>
           <div style={{
-            fontSize: 17, fontWeight: 700, color: 'var(--text-primary)',
-            letterSpacing: -0.2,
+            fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: -0.2,
           }}>
             {t('newOrder.confirmOrder')}
           </div>
@@ -581,54 +989,78 @@ export default function NewOrderFlow() {
 
         <ConfirmCard delay={0.05}>
           <ConfirmRow label={t('newOrder.serviceType')} value={selectedCategory?.name} />
-          {selectedVehicle && <ConfirmRow label={t('newOrder.vehicle')} value={`${selectedVehicle.name} \u2014 $${selectedVehicle.price_per_hour}/hr`} />}
-          <ConfirmRow label={t('adminOrders.urgencyLabel')} value={t('urgency.' + (formValues.urgency || 'normal'))} />
         </ConfirmCard>
 
         <ConfirmCard delay={0.1}>
           <ConfirmRow label={t('orders.description')} value={formValues.description} />
-          {formValues.cargo_details && <ConfirmRow label={t('newOrder.cargoDetails')} value={formValues.cargo_details} />}
+          {(formValues.cargo_length || formValues.cargo_width || formValues.cargo_height) && (
+            <ConfirmRow label={t('newOrder.dimensions')} value={`${formValues.cargo_length || '-'} × ${formValues.cargo_width || '-'} × ${formValues.cargo_height || '-'} ${t('newOrder.cm')}`} />
+          )}
+          {formValues.cargo_weight && (
+            <ConfirmRow label={t('newOrder.weight')} value={`${formValues.cargo_weight} ${t('newOrder.kg')}`} />
+          )}
         </ConfirmCard>
 
         <ConfirmCard delay={0.15}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 8,
-              background: needsDest ? '#10b98114' : 'var(--accent-bg)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}>
-              <EnvironmentOutlined style={{
-                color: needsDest ? 'var(--success-color)' : 'var(--accent)',
-                fontSize: 13,
-              }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 500 }}>
-                {needsDest ? t('orders.pickup') : t('orders.location')}
+          {/* All pickup stops */}
+          {pickupStops.filter(s => s.text).map((stop, idx) => (
+            <div key={`confirm-pickup-${idx}`} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: 8,
+                background: needsDest ? '#10b98114' : 'var(--accent-bg)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <EnvironmentOutlined style={{
+                  color: needsDest ? 'var(--success-color)' : 'var(--accent)', fontSize: 13,
+                }} />
               </div>
-              <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, marginTop: 1 }}>
-                {formValues.pickup_location}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 500 }}>
+                  {needsDest
+                    ? (pickupStops.filter(s => s.text).length > 1 ? `${t('orders.pickup')} ${idx + 1}` : t('orders.pickup'))
+                    : t('orders.location')}
+                </div>
+                <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, marginTop: 1 }}>
+                  {stop.text}
+                </div>
               </div>
             </div>
-          </div>
-          {needsDest && formValues.destination_location && (
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          ))}
+
+          {/* All destination stops */}
+          {needsDest && destStops.filter(s => s.text).map((stop, idx) => (
+            <div key={`confirm-dest-${idx}`} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: idx < destStops.filter(s => s.text).length - 1 ? 10 : 0 }}>
               <div style={{
                 width: 28, height: 28, borderRadius: 8,
                 background: '#ef444414',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
               }}>
                 <EnvironmentOutlined style={{ color: '#ef4444', fontSize: 13 }} />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 500 }}>
-                  {t('orders.destination')}
+                  {destStops.filter(s => s.text).length > 1 ? `${t('orders.destination')} ${idx + 1}` : t('orders.destination')}
                 </div>
                 <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, marginTop: 1 }}>
-                  {formValues.destination_location}
+                  {stop.text}
                 </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Distance */}
+          {totalDistance && (
+            <div style={{
+              marginTop: 12, paddingTop: 10,
+              borderTop: '1px solid var(--border-color)',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <SwapRightOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                {formatDistance(totalDistance.distance)}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                ~ {formatDuration(totalDistance.duration)}
               </div>
             </div>
           )}
@@ -654,19 +1086,24 @@ export default function NewOrderFlow() {
             <ConfirmRow label={t('newOrder.notes')} value={formValues.user_note} />
           </ConfirmCard>
         )}
+        <div style={{ marginTop: 20 }}>
+          <Button type="primary" block onClick={handleSubmit} loading={loading} icon={<CheckCircleOutlined />}
+            style={{
+              height: 54, borderRadius: 14, fontSize: 16, fontWeight: 700,
+              background: 'var(--fab-gradient)', border: 'none',
+              boxShadow: 'var(--fab-shadow)', letterSpacing: -0.2,
+            }}>
+            {t('newOrder.submitOrder')}
+          </Button>
+          <Button block onClick={() => setStep(0)}
+            style={{
+              marginTop: 10, height: 44, borderRadius: 12, fontSize: 14, fontWeight: 600,
+              color: 'var(--text-secondary)', border: 'none', background: 'transparent',
+            }}>
+            ← {t('newOrder.orderDetails')}
+          </Button>
+        </div>
       </div>
-
-      <StickyBottom>
-        <Button type="primary" block onClick={handleSubmit} loading={loading} icon={<CheckCircleOutlined />}
-          style={{
-            height: 54, borderRadius: 14, fontSize: 16, fontWeight: 700,
-            background: 'var(--fab-gradient)', border: 'none',
-            boxShadow: 'var(--fab-shadow)',
-            letterSpacing: -0.2,
-          }}>
-          {t('newOrder.submitOrder')}
-        </Button>
-      </StickyBottom>
     </div>
   );
 }
@@ -674,95 +1111,65 @@ export default function NewOrderFlow() {
 
 // ─── Shared components ───
 
-function StepIndicator({ current, labels }) {
+function StepPill({ active, done, label }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center',
-      padding: '14px 20px 6px',
-      gap: 0,
+      fontSize: 12, fontWeight: active ? 700 : done ? 600 : 400,
+      color: active ? '#fff' : done ? 'var(--accent)' : 'rgba(255,255,255,0.5)',
+      background: active ? 'rgba(255,255,255,0.22)' : done ? 'rgba(255,255,255,0.12)' : 'transparent',
+      padding: '6px 14px', borderRadius: 20,
+      whiteSpace: 'nowrap',
+      transition: 'all 0.3s ease',
+      ...(done ? { color: 'var(--accent)', background: 'var(--accent-bg)' } : {}),
     }}>
-      {labels.map((label, i) => {
-        const isDone = i < current;
-        const isActive = i === current;
-        return (
-          <React.Fragment key={i}>
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              flex: 0, minWidth: 0,
-            }}>
-              <div style={{
-                width: isActive ? 28 : 22,
-                height: isActive ? 28 : 22,
-                borderRadius: '50%',
-                background: isDone
-                  ? 'var(--accent)'
-                  : isActive
-                  ? 'var(--accent)'
-                  : 'var(--bg-tertiary)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
-                boxShadow: isActive ? '0 0 0 4px var(--accent-bg)' : 'none',
-                border: !isDone && !isActive ? '2px solid var(--border-color)' : 'none',
-              }}>
-                {isDone ? (
-                  <CheckCircleOutlined style={{ color: '#fff', fontSize: 12 }} />
-                ) : isActive ? (
-                  <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>{i + 1}</span>
-                ) : (
-                  <span style={{ color: 'var(--text-placeholder)', fontSize: 10, fontWeight: 600 }}>{i + 1}</span>
-                )}
-              </div>
-              <div style={{
-                fontSize: 9, marginTop: 4, textAlign: 'center',
-                fontWeight: isActive ? 700 : isDone ? 500 : 400,
-                color: isActive ? 'var(--accent)' : isDone ? 'var(--text-primary)' : 'var(--text-placeholder)',
-                whiteSpace: 'nowrap',
-                maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>
-                {label}
-              </div>
-            </div>
-            {i < labels.length - 1 && (
-              <div style={{
-                flex: 1, height: 3, borderRadius: 2,
-                background: i < current ? 'var(--accent)' : 'var(--bg-tertiary)',
-                transition: 'background 0.3s ease',
-                marginBottom: 16,
-              }} />
-            )}
-          </React.Fragment>
-        );
-      })}
+      {done && <CheckCircleOutlined style={{ marginRight: 4, fontSize: 11 }} />}
+      {label}
     </div>
   );
 }
 
-function AppHeader({ title, onBack, right }) {
+function FormSection({ icon, title, subtitle, children, first, last, optionalLabel, extra }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      padding: '14px 16px', paddingTop: 'calc(14px + env(safe-area-inset-top, 0px))',
-      background: 'var(--glass-bg)',
-      backdropFilter: 'blur(20px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-      borderBottom: '1px solid var(--glass-border)',
-      position: 'sticky', top: 0, zIndex: 50,
+      padding: first ? '20px 20px 0' : '0 20px',
+      marginBottom: last ? 8 : 0,
     }}>
-      <div onClick={onBack} style={{
-        width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer', fontSize: 16, color: 'var(--text-primary)', WebkitTapHighlightColor: 'transparent',
-        background: 'var(--bg-tertiary)',
-        transition: 'all 0.2s ease',
-      }}>
-        <ArrowLeftOutlined />
-      </div>
       <div style={{
-        flex: 1, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)',
-        letterSpacing: -0.2,
+        display: 'flex', alignItems: 'center', gap: 10,
+        marginBottom: 12, marginTop: first ? 0 : 20,
       }}>
-        {title}
+        <div style={{
+          width: 32, height: 32, borderRadius: 10,
+          background: 'var(--accent-bg)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 15, color: 'var(--accent)',
+        }}>
+          {icon}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{
+            fontSize: 15, fontWeight: 700, color: 'var(--text-primary)',
+            letterSpacing: -0.2, display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            {title}
+            {optionalLabel && (
+              <span style={{
+                fontSize: 10, fontWeight: 500, color: 'var(--text-tertiary)',
+                background: 'var(--badge-muted-bg)', padding: '2px 8px', borderRadius: 6,
+              }}>
+                {optionalLabel}
+              </span>
+            )}
+          </div>
+          {subtitle && (
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 1 }}>
+              {subtitle}
+            </div>
+          )}
+        </div>
+        {extra}
       </div>
-      {right}
+      {children}
     </div>
   );
 }
@@ -771,31 +1178,14 @@ function StickyBottom({ children }) {
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0,
-      padding: '12px 20px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
-      background: 'var(--glass-bg)',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
-      borderTop: '1px solid var(--glass-border)',
-      zIndex: 99, maxWidth: 800, margin: '0 auto',
-    }}>
-      {children}
-    </div>
-  );
-}
-
-function SectionLabel({ text }) {
-  return (
-    <div style={{
-      fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)',
-      marginBottom: 12, marginTop: 12,
-      letterSpacing: -0.1,
-      display: 'flex', alignItems: 'center', gap: 8,
+      zIndex: 99,
     }}>
       <div style={{
-        width: 3, height: 14, borderRadius: 2,
-        background: 'var(--accent)',
-      }} />
-      {text}
+        maxWidth: 800, margin: '0 auto',
+        padding: '16px 20px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
+      }}>
+        {children}
+      </div>
     </div>
   );
 }

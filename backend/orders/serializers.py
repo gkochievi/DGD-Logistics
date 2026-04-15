@@ -74,7 +74,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'description', 'cargo_details',
             'urgency', 'urgency_display',
             'status', 'status_display',
-            'admin_comment', 'user_note',
+            'admin_comment', 'user_note', 'route_stops',
             'is_cancellable',
             'images', 'status_history',
             'created_at', 'updated_at',
@@ -96,8 +96,11 @@ class OrderCreateSerializer(serializers.ModelSerializer):
             'requested_date', 'requested_time',
             'contact_name', 'contact_phone',
             'description', 'cargo_details',
-            'urgency', 'user_note', 'images',
+            'urgency', 'user_note', 'route_stops', 'images',
         ]
+        extra_kwargs = {
+            'selected_category': {'required': False, 'allow_null': True},
+        }
 
     def create(self, validated_data):
         images_data = validated_data.pop('images', [])
@@ -117,7 +120,7 @@ class OrderCreateSerializer(serializers.ModelSerializer):
 class AdminOrderUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
-        fields = ['final_category', 'assigned_vehicle', 'admin_comment', 'status']
+        fields = ['final_category', 'assigned_vehicle', 'admin_comment', 'status', 'urgency']
 
     def update(self, instance, validated_data):
         new_status = validated_data.get('status')

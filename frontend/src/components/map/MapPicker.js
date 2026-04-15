@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Circle, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -29,6 +29,11 @@ const redIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
+// Georgia country center — fallback when geolocation is denied
+const GEORGIA_CENTER = [42.0, 43.5];
+const GEORGIA_ZOOM = 7;
+const USER_LOCATION_ZOOM = 14;
+
 function ClickHandler({ onClick }) {
   useMapEvents({
     click(e) {
@@ -38,42 +43,78 @@ function ClickHandler({ onClick }) {
   return null;
 }
 
+// Inner component that can use useMap() hook
+function MapController({ flyTo }) {
+  const map = useMap();
+  useEffect(() => {
+    if (flyTo) {
+      map.flyTo(flyTo.center, flyTo.zoom, { duration: 1.2 });
+    }
+  }, [flyTo, map]);
+  return null;
+}
+
 export default function MapPicker({
   position,
   onSelect,
   height = 200,
   markerColor = 'green',
   placeholder = 'Tap on the map to select location',
+  extraMarkers = [],
 }) {
-  const [center, setCenter] = useState(position || [40.7128, -74.006]); // Default: NYC
+  const [center] = useState(() => position || GEORGIA_CENTER);
+  const [initialZoom] = useState(() => position ? USER_LOCATION_ZOOM : GEORGIA_ZOOM);
+  const [userLocation, setUserLocation] = useState(null);
+  const [locating, setLocating] = useState(false);
+  const [flyTo, setFlyTo] = useState(null);
   const mapRef = useRef(null);
 
+  // Try to get user's location on mount
   useEffect(() => {
-    // Try to get user's location
-    if (!position && navigator.geolocation) {
+    if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const newCenter = [pos.coords.latitude, pos.coords.longitude];
-          setCenter(newCenter);
-          if (mapRef.current) {
-            mapRef.current.setView(newCenter, 13);
+          const loc = [pos.coords.latitude, pos.coords.longitude];
+          setUserLocation(loc);
+          // If no position was pre-set, fly to user location
+          if (!position) {
+            setFlyTo({ center: loc, zoom: 13 });
           }
         },
-        () => {},
-        { timeout: 5000 }
+        () => {
+          // Denied or error — stays on Georgia, which is fine
+        },
+        { timeout: 5000, enableHighAccuracy: false }
       );
     }
   }, []); // eslint-disable-line
 
+  // Fly to position when it changes externally
   useEffect(() => {
-    if (position && mapRef.current) {
-      mapRef.current.setView(position, 14);
+    if (position) {
+      setFlyTo({ center: position, zoom: USER_LOCATION_ZOOM });
     }
   }, [position]);
 
+  const handleLocateMe = useCallback(() => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = [pos.coords.latitude, pos.coords.longitude];
+        setUserLocation(loc);
+        setFlyTo({ center: loc, zoom: USER_LOCATION_ZOOM });
+        setLocating(false);
+      },
+      () => {
+        setLocating(false);
+      },
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  }, []);
+
   const handleClick = async (latlng) => {
     const { lat, lng } = latlng;
-    // Reverse geocode using Nominatim (free)
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
@@ -89,10 +130,10 @@ export default function MapPicker({
   const icon = markerColor === 'red' ? redIcon : greenIcon;
 
   return (
-    <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #f0f0f0' }}>
+    <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border-color, #f0f0f0)', position: 'relative' }}>
       <MapContainer
         center={center}
-        zoom={12}
+        zoom={initialZoom}
         style={{ height, width: '100%' }}
         ref={mapRef}
         scrollWheelZoom={true}
@@ -102,11 +143,72 @@ export default function MapPicker({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ClickHandler onClick={handleClick} />
+        <MapController flyTo={flyTo} />
+
+        {/* Extra markers from multi-stop routes */}
+        {extraMarkers.map((m, i) => (
+          <Marker
+            key={`extra-${i}`}
+            position={m.position}
+            icon={m.color === 'red' ? redIcon : greenIcon}
+            opacity={0.5}
+          />
+        ))}
+
+        {/* Selected location marker (active stop) */}
         {position && <Marker position={position} icon={icon} />}
+
+        {/* User's current location — blue circle */}
+        {userLocation && (
+          <Circle
+            center={userLocation}
+            radius={60}
+            pathOptions={{
+              color: '#4285F4',
+              fillColor: '#4285F4',
+              fillOpacity: 0.35,
+              weight: 2,
+            }}
+          />
+        )}
       </MapContainer>
+
+      {/* Locate me button */}
+      <button
+        onClick={handleLocateMe}
+        disabled={locating}
+        style={{
+          position: 'absolute', bottom: position ? 8 : 40, right: 8,
+          zIndex: 1000,
+          width: 36, height: 36, borderRadius: 10,
+          background: 'var(--card-bg, #fff)',
+          border: '1px solid var(--border-color, #e5e7eb)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+          cursor: 'pointer', display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          fontSize: 16, color: locating ? 'var(--text-tertiary, #999)' : '#4285F4',
+          transition: 'all 0.2s ease',
+          padding: 0,
+        }}
+        title="My location"
+      >
+        {locating ? (
+          <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="4" />
+            <line x1="12" y1="2" x2="12" y2="6" />
+            <line x1="12" y1="18" x2="12" y2="22" />
+            <line x1="2" y1="12" x2="6" y2="12" />
+            <line x1="18" y1="12" x2="22" y2="12" />
+          </svg>
+        )}
+      </button>
+
       {!position && (
         <div style={{
-          padding: '8px 12px', background: '#fafafa', fontSize: 12, color: '#999',
+          padding: '8px 12px', background: 'var(--bg-secondary, #fafafa)',
+          fontSize: 12, color: 'var(--text-tertiary, #999)',
           textAlign: 'center',
         }}>
           {placeholder}
@@ -122,7 +224,7 @@ export function MapView({ markers = [], height = 200, zoom = 12 }) {
   const center = markers[0].position;
 
   return (
-    <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #f0f0f0' }}>
+    <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border-color, #f0f0f0)' }}>
       <MapContainer
         center={center}
         zoom={zoom}

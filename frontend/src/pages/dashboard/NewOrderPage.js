@@ -11,7 +11,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import api from '../../api/client';
-import { URGENCY_OPTIONS } from '../../utils/status';
+import { useAuth } from '../../contexts/AuthContext';
+
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -19,6 +20,7 @@ const { useBreakpoint } = Grid;
 
 export default function NewOrderPage() {
   const [form] = Form.useForm();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const screens = useBreakpoint();
   const [categories, setCategories] = useState([]);
@@ -55,7 +57,9 @@ export default function NewOrderPage() {
     setLoading(true);
     try {
       const formData = new FormData();
-      formData.append('selected_category', values.selected_category);
+      if (values.selected_category) {
+        formData.append('selected_category', values.selected_category);
+      }
       formData.append('pickup_location', values.pickup_location);
       formData.append('destination_location', values.destination_location || '');
       formData.append('requested_date', values.requested_date.format('YYYY-MM-DD'));
@@ -65,8 +69,12 @@ export default function NewOrderPage() {
       formData.append('contact_name', values.contact_name);
       formData.append('contact_phone', values.contact_phone);
       formData.append('description', values.description);
-      formData.append('cargo_details', values.cargo_details || '');
-      formData.append('urgency', values.urgency || 'normal');
+      const cargoParts = [];
+      if (values.cargo_length || values.cargo_width || values.cargo_height) {
+        cargoParts.push(`${values.cargo_length || '-'} × ${values.cargo_width || '-'} × ${values.cargo_height || '-'} cm`);
+      }
+      if (values.cargo_weight) cargoParts.push(`${values.cargo_weight} kg`);
+      formData.append('cargo_details', cargoParts.join(', '));
       formData.append('user_note', values.user_note || '');
 
       if (suggestion?.id) {
@@ -129,7 +137,7 @@ export default function NewOrderPage() {
           form={form}
           layout="vertical"
           onFinish={onFinish}
-          initialValues={{ urgency: 'normal' }}
+          initialValues={{}}
           requiredMark={false}
         >
           {/* Transport Details Section */}
@@ -141,11 +149,14 @@ export default function NewOrderPage() {
           <Form.Item
             name="selected_category"
             label={<span style={{ fontWeight: 600 }}>Transport Category</span>}
-            rules={[{ required: true, message: 'Please select a category' }]}
           >
             <Select
               placeholder="Select transport type"
-              options={categories.map((c) => ({ value: c.id, label: c.name }))}
+              allowClear
+              options={[
+                { value: '', label: "Not sure? We'll help" },
+                ...categories.map((c) => ({ value: c.id, label: c.name })),
+              ]}
               size={isMobile ? 'large' : 'middle'}
             />
           </Form.Item>
@@ -187,22 +198,24 @@ export default function NewOrderPage() {
             />
           )}
 
-          <Form.Item
-            name="cargo_details"
-            label={<span style={{ fontWeight: 600 }}>Cargo / Task Details</span>}
-          >
-            <TextArea
-              rows={2}
-              placeholder="Weight, dimensions, special requirements..."
-              style={{ borderRadius: 10 }}
-            />
+          <Form.Item label={<span style={{ fontWeight: 600 }}>Cargo Dimensions</span>}>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Form.Item name="cargo_length" noStyle>
+                <Input placeholder="Length" suffix="cm" inputMode="decimal" style={{ borderRadius: 10 }} />
+              </Form.Item>
+              <Form.Item name="cargo_width" noStyle>
+                <Input placeholder="Width" suffix="cm" inputMode="decimal" style={{ borderRadius: 10 }} />
+              </Form.Item>
+              <Form.Item name="cargo_height" noStyle>
+                <Input placeholder="Height" suffix="cm" inputMode="decimal" style={{ borderRadius: 10 }} />
+              </Form.Item>
+            </div>
           </Form.Item>
-
           <Form.Item
-            name="urgency"
-            label={<span style={{ fontWeight: 600 }}>Urgency</span>}
+            name="cargo_weight"
+            label={<span style={{ fontWeight: 600 }}>Cargo Weight</span>}
           >
-            <Select options={URGENCY_OPTIONS} size={isMobile ? 'large' : 'middle'} />
+            <Input placeholder="Weight" suffix="kg" inputMode="decimal" style={{ borderRadius: 10 }} />
           </Form.Item>
 
           {/* Location & Schedule Section */}
@@ -266,6 +279,27 @@ export default function NewOrderPage() {
           <div style={{ ...sectionLabelStyle, marginTop: 8 }}>
             <UserOutlined style={{ color: '#009E4A', fontSize: 15 }} />
             <span style={sectionLabelTextStyle}>Contact Information</span>
+            <div
+              onClick={() => {
+                const name = `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+                form.setFieldsValue({
+                  contact_name: name,
+                  contact_phone: user?.phone_number || '',
+                });
+              }}
+              style={{
+                marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 12px', borderRadius: 20,
+                background: 'var(--accent)', color: '#fff',
+                fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                transition: 'opacity 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              <UserOutlined style={{ fontSize: 11 }} />
+              Me
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>

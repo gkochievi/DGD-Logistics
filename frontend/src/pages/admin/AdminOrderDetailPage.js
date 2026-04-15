@@ -6,6 +6,7 @@ import {
 import {
   ArrowLeftOutlined, TagOutlined, CarOutlined, SyncOutlined,
   CommentOutlined, EnvironmentOutlined, PictureOutlined, HistoryOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
@@ -87,6 +88,16 @@ export default function AdminOrderDetailPage() {
       fetchOrder();
     } catch {
       message.error(t('adminOrderDetail.vehicleAssignFailed'));
+    }
+  };
+
+  const handleUrgencyChange = async (urgency) => {
+    try {
+      await api.patch(`/orders/admin/${id}/`, { urgency });
+      message.success(t('adminOrderDetail.urgencyUpdated'));
+      fetchOrder();
+    } catch {
+      message.error(t('adminOrderDetail.urgencyUpdateFailed'));
     }
   };
 
@@ -264,6 +275,30 @@ export default function AdminOrderDetailPage() {
                 {order.assigned_vehicle_detail.price_per_hour && ` · $${order.assigned_vehicle_detail.price_per_hour}/hr`}
               </div>
             )}
+          </div>
+
+          <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+          {/* Set Priority */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <ThunderboltOutlined style={{ color: '#f59e0b', fontSize: 14 }} />
+              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                {t('adminOrderDetail.setPriority')}
+              </Text>
+            </div>
+            <Select
+              style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
+              size={isMobile ? 'large' : 'middle'}
+              value={order.urgency}
+              onChange={handleUrgencyChange}
+              options={[
+                { value: 'low', label: t('urgency.low') },
+                { value: 'normal', label: t('urgency.normal') },
+                { value: 'high', label: t('urgency.high') },
+                { value: 'urgent', label: t('urgency.urgent') },
+              ]}
+            />
           </div>
 
           <Divider style={{ borderColor: 'var(--border-color)' }} />

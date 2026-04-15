@@ -70,6 +70,7 @@ class Order(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW)
     admin_comment = models.TextField(blank=True)
     user_note = models.TextField(blank=True)
+    route_stops = models.TextField(blank=True, default='')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
