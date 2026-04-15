@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Button, List, Typography, Empty, Spin, Grid } from 'antd';
+import { Button, Empty, Spin, Grid, Typography } from 'antd';
 import {
-  PlusCircleOutlined, FileTextOutlined, ClockCircleOutlined, CheckCircleOutlined,
+  PlusCircleOutlined, FileTextOutlined, ClockCircleOutlined,
+  CheckCircleOutlined, RightOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { StatusBadge } from '../../components/common/StatusBadge';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
 
 export default function DashboardHome() {
@@ -31,66 +32,164 @@ export default function DashboardHome() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /></div>;
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 80 }}>
+      <Spin size="large" />
+    </div>
+  );
+
+  const statCards = [
+    { title: 'Total Orders', value: stats?.total_orders, icon: <FileTextOutlined />, color: 'var(--accent)' },
+    { title: 'Active', value: stats?.active_orders, icon: <ClockCircleOutlined />, color: '#f59e0b' },
+    { title: 'Completed', value: stats?.completed_orders, icon: <CheckCircleOutlined />, color: '#10b981' },
+  ];
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-        <Title level={4} style={{ margin: 0 }}>My Dashboard</Title>
-        <Button type="primary" icon={<PlusCircleOutlined />} size={isMobile ? 'large' : 'middle'}
-          onClick={() => navigate('/dashboard/orders/new')} style={isMobile ? { height: 44 } : {}}>
+    <div className="page-enter">
+      {/* Header */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: 24, flexWrap: 'wrap', gap: 12,
+      }}>
+        <Title level={3} style={{
+          margin: 0, fontWeight: 800, letterSpacing: '-0.02em',
+          color: 'var(--text-primary)',
+        }}>
+          My Dashboard
+        </Title>
+        <Button
+          type="primary"
+          icon={<PlusCircleOutlined />}
+          size={isMobile ? 'large' : 'middle'}
+          onClick={() => navigate('/dashboard/orders/new')}
+          style={{
+            background: 'var(--accent)', borderColor: 'var(--accent)',
+            borderRadius: 10, height: isMobile ? 44 : 40,
+            fontWeight: 600, boxShadow: 'var(--shadow-sm)',
+          }}
+        >
           New Order
         </Button>
       </div>
 
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        {[
-          { title: 'Total Orders', value: stats?.total_orders, icon: <FileTextOutlined />, color: '#1677ff' },
-          { title: 'Active', value: stats?.active_orders, icon: <ClockCircleOutlined />, color: '#fa8c16' },
-          { title: 'Completed', value: stats?.completed_orders, icon: <CheckCircleOutlined />, color: '#52c41a' },
-        ].map((s, i) => (
-          <Col xs={8} sm={8} key={i}>
-            <Card size="small" bodyStyle={{ padding: isMobile ? 12 : 16 }}>
-              <Statistic
-                title={<span style={{ fontSize: isMobile ? 11 : 14 }}>{s.title}</span>}
-                value={s.value || 0}
-                prefix={s.icon}
-                valueStyle={{ color: s.color, fontSize: isMobile ? 20 : 24 }}
-              />
-            </Card>
-          </Col>
+      {/* Stat cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 16,
+        marginBottom: 28,
+      }}>
+        {statCards.map((s, i) => (
+          <div key={i} style={{
+            background: 'var(--card-bg)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 16,
+            padding: isMobile ? 14 : 20,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14 }}>
+              <div style={{
+                width: isMobile ? 40 : 48, height: isMobile ? 40 : 48, borderRadius: 12,
+                background: `color-mix(in srgb, ${s.color} 12%, transparent)`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: isMobile ? 18 : 22, color: s.color, flexShrink: 0,
+              }}>
+                {s.icon}
+              </div>
+              <div>
+                <div style={{
+                  fontSize: isMobile ? 22 : 28, fontWeight: 800,
+                  color: s.color, lineHeight: 1.1, letterSpacing: '-0.02em',
+                }}>
+                  {s.value || 0}
+                </div>
+                <div style={{
+                  fontSize: isMobile ? 11 : 13, color: 'var(--text-tertiary)',
+                  fontWeight: 500, marginTop: 2,
+                }}>
+                  {s.title}
+                </div>
+              </div>
+            </div>
+          </div>
         ))}
-      </Row>
+      </div>
 
-      <Card
-        title="Recent Orders"
-        extra={<Button type="link" onClick={() => navigate('/dashboard/orders')}>View All</Button>}
-        bodyStyle={{ padding: isMobile ? '8px 0' : undefined }}
-      >
+      {/* Recent orders */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--border-color)',
+        borderRadius: 16,
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '18px 24px', borderBottom: '1px solid var(--border-color)',
+        }}>
+          <Text style={{
+            fontSize: 16, fontWeight: 700, color: 'var(--text-primary)',
+            letterSpacing: '-0.02em',
+          }}>
+            Recent Orders
+          </Text>
+          <Button
+            type="link"
+            onClick={() => navigate('/dashboard/orders')}
+            style={{ color: 'var(--accent)', fontWeight: 600, padding: 0 }}
+          >
+            View All
+          </Button>
+        </div>
+
         {recentOrders.length === 0 ? (
-          <Empty description="No orders yet" style={{ padding: 24 }}>
-            <Button type="primary" size="large" onClick={() => navigate('/dashboard/orders/new')} style={{ height: 48 }}>
-              Create Your First Order
-            </Button>
-          </Empty>
-        ) : (
-          <List
-            dataSource={recentOrders}
-            renderItem={(order) => (
-              <List.Item
-                style={{ cursor: 'pointer', padding: isMobile ? '12px 16px' : '12px 24px' }}
-                onClick={() => navigate(`/dashboard/orders/${order.id}`)}
-                extra={<StatusBadge status={order.status} />}
+          <div style={{ padding: 48, textAlign: 'center' }}>
+            <Empty description="No orders yet" style={{ marginBottom: 16 }}>
+              <Button
+                type="primary"
+                size="large"
+                onClick={() => navigate('/dashboard/orders/new')}
+                style={{
+                  background: 'var(--accent)', borderColor: 'var(--accent)',
+                  borderRadius: 12, height: 48, fontWeight: 700, fontSize: 15,
+                }}
               >
-                <List.Item.Meta
-                  title={<span style={{ fontSize: isMobile ? 14 : 14 }}>#{order.id} — {order.pickup_location}</span>}
-                  description={`${order.requested_date} · ${order.selected_category_name || 'No category'}`}
-                />
-              </List.Item>
-            )}
-          />
+                Create Your First Order
+              </Button>
+            </Empty>
+          </div>
+        ) : (
+          recentOrders.map((order, index) => (
+            <div
+              key={order.id}
+              onClick={() => navigate(`/dashboard/orders/${order.id}`)}
+              style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: isMobile ? '14px 16px' : '14px 24px',
+                cursor: 'pointer',
+                borderBottom: index < recentOrders.length - 1 ? '1px solid var(--border-color)' : 'none',
+                transition: 'background 0.15s ease',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{
+                  fontSize: 14, fontWeight: 600, color: 'var(--text-primary)',
+                  marginBottom: 3,
+                }}>
+                  #{order.id} — {order.pickup_location}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                  {order.requested_date} · {order.selected_category_name || 'No category'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 12 }}>
+                <StatusBadge status={order.status} />
+                {isMobile && <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 11 }} />}
+              </div>
+            </div>
+          ))
         )}
-      </Card>
+      </div>
     </div>
   );
 }

@@ -36,41 +36,74 @@ export default function AppLoginPage() {
       background: 'var(--bg-primary)',
       display: 'flex',
       flexDirection: 'column',
-      maxWidth: 480,
+      maxWidth: 520,
       margin: '0 auto',
+      position: 'relative',
+      overflow: 'hidden',
+      padding: '0 20px',
     }}>
+      {/* Background decorative elements */}
+      <div style={{
+        position: 'absolute', top: -80, right: -60, width: 240, height: 240,
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, var(--accent-bg) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute', bottom: '20%', left: -60, width: 180, height: 180,
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, var(--accent-bg) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+
       {/* Logo area */}
       <div style={{
-        paddingTop: 'calc(72px + env(safe-area-inset-top, 0px))',
-        paddingBottom: 48,
+        paddingTop: 'calc(80px + env(safe-area-inset-top, 0px))',
+        paddingBottom: 52,
         textAlign: 'center',
+        position: 'relative',
+        zIndex: 1,
       }}>
         <div style={{
-          width: 80, height: 80, borderRadius: 24,
+          width: 84, height: 84, borderRadius: 26,
           background: 'var(--header-gradient)',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          marginBottom: 20,
-          boxShadow: '0 8px 24px rgba(99,102,241,0.25)',
+          marginBottom: 22,
+          boxShadow: '0 12px 32px rgba(0,184,86,0.25)',
           position: 'relative',
           overflow: 'hidden',
         }}>
-          {/* Decorative shine */}
+          {/* Decorative shine layers */}
           <div style={{
-            position: 'absolute', top: -10, right: -10, width: 40, height: 40,
+            position: 'absolute', top: -12, right: -12, width: 48, height: 48,
             borderRadius: '50%', background: 'rgba(255,255,255,0.15)',
           }} />
-          <CarOutlined style={{ fontSize: 36, color: '#fff', position: 'relative', zIndex: 1 }} />
+          <div style={{
+            position: 'absolute', bottom: -8, left: -8, width: 32, height: 32,
+            borderRadius: '50%', background: 'rgba(255,255,255,0.08)',
+          }} />
+          <CarOutlined style={{ fontSize: 38, color: '#fff', position: 'relative', zIndex: 1 }} />
         </div>
-        <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: -0.5 }}>
+        <div style={{
+          fontSize: 28, fontWeight: 800, color: 'var(--text-primary)',
+          letterSpacing: -0.6, lineHeight: 1.2,
+        }}>
           {t('common.appName')}
         </div>
-        <Text style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>
+        <Text style={{
+          fontSize: 14, color: 'var(--text-secondary)', marginTop: 8,
+          display: 'block', letterSpacing: 0.1,
+        }}>
           {t('auth.tagline')}
         </Text>
       </div>
 
       {/* Form */}
-      <div style={{ padding: '0 28px', flex: 1 }}>
+      <div style={{
+        padding: '0 28px', flex: 1,
+        position: 'relative', zIndex: 1,
+        animation: 'fadeInUp 0.5s cubic-bezier(0.22,1,0.36,1) 0.1s both',
+      }}>
         <Form layout="vertical" onFinish={onFinish} size="large" requiredMark={false}>
           <Form.Item name="email" rules={[{ required: true, message: t('auth.enterEmail') }]}>
             <Input
@@ -79,9 +112,9 @@ export default function AppLoginPage() {
               inputMode="email"
               autoComplete="email"
               style={{
-                height: 54, borderRadius: 16, fontSize: 16,
+                height: 56, borderRadius: 16, fontSize: 16,
                 background: 'var(--input-bg)',
-                border: '1px solid var(--input-border)',
+                border: '1.5px solid var(--input-border)',
               }}
             />
           </Form.Item>
@@ -91,20 +124,22 @@ export default function AppLoginPage() {
               placeholder={t('auth.password')}
               autoComplete="current-password"
               style={{
-                height: 54, borderRadius: 16, fontSize: 16,
+                height: 56, borderRadius: 16, fontSize: 16,
                 background: 'var(--input-bg)',
-                border: '1px solid var(--input-border)',
+                border: '1.5px solid var(--input-border)',
               }}
             />
           </Form.Item>
-          <Form.Item style={{ marginTop: 12 }}>
+          <Form.Item style={{ marginTop: 16 }}>
             <Button
               type="primary" htmlType="submit" block loading={loading}
               style={{
-                height: 54, borderRadius: 16, fontSize: 16, fontWeight: 700,
+                height: 56, borderRadius: 16, fontSize: 16, fontWeight: 700,
                 background: 'var(--header-gradient)',
                 border: 'none',
-                boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
+                boxShadow: '0 6px 20px rgba(0,184,86,0.3)',
+                letterSpacing: 0.2,
+                transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
               }}
             >
               {t('auth.login')}
@@ -115,14 +150,21 @@ export default function AppLoginPage() {
 
       {/* Footer */}
       <div style={{
-        padding: '28px',
-        paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 0px))',
+        padding: '32px 28px',
+        paddingBottom: 'calc(32px + env(safe-area-inset-bottom, 0px))',
         textAlign: 'center',
+        position: 'relative',
+        zIndex: 1,
       }}>
-        <Text style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{t('auth.noAccount')} </Text>
+        <Text style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+          {t('auth.noAccount')}{' '}
+        </Text>
         <span
           onClick={() => navigate('/app/register')}
-          style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+          style={{
+            color: 'var(--accent)', fontWeight: 700, fontSize: 14,
+            cursor: 'pointer', letterSpacing: -0.1,
+          }}
         >
           {t('auth.signUp')}
         </span>

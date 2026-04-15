@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Dropdown, Avatar, Grid, Switch } from 'antd';
 import {
-  DashboardOutlined, FileTextOutlined, HistoryOutlined,
+  DashboardOutlined, FileTextOutlined,
   TeamOutlined, AppstoreOutlined, UserOutlined, LogoutOutlined,
   CarOutlined, MoonFilled, SunFilled, BarChartOutlined,
   GlobalOutlined,
@@ -49,7 +49,7 @@ export default function AdminLayout() {
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>{LANG_FLAGS[code]}</span>
             <span>{LANG_LABELS[code]}</span>
-            {lang === code && <span style={{ marginLeft: 'auto', color: '#1677ff' }}>✓</span>}
+            {lang === code && <span style={{ marginLeft: 'auto', color: 'var(--accent)' }}>✓</span>}
           </span>
         ),
         onClick: () => changeLang(code),
@@ -84,14 +84,13 @@ export default function AdminLayout() {
         zIndex: 100,
         background: 'var(--bg-primary)',
         borderBottom: '1px solid var(--border-color)',
-        boxShadow: 'var(--shadow-sm)',
       }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 16px',
-          height: 56,
+          padding: '0 20px',
+          height: 60,
           maxWidth: 1400,
           margin: '0 auto',
         }}>
@@ -104,15 +103,15 @@ export default function AdminLayout() {
             }}
           >
             <div style={{
-              width: 32, height: 32, borderRadius: 8,
-              background: 'linear-gradient(135deg, #1677ff, #0050b3)',
+              width: 34, height: 34, borderRadius: 10,
+              background: 'var(--fab-gradient)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 14, fontWeight: 700,
+              color: '#fff', fontSize: 13, fontWeight: 800,
             }}>
-              ST
+              HW
             </div>
             {!isMobile && (
-              <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
+              <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', letterSpacing: -0.3 }}>
                 {t('common.admin')}
               </span>
             )}
@@ -122,7 +121,7 @@ export default function AdminLayout() {
           {!isMobile && (
             <nav style={{
               display: 'flex', alignItems: 'center', gap: 2,
-              marginLeft: 32,
+              marginLeft: 36,
               flex: 1,
             }}>
               {MENU_ITEMS.map((item) => {
@@ -132,19 +131,19 @@ export default function AdminLayout() {
                     key={item.key}
                     onClick={() => navigate(item.key)}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
+                      display: 'flex', alignItems: 'center', gap: 7,
                       padding: '8px 14px',
-                      borderRadius: 8,
+                      borderRadius: 10,
                       cursor: 'pointer',
                       fontSize: 13,
-                      fontWeight: isActive ? 600 : 400,
-                      color: isActive ? '#1677ff' : 'var(--text-secondary)',
-                      background: isActive ? 'var(--accent-bg)' : 'transparent',
-                      transition: 'all 0.15s',
+                      fontWeight: isActive ? 600 : 450,
+                      color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                      background: isActive ? 'var(--nav-active-bg)' : 'transparent',
+                      transition: 'all 0.15s ease',
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    <span style={{ fontSize: 15 }}>{item.icon}</span>
+                    <span style={{ fontSize: 15, opacity: isActive ? 1 : 0.75 }}>{item.icon}</span>
                     {item.label}
                   </div>
                 );
@@ -167,10 +166,16 @@ export default function AdminLayout() {
           >
             <div style={{
               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-              padding: '6px 10px', borderRadius: 8,
+              padding: '6px 12px', borderRadius: 10,
               transition: 'background 0.15s',
+              background: dropdownOpen ? 'var(--surface-hover)' : 'transparent',
             }}>
-              <Avatar size={30} style={{ backgroundColor: '#f56a00', fontSize: 13 }} icon={<UserOutlined />} />
+              <Avatar size={32} style={{
+                background: 'var(--fab-gradient)',
+                fontSize: 13, fontWeight: 600,
+              }}>
+                {(user?.first_name?.[0] || '?').toUpperCase()}
+              </Avatar>
               {!isMobile && (
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
                   {user?.first_name}
@@ -185,9 +190,9 @@ export default function AdminLayout() {
       <div style={{
         maxWidth: 1400,
         margin: '0 auto',
-        padding: isMobile ? 12 : 24,
-        minHeight: isMobile ? 'calc(100vh - 56px - 56px)' : 'calc(100vh - 56px)',
-        paddingBottom: isMobile ? 72 : 24,
+        padding: isMobile ? 16 : 28,
+        minHeight: isMobile ? 'calc(100vh - 60px - 60px)' : 'calc(100vh - 60px)',
+        paddingBottom: isMobile ? 80 : 28,
       }}>
         <Outlet />
       </div>
@@ -198,11 +203,13 @@ export default function AdminLayout() {
           position: 'fixed',
           bottom: 0, left: 0, right: 0,
           background: 'var(--tab-bar-bg)',
-          borderTop: '1px solid var(--border-color)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          borderTop: '1px solid var(--tab-bar-border)',
           display: 'flex',
           justifyContent: 'space-around',
           alignItems: 'center',
-          height: 56,
+          height: 60,
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           zIndex: 100,
           boxShadow: 'var(--tab-bar-shadow)',
@@ -219,13 +226,13 @@ export default function AdminLayout() {
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 2,
-                  padding: '6px 0',
+                  gap: 3,
+                  padding: '8px 0',
                   cursor: 'pointer',
-                  color: isActive ? '#1677ff' : 'var(--text-tertiary)',
-                  fontSize: 20,
+                  color: isActive ? 'var(--accent)' : 'var(--text-tertiary)',
+                  fontSize: 19,
                   WebkitTapHighlightColor: 'transparent',
-                  transition: 'color 0.2s',
+                  transition: 'color 0.2s ease',
                 }}
               >
                 {item.icon}

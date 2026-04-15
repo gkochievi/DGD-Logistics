@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Card, Descriptions, Typography, Spin, Button, Timeline, Image, Space,
-  Select, Input, message, Empty, Grid, Divider, Modal,
+  Descriptions, Typography, Spin, Button, Timeline, Image, Space,
+  Select, Input, message, Empty, Grid, Divider,
 } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import {
+  ArrowLeftOutlined, TagOutlined, CarOutlined, SyncOutlined,
+  CommentOutlined, EnvironmentOutlined, PictureOutlined, HistoryOutlined,
+} from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { StatusBadge, UrgencyBadge } from '../../components/common/StatusBadge';
@@ -97,169 +100,330 @@ export default function AdminOrderDetailPage() {
     }
   };
 
-  if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /></div>;
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 80 }}>
+      <Spin size="large" />
+    </div>
+  );
   if (!order) return <Empty description={t('adminOrderDetail.orderNotFound')} />;
 
   const isMobile = !screens.md;
 
+  const sectionStyle = {
+    background: 'var(--card-bg)',
+    border: '1px solid var(--border-color)',
+    borderRadius: 16,
+    marginBottom: 20,
+    overflow: 'hidden',
+  };
+
+  const sectionHeaderStyle = {
+    padding: '16px 24px',
+    borderBottom: '1px solid var(--border-color)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+  };
+
+  const sectionTitleStyle = {
+    fontSize: 15, fontWeight: 700, color: 'var(--text-primary)',
+    letterSpacing: '-0.02em', margin: 0,
+  };
+
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin/orders')}
-          size={isMobile ? 'large' : 'middle'}>
+    <div style={{ maxWidth: 920, margin: '0 auto' }} className="page-enter">
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        marginBottom: 24, flexWrap: 'wrap',
+      }}>
+        <Button
+          icon={<ArrowLeftOutlined />}
+          onClick={() => navigate('/admin/orders')}
+          size={isMobile ? 'large' : 'middle'}
+          style={{ borderRadius: 10, border: '1px solid var(--border-color)' }}
+        >
           {isMobile ? '' : t('common.back')}
         </Button>
-        <Title level={4} style={{ margin: 0 }}>{t('orders.orderDetail', { id: order.id })}</Title>
+        <Title level={3} style={{
+          margin: 0, fontWeight: 800, letterSpacing: '-0.02em',
+          color: 'var(--text-primary)',
+        }}>
+          {t('orders.orderDetail', { id: order.id })}
+        </Title>
         <StatusBadge status={order.status} />
       </div>
 
-      <Card style={{ marginBottom: 16 }}>
-        <Descriptions column={isMobile ? 1 : 2} bordered size="small" title={t('adminOrderDetail.orderInfo')}>
-          <Descriptions.Item label={t('adminOrderDetail.customer')}>
-            {order.user_detail?.full_name || '—'} ({order.user_detail?.email})
-          </Descriptions.Item>
-          <Descriptions.Item label={t('orders.assigned')}><UrgencyBadge urgency={order.urgency} /></Descriptions.Item>
-          <Descriptions.Item label={t('adminOrderDetail.selectedCategory')}>{order.selected_category_detail?.name || '—'}</Descriptions.Item>
-          <Descriptions.Item label={t('adminOrderDetail.suggestedCategory')}>{order.suggested_category_detail?.name || '—'}</Descriptions.Item>
-          <Descriptions.Item label={t('orders.pickup')} span={isMobile ? 1 : 2}>{order.pickup_location}</Descriptions.Item>
-          <Descriptions.Item label={t('orders.destination')} span={isMobile ? 1 : 2}>{order.destination_location || '—'}</Descriptions.Item>
-          <Descriptions.Item label={t('adminOrderDetail.requestedDate')}>{order.requested_date}</Descriptions.Item>
-          <Descriptions.Item label={t('orders.time')}>{order.requested_time || '—'}</Descriptions.Item>
-          <Descriptions.Item label={t('orders.contact')}>{order.contact_name}</Descriptions.Item>
-          <Descriptions.Item label={t('auth.phone')}>{order.contact_phone}</Descriptions.Item>
-          <Descriptions.Item label={t('orders.description')} span={isMobile ? 1 : 2}>{order.description}</Descriptions.Item>
-          {order.cargo_details && (
-            <Descriptions.Item label={t('newOrder.cargoDetails')} span={isMobile ? 1 : 2}>{order.cargo_details}</Descriptions.Item>
-          )}
-          {order.user_note && (
-            <Descriptions.Item label={t('newOrder.notes')} span={isMobile ? 1 : 2}>{order.user_note}</Descriptions.Item>
-          )}
-          <Descriptions.Item label={t('adminOrderDetail.created')}>{new Date(order.created_at).toLocaleString()}</Descriptions.Item>
-          <Descriptions.Item label={t('adminOrderDetail.updated')}>{new Date(order.updated_at).toLocaleString()}</Descriptions.Item>
-        </Descriptions>
-      </Card>
-
-      {/* Admin actions */}
-      <Card title={t('adminOrderDetail.adminActions')} style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 16 }}>
-          <Text strong style={{ display: 'block', marginBottom: 8 }}>{t('adminOrderDetail.assignCategory')}</Text>
-          <Select
-            style={{ width: '100%', maxWidth: isMobile ? '100%' : 300 }}
-            size={isMobile ? 'large' : 'middle'}
-            value={order.final_category || undefined}
-            placeholder={t('adminOrderDetail.selectFinalCategory')}
-            onChange={handleCategoryChange}
-            options={categories.map((c) => ({ value: c.id, label: c.name }))}
-          />
+      {/* Order Info */}
+      <div style={sectionStyle}>
+        <div style={sectionHeaderStyle}>
+          <Text style={sectionTitleStyle}>{t('adminOrderDetail.orderInfo')}</Text>
         </div>
+        <div style={{ padding: isMobile ? 16 : 24 }}>
+          <Descriptions column={isMobile ? 1 : 2} size="small" labelStyle={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>
+            <Descriptions.Item label={t('adminOrderDetail.customer')}>
+              <span style={{ fontWeight: 600 }}>{order.user_detail?.full_name || '—'}</span>
+              <span style={{ color: 'var(--text-tertiary)' }}> ({order.user_detail?.email})</span>
+            </Descriptions.Item>
+            <Descriptions.Item label={t('orders.assigned')}><UrgencyBadge urgency={order.urgency} /></Descriptions.Item>
+            <Descriptions.Item label={t('adminOrderDetail.selectedCategory')}>
+              {order.selected_category_detail?.name || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('adminOrderDetail.suggestedCategory')}>
+              {order.suggested_category_detail?.name || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('orders.pickup')} span={isMobile ? 1 : 2}>
+              {order.pickup_location}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('orders.destination')} span={isMobile ? 1 : 2}>
+              {order.destination_location || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('adminOrderDetail.requestedDate')}>{order.requested_date}</Descriptions.Item>
+            <Descriptions.Item label={t('orders.time')}>{order.requested_time || '—'}</Descriptions.Item>
+            <Descriptions.Item label={t('orders.contact')}>{order.contact_name}</Descriptions.Item>
+            <Descriptions.Item label={t('auth.phone')}>{order.contact_phone}</Descriptions.Item>
+            <Descriptions.Item label={t('orders.description')} span={isMobile ? 1 : 2}>
+              {order.description}
+            </Descriptions.Item>
+            {order.cargo_details && (
+              <Descriptions.Item label={t('newOrder.cargoDetails')} span={isMobile ? 1 : 2}>
+                {order.cargo_details}
+              </Descriptions.Item>
+            )}
+            {order.user_note && (
+              <Descriptions.Item label={t('newOrder.notes')} span={isMobile ? 1 : 2}>
+                {order.user_note}
+              </Descriptions.Item>
+            )}
+            <Descriptions.Item label={t('adminOrderDetail.created')}>
+              {new Date(order.created_at).toLocaleString()}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('adminOrderDetail.updated')}>
+              {new Date(order.updated_at).toLocaleString()}
+            </Descriptions.Item>
+          </Descriptions>
+        </div>
+      </div>
 
-        <Divider />
-
-        <div style={{ marginBottom: 16 }}>
-          <Text strong style={{ display: 'block', marginBottom: 8 }}>{t('adminOrderDetail.assignVehicle')}</Text>
-          <Select
-            style={{ width: '100%', maxWidth: isMobile ? '100%' : 300 }}
-            size={isMobile ? 'large' : 'middle'}
-            value={order.assigned_vehicle || undefined}
-            placeholder={t('adminOrderDetail.selectVehicle')}
-            allowClear
-            showSearch
-            filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-            onChange={handleVehicleAssign}
-            options={vehicles.map((v) => ({
-              value: v.id,
-              label: `${v.name} (${v.plate_number}) — ${v.category_name}`,
-            }))}
-          />
-          {order.assigned_vehicle_detail && (
-            <div style={{
-              marginTop: 8, padding: '8px 12px', background: 'var(--accent-bg)', borderRadius: 8, fontSize: 13,
-            }}>
-              {order.assigned_vehicle_detail.name} · {order.assigned_vehicle_detail.plate_number}
-              {order.assigned_vehicle_detail.price_per_hour && ` · $${order.assigned_vehicle_detail.price_per_hour}/hr`}
+      {/* Admin Actions */}
+      <div style={sectionStyle}>
+        <div style={sectionHeaderStyle}>
+          <Text style={sectionTitleStyle}>{t('adminOrderDetail.adminActions')}</Text>
+        </div>
+        <div style={{ padding: isMobile ? 16 : 24 }}>
+          {/* Assign Category */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <TagOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
+              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                {t('adminOrderDetail.assignCategory')}
+              </Text>
             </div>
-          )}
-        </div>
-
-        <Divider />
-
-        <div style={{ marginBottom: 16 }}>
-          <Text strong style={{ display: 'block', marginBottom: 8 }}>{t('adminOrderDetail.changeStatus')}</Text>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Select
-              style={{ width: isMobile ? '100%' : 180 }}
+              style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
               size={isMobile ? 'large' : 'middle'}
-              value={newStatus}
-              onChange={setNewStatus}
-              options={STATUS_OPTIONS}
+              value={order.final_category || undefined}
+              placeholder={t('adminOrderDetail.selectFinalCategory')}
+              onChange={handleCategoryChange}
+              options={categories.map((c) => ({ value: c.id, label: c.name }))}
             />
-            <Button type="primary" loading={updating} onClick={handleStatusChange}
-              size={isMobile ? 'large' : 'middle'} style={isMobile ? { width: '100%', height: 44 } : {}}>
-              {t('adminOrderDetail.updateStatus')}
+          </div>
+
+          <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+          {/* Assign Vehicle */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <CarOutlined style={{ color: '#009E4A', fontSize: 14 }} />
+              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                {t('adminOrderDetail.assignVehicle')}
+              </Text>
+            </div>
+            <Select
+              style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
+              size={isMobile ? 'large' : 'middle'}
+              value={order.assigned_vehicle || undefined}
+              placeholder={t('adminOrderDetail.selectVehicle')}
+              allowClear
+              showSearch
+              filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              onChange={handleVehicleAssign}
+              options={vehicles.map((v) => ({
+                value: v.id,
+                label: `${v.name} (${v.plate_number}) — ${v.category_name}`,
+              }))}
+            />
+            {order.assigned_vehicle_detail && (
+              <div style={{
+                marginTop: 10, padding: '10px 14px',
+                background: 'var(--accent-bg)', borderRadius: 10,
+                fontSize: 13, color: 'var(--text-secondary)',
+                border: '1px solid var(--accent-bg-strong)',
+              }}>
+                {order.assigned_vehicle_detail.name} · {order.assigned_vehicle_detail.plate_number}
+                {order.assigned_vehicle_detail.price_per_hour && ` · $${order.assigned_vehicle_detail.price_per_hour}/hr`}
+              </div>
+            )}
+          </div>
+
+          <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+          {/* Change Status */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <SyncOutlined style={{ color: '#06b6d4', fontSize: 14 }} />
+              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                {t('adminOrderDetail.changeStatus')}
+              </Text>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <Select
+                style={{ width: isMobile ? '100%' : 200 }}
+                size={isMobile ? 'large' : 'middle'}
+                value={newStatus}
+                onChange={setNewStatus}
+                options={STATUS_OPTIONS}
+              />
+              <Button
+                type="primary"
+                loading={updating}
+                onClick={handleStatusChange}
+                size={isMobile ? 'large' : 'middle'}
+                style={{
+                  background: 'var(--accent)',
+                  borderColor: 'var(--accent)',
+                  borderRadius: 10,
+                  fontWeight: 600,
+                  ...(isMobile ? { width: '100%', height: 44 } : {}),
+                }}
+              >
+                {t('adminOrderDetail.updateStatus')}
+              </Button>
+            </div>
+          </div>
+
+          <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+          {/* Admin Comment */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <CommentOutlined style={{ color: '#f59e0b', fontSize: 14 }} />
+              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                {t('adminOrderDetail.adminCommentLabel')}
+              </Text>
+            </div>
+            <TextArea
+              rows={3}
+              value={comment || order.admin_comment || ''}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder={t('adminOrderDetail.addComment')}
+              style={{ borderRadius: 10 }}
+            />
+            <Button
+              onClick={handleCommentSave}
+              style={{
+                marginTop: 10, borderRadius: 10,
+                fontWeight: 600, border: '1px solid var(--border-color)',
+              }}
+            >
+              {t('adminOrderDetail.saveComment')}
             </Button>
           </div>
         </div>
+      </div>
 
-        <div>
-          <Text strong style={{ display: 'block', marginBottom: 8 }}>{t('adminOrderDetail.adminCommentLabel')}</Text>
-          <TextArea
-            rows={3}
-            value={comment || order.admin_comment || ''}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder={t('adminOrderDetail.addComment')}
-          />
-          <Button style={{ marginTop: 8 }} onClick={handleCommentSave}>{t('adminOrderDetail.saveComment')}</Button>
-        </div>
-      </Card>
-
+      {/* Map */}
       {(order.pickup_lat && order.pickup_lng) && (
-        <Card title={t('adminOrderDetail.locationMap')} style={{ marginBottom: 16 }}>
-          <MapView
-            height={250}
-            markers={[
-              { position: [order.pickup_lat, order.pickup_lng], color: 'green' },
-              ...(order.destination_lat && order.destination_lng
-                ? [{ position: [order.destination_lat, order.destination_lng], color: 'red' }]
-                : []),
-            ]}
-          />
-        </Card>
+        <div style={sectionStyle}>
+          <div style={sectionHeaderStyle}>
+            <EnvironmentOutlined style={{ color: '#10b981', fontSize: 15 }} />
+            <Text style={sectionTitleStyle}>{t('adminOrderDetail.locationMap')}</Text>
+          </div>
+          <div style={{ padding: 0 }}>
+            <MapView
+              height={260}
+              markers={[
+                { position: [order.pickup_lat, order.pickup_lng], color: 'green' },
+                ...(order.destination_lat && order.destination_lng
+                  ? [{ position: [order.destination_lat, order.destination_lng], color: 'red' }]
+                  : []),
+              ]}
+            />
+          </div>
+        </div>
       )}
 
+      {/* Images */}
       {order.images?.length > 0 && (
-        <Card title={t('adminOrderDetail.uploadedImages')} style={{ marginBottom: 16 }}>
-          <Image.PreviewGroup>
-            <Space wrap>
-              {order.images.map((img) => (
-                <Image key={img.id} width={120} height={120} src={img.image}
-                  style={{ objectFit: 'cover', borderRadius: 8 }} />
-              ))}
-            </Space>
-          </Image.PreviewGroup>
-        </Card>
+        <div style={sectionStyle}>
+          <div style={sectionHeaderStyle}>
+            <PictureOutlined style={{ color: '#009E4A', fontSize: 15 }} />
+            <Text style={sectionTitleStyle}>{t('adminOrderDetail.uploadedImages')}</Text>
+          </div>
+          <div style={{ padding: isMobile ? 16 : 24 }}>
+            <Image.PreviewGroup>
+              <Space wrap size={12}>
+                {order.images.map((img) => (
+                  <Image
+                    key={img.id}
+                    width={120}
+                    height={120}
+                    src={img.image}
+                    style={{ objectFit: 'cover', borderRadius: 12 }}
+                  />
+                ))}
+              </Space>
+            </Image.PreviewGroup>
+          </div>
+        </div>
       )}
 
+      {/* Status History */}
       {order.status_history?.length > 0 && (
-        <Card title={t('orders.statusHistory')}>
-          <Timeline
-            items={order.status_history.map((h) => ({
-              color: STATUS_CONFIG[h.new_status]?.color || 'gray',
-              children: (
-                <div>
+        <div style={sectionStyle}>
+          <div style={sectionHeaderStyle}>
+            <HistoryOutlined style={{ color: '#06b6d4', fontSize: 15 }} />
+            <Text style={sectionTitleStyle}>{t('orders.statusHistory')}</Text>
+          </div>
+          <div style={{ padding: isMobile ? 16 : 24 }}>
+            <Timeline
+              items={order.status_history.map((h) => ({
+                color: STATUS_CONFIG[h.new_status]?.color || 'gray',
+                children: (
                   <div>
-                    <StatusBadge status={h.new_status} />
-                    {h.old_status && <Text type="secondary"> {t('status.' + h.old_status)}</Text>}
+                    <div style={{ marginBottom: 4 }}>
+                      <StatusBadge status={h.new_status} />
+                      {h.old_status && (
+                        <Text style={{
+                          color: 'var(--text-tertiary)', fontSize: 12, marginLeft: 6,
+                        }}>
+                          {t('status.' + h.old_status)}
+                        </Text>
+                      )}
+                    </div>
+                    {h.changed_by_name && (
+                      <Text style={{ color: 'var(--text-secondary)', fontSize: 12, display: 'block' }}>
+                        {h.changed_by_name}
+                      </Text>
+                    )}
+                    {h.comment && (
+                      <div style={{
+                        padding: '6px 10px', background: 'var(--bg-secondary)',
+                        borderRadius: 8, marginTop: 4, fontSize: 12,
+                        color: 'var(--text-secondary)',
+                      }}>
+                        {h.comment}
+                      </div>
+                    )}
+                    <Text style={{ color: 'var(--text-tertiary)', fontSize: 11, marginTop: 4, display: 'block' }}>
+                      {new Date(h.created_at).toLocaleString()}
+                    </Text>
                   </div>
-                  {h.changed_by_name && (
-                    <Text type="secondary" style={{ fontSize: 12 }}>{h.changed_by_name}</Text>
-                  )}
-                  {h.comment && <div><Text type="secondary" style={{ fontSize: 12 }}>{h.comment}</Text></div>}
-                  <div><Text type="secondary" style={{ fontSize: 11 }}>{new Date(h.created_at).toLocaleString()}</Text></div>
-                </div>
-              ),
-            }))}
-          />
-        </Card>
+                ),
+              }))}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

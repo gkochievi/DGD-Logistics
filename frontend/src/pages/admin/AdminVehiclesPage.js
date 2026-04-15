@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Card, Table, Button, Typography, Tag, Modal, Form, Input, Select, InputNumber, Switch, Space,
-  message, Grid, List, Empty, Upload,
+  Table, Button, Typography, Tag, Modal, Form, Input, Select, InputNumber, Switch, Space,
+  message, Grid, Empty,
 } from 'antd';
 import { PlusOutlined, EditOutlined, CarOutlined } from '@ant-design/icons';
 import api from '../../api/client';
@@ -99,25 +99,32 @@ export default function AdminVehiclesPage() {
 
   const columns = [
     {
-      title: '', width: 48,
+      title: '', width: 52,
       render: (_, r) => (
         <div style={{
-          width: 34, height: 34, borderRadius: 9,
-          background: `${r.category_color || '#1677ff'}14`,
+          width: 38, height: 38, borderRadius: 10,
+          background: `color-mix(in srgb, ${r.category_color || 'var(--accent)'} 12%, transparent)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 16, color: r.category_color || '#1677ff',
+          fontSize: 17, color: r.category_color || 'var(--accent)',
         }}>
           {getCategoryIcon(r.category_icon)}
         </div>
       ),
     },
-    { title: t('adminUsers.name'), dataIndex: 'name', ellipsis: true },
-    { title: t('adminVehicles.plateNumber'), dataIndex: 'plate_number', width: 100 },
+    {
+      title: t('adminUsers.name'), dataIndex: 'name', ellipsis: true,
+      render: (name) => <span style={{ fontWeight: 600 }}>{name}</span>,
+    },
+    { title: t('adminVehicles.plateNumber'), dataIndex: 'plate_number', width: 110 },
     { title: t('adminOrders.category'), dataIndex: 'category_name', width: 140, ellipsis: true },
     { title: t('adminVehicles.capacity'), dataIndex: 'capacity', width: 100, ellipsis: true },
     {
-      title: t('adminVehicles.pricePerHour'), dataIndex: 'price_per_hour', width: 90,
-      render: (v) => v ? `$${v}` : '—',
+      title: t('adminVehicles.pricePerHour'), dataIndex: 'price_per_hour', width: 100,
+      render: (v) => v ? (
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>${v}</span>
+      ) : (
+        <span style={{ color: 'var(--text-tertiary)' }}>—</span>
+      ),
     },
     {
       title: t('adminVehicles.status'), dataIndex: 'status', width: 130,
@@ -126,71 +133,149 @@ export default function AdminVehiclesPage() {
     {
       title: '', width: 50,
       render: (_, record) => (
-        <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openModal(record)} />
+        <Button
+          size="small" type="text"
+          icon={<EditOutlined />}
+          onClick={(e) => { e.stopPropagation(); openModal(record); }}
+          style={{ color: 'var(--accent)' }}
+        />
       ),
     },
   ];
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>{t('adminVehicles.title')}</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
+    <div className="page-enter">
+      {/* Header */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: 24, flexWrap: 'wrap', gap: 12,
+      }}>
+        <Title level={3} style={{
+          margin: 0, fontWeight: 800, letterSpacing: '-0.02em',
+          color: 'var(--text-primary)',
+        }}>
+          {t('adminVehicles.title')}
+        </Title>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => openModal()}
+          style={{
+            background: 'var(--accent)', borderColor: 'var(--accent)',
+            borderRadius: 10, height: 40, fontWeight: 600,
+          }}
+        >
           {t('adminVehicles.addVehicle')}
         </Button>
       </div>
 
+      {/* Content */}
       {isMobile ? (
-        <List
-          loading={loading}
-          dataSource={vehicles}
-          locale={{ emptyText: <Empty description={t('adminVehicles.noVehicles')} /> }}
-          renderItem={(v) => (
-            <Card size="small" style={{ marginBottom: 8, cursor: 'pointer' }} onClick={() => openModal(v)}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        loading && vehicles.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-tertiary)' }}>
+            {t('common.loading')}
+          </div>
+        ) : vehicles.length === 0 ? (
+          <Empty description={t('adminVehicles.noVehicles')} />
+        ) : (
+          vehicles.map((v) => (
+            <div
+              key={v.id}
+              onClick={() => openModal(v)}
+              style={{
+                background: 'var(--card-bg)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 14,
+                padding: '16px',
+                marginBottom: 10,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
-                  width: 40, height: 40, borderRadius: 10,
-                  background: `${v.category_color || '#1677ff'}14`,
+                  width: 46, height: 46, borderRadius: 12,
+                  background: `color-mix(in srgb, ${v.category_color || 'var(--accent)'} 12%, transparent)`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 20, color: v.category_color || '#1677ff', flexShrink: 0,
+                  fontSize: 22, color: v.category_color || 'var(--accent)', flexShrink: 0,
                 }}>
                   {getCategoryIcon(v.category_icon)}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{v.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
+                    {v.name}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
                     {v.plate_number} · {v.category_name} · {v.capacity || '—'}
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                  <Tag color={VEHICLE_STATUS_COLORS[v.status]} style={{ margin: 0 }}>{getVehicleStatusLabel(v.status)}</Tag>
-                  {v.price_per_hour && <Text type="secondary" style={{ fontSize: 12 }}>${v.price_per_hour}/{t('common.perHour')}</Text>}
+                  <Tag color={VEHICLE_STATUS_COLORS[v.status]} style={{ margin: 0 }}>
+                    {getVehicleStatusLabel(v.status)}
+                  </Tag>
+                  {v.price_per_hour && (
+                    <Text style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 600 }}>
+                      ${v.price_per_hour}/{t('common.perHour')}
+                    </Text>
+                  )}
                 </div>
               </div>
-            </Card>
-          )}
-        />
+            </div>
+          ))
+        )
       ) : (
-        <Card bodyStyle={{ padding: 0 }}>
-          <Table columns={columns} dataSource={vehicles} rowKey="id" loading={loading} size="middle" pagination={false} />
-        </Card>
+        <div style={{
+          background: 'var(--card-bg)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 16,
+          overflow: 'hidden',
+          boxShadow: 'var(--shadow-xs)',
+        }}>
+          <Table
+            columns={columns}
+            dataSource={vehicles}
+            rowKey="id"
+            loading={loading}
+            size="middle"
+            pagination={false}
+          />
+        </div>
       )}
 
+      {/* Modal */}
       <Modal
-        title={editingVehicle ? t('adminVehicles.editVehicle') : t('adminVehicles.addVehicle')}
+        title={
+          <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.02em' }}>
+            {editingVehicle ? t('adminVehicles.editVehicle') : t('adminVehicles.addVehicle')}
+          </span>
+        }
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={null}
         destroyOnClose
-        width={560}
+        width={580}
+        styles={{
+          content: { borderRadius: 16, padding: 0 },
+          header: { padding: '20px 24px 0', borderBottom: 'none' },
+          body: { padding: '16px 24px 24px' },
+        }}
       >
-        <Form form={form} layout="vertical" onFinish={handleSave}>
-          <Form.Item name="name" label={t('adminVehicles.vehicleName')} rules={[{ required: true, message: t('common.required') }]}>
-            <Input placeholder={t('adminVehicles.vehicleNamePlaceholder')} />
+        <Form form={form} layout="vertical" onFinish={handleSave} requiredMark={false}>
+          <Form.Item
+            name="name"
+            label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.vehicleName')}</span>}
+            rules={[{ required: true, message: t('common.required') }]}
+          >
+            <Input placeholder={t('adminVehicles.vehicleNamePlaceholder')} style={{ borderRadius: 10 }} />
           </Form.Item>
 
-          <div style={{ display: 'flex', gap: 12 }}>
-            <Form.Item name="category" label={t('adminOrders.category')} rules={[{ required: true, message: t('common.required') }]} style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: 14 }}>
+            <Form.Item
+              name="category"
+              label={<span style={{ fontWeight: 600 }}>{t('adminOrders.category')}</span>}
+              rules={[{ required: true, message: t('common.required') }]}
+              style={{ flex: 1 }}
+            >
               <Select
                 placeholder={t('adminOrderDetail.selectFinalCategory')}
                 showSearch
@@ -198,44 +283,91 @@ export default function AdminVehiclesPage() {
                 options={categories.map((c) => ({ value: c.id, label: c.name }))}
               />
             </Form.Item>
-            <Form.Item name="plate_number" label={t('adminVehicles.plateNumber')} rules={[{ required: true, message: t('common.required') }]} style={{ flex: 1 }}>
-              <Input placeholder={t('adminVehicles.plateNumberPlaceholder')} />
+            <Form.Item
+              name="plate_number"
+              label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.plateNumber')}</span>}
+              rules={[{ required: true, message: t('common.required') }]}
+              style={{ flex: 1 }}
+            >
+              <Input placeholder={t('adminVehicles.plateNumberPlaceholder')} style={{ borderRadius: 10 }} />
             </Form.Item>
           </div>
 
-          <div style={{ display: 'flex', gap: 12 }}>
-            <Form.Item name="year" label={t('adminVehicles.year')} style={{ flex: 1 }}>
-              <InputNumber placeholder="2023" style={{ width: '100%' }} min={1990} max={2030} />
+          <div style={{ display: 'flex', gap: 14 }}>
+            <Form.Item
+              name="year"
+              label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.year')}</span>}
+              style={{ flex: 1 }}
+            >
+              <InputNumber placeholder="2023" style={{ width: '100%', borderRadius: 10 }} min={1990} max={2030} />
             </Form.Item>
-            <Form.Item name="capacity" label={t('adminVehicles.capacity')} style={{ flex: 1 }}>
-              <Input placeholder={t('adminVehicles.capacityPlaceholder')} />
+            <Form.Item
+              name="capacity"
+              label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.capacity')}</span>}
+              style={{ flex: 1 }}
+            >
+              <Input placeholder={t('adminVehicles.capacityPlaceholder')} style={{ borderRadius: 10 }} />
             </Form.Item>
           </div>
 
-          <div style={{ display: 'flex', gap: 12 }}>
-            <Form.Item name="price_per_hour" label={t('adminVehicles.pricePerHour')} style={{ flex: 1 }}>
-              <InputNumber placeholder="85.00" style={{ width: '100%' }} min={0} step={5} />
+          <div style={{ display: 'flex', gap: 14 }}>
+            <Form.Item
+              name="price_per_hour"
+              label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.pricePerHour')}</span>}
+              style={{ flex: 1 }}
+            >
+              <InputNumber placeholder="85.00" style={{ width: '100%', borderRadius: 10 }} min={0} step={5} />
             </Form.Item>
-            <Form.Item name="price_per_km" label={t('adminVehicles.pricePerKm')} style={{ flex: 1 }}>
-              <InputNumber placeholder="3.50" style={{ width: '100%' }} min={0} step={0.5} />
+            <Form.Item
+              name="price_per_km"
+              label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.pricePerKm')}</span>}
+              style={{ flex: 1 }}
+            >
+              <InputNumber placeholder="3.50" style={{ width: '100%', borderRadius: 10 }} min={0} step={0.5} />
             </Form.Item>
           </div>
 
-          <Form.Item name="description" label={t('orders.description')}>
-            <TextArea rows={3} placeholder={t('adminVehicles.vehicleNamePlaceholder')} />
+          <Form.Item
+            name="description"
+            label={<span style={{ fontWeight: 600 }}>{t('orders.description')}</span>}
+          >
+            <TextArea rows={3} placeholder={t('adminVehicles.vehicleNamePlaceholder')} style={{ borderRadius: 10 }} />
           </Form.Item>
 
-          <div style={{ display: 'flex', gap: 12 }}>
-            <Form.Item name="status" label={t('adminVehicles.status')} style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            <Form.Item
+              name="status"
+              label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.status')}</span>}
+              style={{ flex: 1 }}
+            >
               <Select options={VEHICLE_STATUS_OPTIONS} />
             </Form.Item>
-            <Form.Item name="is_active" label={t('common.active')} valuePropName="checked" style={{ flex: 0 }}>
-              <Switch />
-            </Form.Item>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 14px', background: 'var(--bg-secondary)',
+              borderRadius: 12, marginTop: 30, minWidth: 120, gap: 10,
+            }}>
+              <Text style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
+                {t('common.active')}
+              </Text>
+              <Form.Item name="is_active" valuePropName="checked" style={{ margin: 0 }}>
+                <Switch />
+              </Form.Item>
+            </div>
           </div>
 
-          <Form.Item>
-            <Button type="primary" htmlType="submit" block loading={saving}>
+          <Form.Item style={{ marginBottom: 0, marginTop: 8 }}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              loading={saving}
+              size="large"
+              style={{
+                background: 'var(--accent)', borderColor: 'var(--accent)',
+                borderRadius: 12, height: 46, fontWeight: 700, fontSize: 15,
+              }}
+            >
               {editingVehicle ? t('profile.saveChanges') : t('adminVehicles.addVehicle')}
             </Button>
           </Form.Item>

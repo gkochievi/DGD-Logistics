@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Card, Table, Select, Button, Input, Typography, Space, Grid, Empty,
+  Table, Select, Button, Input, Typography, Space, Grid, Empty,
 } from 'antd';
-import { EyeOutlined, SearchOutlined, RightOutlined } from '@ant-design/icons';
+import { EyeOutlined, SearchOutlined, RightOutlined, FilterOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { StatusBadge, UrgencyBadge } from '../../components/common/StatusBadge';
@@ -65,16 +65,29 @@ export default function AdminOrdersPage({ historyMode = false }) {
   const isMobile = !screens.md;
 
   const columns = [
-    { title: 'ID', dataIndex: 'id', width: 60, render: (id) => `#${id}` },
-    { title: t('orders.pickup'), dataIndex: 'pickup_location', ellipsis: true },
+    {
+      title: 'ID', dataIndex: 'id', width: 70,
+      render: (id) => (
+        <span style={{ fontWeight: 600, color: 'var(--accent)' }}>#{id}</span>
+      ),
+    },
+    {
+      title: t('orders.pickup'), dataIndex: 'pickup_location', ellipsis: true,
+      render: (text) => <span style={{ fontWeight: 500 }}>{text}</span>,
+    },
     { title: t('adminOrders.category'), dataIndex: 'selected_category_name', width: 140, ellipsis: true },
     { title: t('orders.date'), dataIndex: 'requested_date', width: 110 },
-    { title: t('adminOrders.status'), dataIndex: 'status', width: 120, render: (s) => <StatusBadge status={s} /> },
-    { title: t('adminOrders.urgencyLabel'), dataIndex: 'urgency', width: 90, render: (u) => <UrgencyBadge urgency={u} /> },
+    { title: t('adminOrders.status'), dataIndex: 'status', width: 130, render: (s) => <StatusBadge status={s} /> },
+    { title: t('adminOrders.urgencyLabel'), dataIndex: 'urgency', width: 100, render: (u) => <UrgencyBadge urgency={u} /> },
     {
       title: '', width: 50,
       render: (_, r) => (
-        <Button type="link" icon={<EyeOutlined />} onClick={() => navigate(`/admin/orders/${r.id}`)} />
+        <Button
+          type="text"
+          icon={<EyeOutlined />}
+          onClick={() => navigate(`/admin/orders/${r.id}`)}
+          style={{ color: 'var(--accent)' }}
+        />
       ),
     },
   ];
@@ -82,65 +95,135 @@ export default function AdminOrdersPage({ historyMode = false }) {
   const hasMore = pagination.current * pagination.pageSize < pagination.total;
 
   return (
-    <div>
-      <Title level={4}>{historyMode ? t('adminOrders.orderHistory') : t('adminOrders.activeOrders')}</Title>
+    <div className="page-enter">
+      <Title level={3} style={{
+        margin: '0 0 24px 0', fontWeight: 800,
+        letterSpacing: '-0.02em', color: 'var(--text-primary)',
+      }}>
+        {historyMode ? t('adminOrders.orderHistory') : t('adminOrders.activeOrders')}
+      </Title>
 
-      <Card size="small" style={{ marginBottom: 16 }}>
+      {/* Filter bar */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--border-color)',
+        borderRadius: 14,
+        padding: isMobile ? '14px 16px' : '16px 20px',
+        marginBottom: 20,
+        boxShadow: 'var(--shadow-xs)',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          marginBottom: 12, color: 'var(--text-tertiary)',
+        }}>
+          <FilterOutlined style={{ fontSize: 13 }} />
+          <Text style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Filters
+          </Text>
+        </div>
         <Space wrap size={isMobile ? 'small' : 'middle'} style={{ width: '100%' }}>
           <Input
-            placeholder={t('common.search')} prefix={<SearchOutlined />} allowClear
-            style={{ width: isMobile ? '100%' : 180 }} value={search}
+            placeholder={t('common.search')}
+            prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
+            allowClear
+            style={{
+              width: isMobile ? '100%' : 200,
+              borderRadius: 10,
+            }}
+            value={search}
             onChange={(e) => setSearch(e.target.value)}
             onPressEnter={() => fetchOrders()}
             size={isMobile ? 'large' : 'middle'}
           />
-          <Select placeholder={t('adminOrders.status')} allowClear style={{ width: isMobile ? 110 : 140 }}
+          <Select
+            placeholder={t('adminOrders.status')}
+            allowClear
+            style={{ width: isMobile ? 120 : 150, borderRadius: 10 }}
             value={searchParams.get('status') || undefined}
-            onChange={(val) => updateFilter('status', val)} options={STATUS_OPTIONS} />
-          <Select placeholder={t('adminOrders.urgencyLabel')} allowClear style={{ width: isMobile ? 100 : 120 }}
+            onChange={(val) => updateFilter('status', val)}
+            options={STATUS_OPTIONS}
+          />
+          <Select
+            placeholder={t('adminOrders.urgencyLabel')}
+            allowClear
+            style={{ width: isMobile ? 110 : 130 }}
             value={searchParams.get('urgency') || undefined}
-            onChange={(val) => updateFilter('urgency', val)} options={URGENCY_OPTIONS} />
-          <Select placeholder={t('adminOrders.category')} allowClear style={{ width: isMobile ? 130 : 160 }}
+            onChange={(val) => updateFilter('urgency', val)}
+            options={URGENCY_OPTIONS}
+          />
+          <Select
+            placeholder={t('adminOrders.category')}
+            allowClear
+            style={{ width: isMobile ? 140 : 170 }}
             value={searchParams.get('category') || undefined}
             onChange={(val) => updateFilter('category', val)}
             showSearch
             filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-            options={categories.map((c) => ({ value: String(c.id), label: c.name }))} />
+            options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
+          />
         </Space>
-      </Card>
+      </div>
 
+      {/* Content */}
       {isMobile ? (
         <>
           {loading && orders.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>{t('common.loading')}</div>
+            <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-tertiary)' }}>
+              {t('common.loading')}
+            </div>
           ) : orders.length === 0 ? (
             <Empty description={t('adminOrders.noOrdersFound')} />
           ) : (
             <>
               {orders.map((order) => (
-                <Card key={order.id} size="small" style={{ marginBottom: 8, cursor: 'pointer' }}
+                <div
+                  key={order.id}
                   onClick={() => navigate(`/admin/orders/${order.id}`)}
-                  bodyStyle={{ padding: '12px 16px' }}
+                  style={{
+                    background: 'var(--card-bg)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 14,
+                    padding: '14px 16px',
+                    marginBottom: 10,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <Text strong>#{order.id}</Text>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center', marginBottom: 8,
+                  }}>
+                    <Text style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 14 }}>
+                      #{order.id}
+                    </Text>
                     <StatusBadge status={order.status} />
                   </div>
-                  <div style={{ fontSize: 14, marginBottom: 4 }}>{order.pickup_location}</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
+                  <div style={{
+                    fontSize: 14, fontWeight: 500,
+                    color: 'var(--text-primary)', marginBottom: 6,
+                  }}>
+                    {order.pickup_location}
+                  </div>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}>
+                    <Text style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                       {order.requested_date} · {order.selected_category_name || '—'} · <UrgencyBadge urgency={order.urgency} />
                     </Text>
-                    <RightOutlined style={{ color: '#ccc', fontSize: 12 }} />
+                    <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 11 }} />
                   </div>
-                </Card>
+                </div>
               ))}
               {hasMore && (
                 <Button
                   block
-                  style={{ marginTop: 8, height: 44 }}
                   loading={loading}
                   onClick={() => fetchOrders(pagination.current + 1)}
+                  style={{
+                    marginTop: 12, height: 46, borderRadius: 12,
+                    fontWeight: 600, border: '1px solid var(--border-color)',
+                  }}
                 >
                   {t('common.loadMore')}
                 </Button>
@@ -149,10 +232,31 @@ export default function AdminOrdersPage({ historyMode = false }) {
           )}
         </>
       ) : (
-        <Card bodyStyle={{ padding: 0 }}>
-          <Table columns={columns} dataSource={orders} rowKey="id" loading={loading} size="middle"
-            pagination={{ ...pagination, onChange: fetchOrders, showSizeChanger: false }} />
-        </Card>
+        <div style={{
+          background: 'var(--card-bg)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 16,
+          overflow: 'hidden',
+          boxShadow: 'var(--shadow-xs)',
+        }}>
+          <Table
+            columns={columns}
+            dataSource={orders}
+            rowKey="id"
+            loading={loading}
+            size="middle"
+            pagination={{
+              ...pagination,
+              onChange: fetchOrders,
+              showSizeChanger: false,
+              style: { padding: '0 16px' },
+            }}
+            onRow={(record) => ({
+              onClick: () => navigate(`/admin/orders/${record.id}`),
+              style: { cursor: 'pointer' },
+            })}
+          />
+        </div>
       )}
     </div>
   );

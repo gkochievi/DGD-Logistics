@@ -9,6 +9,10 @@ SECRET_KEY = config('DJANGO_SECRET_KEY', default='insecure-dev-key')
 DEBUG = config('DJANGO_DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('DJANGO_ALLOWED_HOSTS', default='*', cast=Csv())
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://e852-2a0b-6201-448d-da00-bdaf-f6a5-fae-40f6.ngrok-free.app',
+]
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -94,11 +98,13 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS
-CORS_ALLOWED_ORIGINS = config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:3000',
-    cast=Csv()
-)
+CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
+if not CORS_ALLOW_ALL_ORIGINS:
+    CORS_ALLOWED_ORIGINS = config(
+        'CORS_ALLOWED_ORIGINS',
+        default='http://localhost:3000,https://e852-2a0b-6201-448d-da00-bdaf-f6a5-fae-40f6.ngrok-free.app',
+        cast=Csv()
+    )
 CORS_ALLOW_CREDENTIALS = True
 
 # REST Framework

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Typography, message, Radio } from 'antd';
+import { Form, Input, Button, Typography, message } from 'antd';
 import {
   UserOutlined, MailOutlined, LockOutlined, PhoneOutlined, CarOutlined,
   BankOutlined, TeamOutlined,
@@ -37,9 +37,9 @@ export default function AppRegisterPage() {
   };
 
   const inputStyle = {
-    height: 52, borderRadius: 16, fontSize: 15,
+    height: 54, borderRadius: 16, fontSize: 15,
     background: 'var(--input-bg)',
-    border: '1px solid var(--input-border)',
+    border: '1.5px solid var(--input-border)',
   };
 
   return (
@@ -48,40 +48,73 @@ export default function AppRegisterPage() {
       background: 'var(--bg-primary)',
       display: 'flex',
       flexDirection: 'column',
-      maxWidth: 480,
+      maxWidth: 520,
       margin: '0 auto',
+      position: 'relative',
+      overflow: 'hidden',
+      padding: '0 20px',
     }}>
+      {/* Background decorative elements */}
+      <div style={{
+        position: 'absolute', top: -60, right: -50, width: 200, height: 200,
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, var(--accent-bg) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute', bottom: '30%', left: -50, width: 160, height: 160,
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, var(--accent-bg) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+
       {/* Logo area */}
       <div style={{
         paddingTop: 'calc(48px + env(safe-area-inset-top, 0px))',
-        paddingBottom: 28,
+        paddingBottom: 32,
         textAlign: 'center',
+        position: 'relative',
+        zIndex: 1,
       }}>
         <div style={{
-          width: 60, height: 60, borderRadius: 18,
+          width: 64, height: 64, borderRadius: 20,
           background: 'var(--header-gradient)',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          marginBottom: 14,
-          boxShadow: '0 6px 20px rgba(99,102,241,0.25)',
+          marginBottom: 16,
+          boxShadow: '0 8px 24px rgba(0,184,86,0.25)',
           position: 'relative',
           overflow: 'hidden',
         }}>
           <div style={{
-            position: 'absolute', top: -8, right: -8, width: 30, height: 30,
+            position: 'absolute', top: -8, right: -8, width: 32, height: 32,
             borderRadius: '50%', background: 'rgba(255,255,255,0.15)',
           }} />
-          <CarOutlined style={{ fontSize: 26, color: '#fff', position: 'relative', zIndex: 1 }} />
+          <div style={{
+            position: 'absolute', bottom: -6, left: -6, width: 24, height: 24,
+            borderRadius: '50%', background: 'rgba(255,255,255,0.08)',
+          }} />
+          <CarOutlined style={{ fontSize: 28, color: '#fff', position: 'relative', zIndex: 1 }} />
         </div>
-        <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: -0.5 }}>
+        <div style={{
+          fontSize: 26, fontWeight: 800, color: 'var(--text-primary)',
+          letterSpacing: -0.6, lineHeight: 1.2,
+        }}>
           {t('auth.createAccount')}
         </div>
-        <Text style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+        <Text style={{
+          fontSize: 13, color: 'var(--text-secondary)',
+          marginTop: 6, display: 'block', letterSpacing: 0.1,
+        }}>
           {t('auth.getStarted')}
         </Text>
       </div>
 
       {/* Form */}
-      <div style={{ padding: '0 28px', flex: 1 }}>
+      <div style={{
+        padding: '0 28px', flex: 1,
+        position: 'relative', zIndex: 1,
+        animation: 'fadeInUp 0.5s cubic-bezier(0.22,1,0.36,1) 0.1s both',
+      }}>
         <Form layout="vertical" onFinish={onFinish} size="large" requiredMark={false}>
           <div style={{ display: 'flex', gap: 10 }}>
             <Form.Item name="first_name" rules={[{ required: true, message: t('common.required') }]} style={{ flex: 1 }}>
@@ -125,54 +158,51 @@ export default function AppRegisterPage() {
             />
           </Form.Item>
 
+          {/* User type toggle */}
           <Form.Item name="user_type" initialValue="personal">
-            <Radio.Group
-              onChange={(e) => setUserType(e.target.value)}
-              style={{ display: 'flex', gap: 10, width: '100%' }}
-            >
-              {['personal', 'company'].map((type) => (
-                <Radio.Button
-                  key={type}
-                  value={type}
-                  style={{
-                    flex: 1, textAlign: 'center', height: 52, lineHeight: '52px',
-                    borderRadius: 16, fontSize: 15, fontWeight: 600,
-                  }}
-                >
-                  {type === 'personal' ? <TeamOutlined style={{ marginRight: 6 }} /> : <BankOutlined style={{ marginRight: 6 }} />}
-                  {t(`auth.${type}`)}
-                </Radio.Button>
-              ))}
-            </Radio.Group>
+            <UserTypeToggle value={userType} onChange={(val) => setUserType(val)} t={t} />
           </Form.Item>
 
-          {userType === 'company' && (
-            <div className="animate-fade-in-up">
-              <Form.Item name="company_name" rules={[{ required: true, message: t('common.required') }]}>
-                <Input
-                  prefix={<BankOutlined style={{ color: 'var(--text-placeholder)' }} />}
-                  placeholder={t('auth.companyName')}
-                  style={inputStyle}
-                />
-              </Form.Item>
-              <Form.Item
-                name="company_id"
-                rules={[
-                  { required: true, message: t('common.required') },
-                  { pattern: /^\d{11}$/, message: t('auth.companyIdInvalid') },
-                ]}
-                extra={<span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{t('auth.companyIdHelp')}</span>}
-              >
-                <Input
-                  prefix={<BankOutlined style={{ color: 'var(--text-placeholder)' }} />}
-                  placeholder={t('auth.companyIdPlaceholder')}
-                  maxLength={11}
-                  inputMode="numeric"
-                  style={inputStyle}
-                />
-              </Form.Item>
-            </div>
-          )}
+          {/* Company fields with animation */}
+          <div style={{
+            maxHeight: userType === 'company' ? 300 : 0,
+            opacity: userType === 'company' ? 1 : 0,
+            overflow: 'hidden',
+            transition: 'all 0.35s cubic-bezier(0.22,1,0.36,1)',
+          }}>
+            <Form.Item
+              name="company_name"
+              rules={userType === 'company' ? [{ required: true, message: t('common.required') }] : []}
+            >
+              <Input
+                prefix={<BankOutlined style={{ color: 'var(--text-placeholder)' }} />}
+                placeholder={t('auth.companyName')}
+                style={inputStyle}
+              />
+            </Form.Item>
+            <Form.Item
+              name="company_id"
+              rules={userType === 'company' ? [
+                { required: true, message: t('common.required') },
+                { pattern: /^\d{11}$/, message: t('auth.companyIdInvalid') },
+              ] : []}
+              extra={
+                userType === 'company' ? (
+                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.4 }}>
+                    {t('auth.companyIdHelp')}
+                  </span>
+                ) : null
+              }
+            >
+              <Input
+                prefix={<BankOutlined style={{ color: 'var(--text-placeholder)' }} />}
+                placeholder={t('auth.companyIdPlaceholder')}
+                maxLength={11}
+                inputMode="numeric"
+                style={inputStyle}
+              />
+            </Form.Item>
+          </div>
 
           <Form.Item name="password" rules={[
             { required: true, message: t('auth.createPassword') },
@@ -203,14 +233,16 @@ export default function AppRegisterPage() {
             />
           </Form.Item>
 
-          <Form.Item style={{ marginTop: 4 }}>
+          <Form.Item style={{ marginTop: 8 }}>
             <Button
               type="primary" htmlType="submit" block loading={loading}
               style={{
-                height: 54, borderRadius: 16, fontSize: 16, fontWeight: 700,
+                height: 56, borderRadius: 16, fontSize: 16, fontWeight: 700,
                 background: 'var(--header-gradient)',
                 border: 'none',
-                boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
+                boxShadow: '0 6px 20px rgba(0,184,86,0.3)',
+                letterSpacing: 0.2,
+                transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
               }}
             >
               {t('auth.createAccount')}
@@ -221,18 +253,69 @@ export default function AppRegisterPage() {
 
       {/* Footer */}
       <div style={{
-        padding: '20px 28px',
-        paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
+        padding: '24px 28px',
+        paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
         textAlign: 'center',
+        position: 'relative',
+        zIndex: 1,
       }}>
-        <Text style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{t('auth.hasAccount')} </Text>
+        <Text style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+          {t('auth.hasAccount')}{' '}
+        </Text>
         <span
           onClick={() => navigate('/app/login')}
-          style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+          style={{
+            color: 'var(--accent)', fontWeight: 700, fontSize: 14,
+            cursor: 'pointer', letterSpacing: -0.1,
+          }}
         >
           {t('auth.login')}
         </span>
       </div>
+    </div>
+  );
+}
+
+/* Custom toggle that works as a controlled Ant Design form field */
+function UserTypeToggle({ value, onChange, t }) {
+  const types = ['personal', 'company'];
+  return (
+    <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+      {types.map((type) => {
+        const isActive = value === type;
+        return (
+          <div
+            key={type}
+            onClick={() => onChange(type)}
+            style={{
+              flex: 1,
+              textAlign: 'center',
+              height: 54,
+              borderRadius: 16,
+              fontSize: 15,
+              fontWeight: 650,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 7,
+              background: isActive ? 'var(--accent-bg-strong)' : 'var(--input-bg)',
+              border: isActive
+                ? '1.5px solid var(--accent)'
+                : '1.5px solid var(--input-border)',
+              color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+              transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
+              letterSpacing: -0.1,
+              userSelect: 'none',
+            }}
+          >
+            {type === 'personal'
+              ? <TeamOutlined style={{ fontSize: 16 }} />
+              : <BankOutlined style={{ fontSize: 16 }} />}
+            {t(`auth.${type}`)}
+          </div>
+        );
+      })}
     </div>
   );
 }

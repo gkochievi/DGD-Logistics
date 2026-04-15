@@ -7,7 +7,7 @@ export function ThemeProvider({ children }) {
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('theme');
     if (saved) return saved === 'dark';
-    return window.matchMedia?.('(prefers-color-scheme: dark)').matches || false;
+    return false;
   });
 
   useEffect(() => {
@@ -26,43 +26,66 @@ export function ThemeProvider({ children }) {
   const antdThemeConfig = {
     algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
     token: {
-      colorPrimary: isDark ? '#818cf8' : '#6366f1',
-      colorSuccess: '#10b981',
-      colorWarning: '#f59e0b',
-      colorError: '#ef4444',
-      colorInfo: '#3b82f6',
+      colorPrimary: isDark ? '#33C97A' : '#00B856',
+      colorSuccess: isDark ? '#34d399' : '#10b981',
+      colorWarning: isDark ? '#fbbf24' : '#f59e0b',
+      colorError: isDark ? '#f87171' : '#ef4444',
+      colorInfo: isDark ? '#60a5fa' : '#3b82f6',
       borderRadius: 12,
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif",
-      colorBgContainer: isDark ? '#1e2235' : '#ffffff',
-      colorBgElevated: isDark ? '#232738' : '#ffffff',
-      colorBgLayout: isDark ? '#151823' : '#f8f9fc',
-      colorBorder: isDark ? '#2a2e42' : '#e8eaf2',
-      colorBorderSecondary: isDark ? '#232738' : '#f0f1f7',
-      controlHeight: 44,
-      controlHeightLG: 52,
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      colorBgContainer: isDark ? '#1c1e27' : '#ffffff',
+      colorBgElevated: isDark ? '#22252f' : '#ffffff',
+      colorBgLayout: isDark ? '#111318' : '#f6f8fb',
+      colorBorder: isDark ? '#2a2d3a' : '#e5e7eb',
+      colorBorderSecondary: isDark ? '#22252f' : '#f3f4f6',
+      controlHeight: 42,
+      controlHeightLG: 50,
+      fontSize: 14,
+      colorText: isDark ? '#f3f4f6' : '#111827',
+      colorTextSecondary: isDark ? '#9ca3af' : '#4b5563',
+      colorTextTertiary: isDark ? '#6b7280' : '#9ca3af',
+      colorTextQuaternary: isDark ? '#4b5563' : '#d1d5db',
     },
     components: {
       Button: {
-        borderRadius: 12,
-        controlHeight: 44,
-        controlHeightLG: 52,
+        borderRadius: 10,
+        controlHeight: 40,
+        controlHeightLG: 48,
         fontWeight: 600,
+        primaryShadow: '0 2px 8px rgba(0,184,86,0.25)',
       },
       Input: {
-        borderRadius: 12,
-        controlHeight: 48,
-        activeBorderColor: isDark ? '#818cf8' : '#6366f1',
-        hoverBorderColor: isDark ? '#818cf8' : '#6366f1',
+        borderRadius: 10,
+        controlHeight: 44,
+        activeBorderColor: isDark ? '#33C97A' : '#00B856',
+        hoverBorderColor: isDark ? '#00B856' : '#5FDA96',
+        colorBgContainer: isDark ? '#13151b' : '#f9fafb',
       },
       Select: {
-        borderRadius: 12,
-        controlHeight: 48,
+        borderRadius: 10,
+        controlHeight: 44,
+        colorBgContainer: isDark ? '#13151b' : '#f9fafb',
       },
       Card: {
         borderRadiusLG: 16,
+        colorBorderSecondary: isDark ? '#1f2128' : '#e5e7eb',
       },
       Modal: {
         borderRadiusLG: 20,
+      },
+      Table: {
+        borderRadius: 12,
+        headerBg: isDark ? '#16181f' : '#f9fafb',
+        rowHoverBg: isDark ? 'rgba(51,201,122,0.04)' : 'rgba(0,184,86,0.02)',
+      },
+      Tag: {
+        borderRadiusSM: 6,
+      },
+      Menu: {
+        borderRadius: 10,
+      },
+      Descriptions: {
+        borderRadius: 12,
       },
     },
   };

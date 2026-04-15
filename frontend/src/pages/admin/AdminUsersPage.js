@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Card, Table, Button, Input, Select, Typography, Space, Grid, List, Tag, message,
+  Table, Button, Input, Select, Typography, Space, Grid, Tag, message, Empty,
 } from 'antd';
-import { PlusOutlined, EditOutlined, SearchOutlined, UserOutlined, StopOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined, EditOutlined, SearchOutlined, StopOutlined,
+  CheckCircleOutlined, FilterOutlined, RightOutlined,
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
@@ -51,7 +54,10 @@ export default function AdminUsersPage() {
   const isMobile = !screens.md;
 
   const columns = [
-    { title: t('adminUsers.name'), dataIndex: 'full_name', ellipsis: true },
+    {
+      title: t('adminUsers.name'), dataIndex: 'full_name', ellipsis: true,
+      render: (name) => <span style={{ fontWeight: 600 }}>{name}</span>,
+    },
     { title: t('adminUsers.email'), dataIndex: 'email', ellipsis: true },
     { title: t('adminUsers.phone'), dataIndex: 'phone_number', width: 130 },
     {
@@ -68,19 +74,30 @@ export default function AdminUsersPage() {
     },
     {
       title: t('adminOrders.status'), dataIndex: 'is_active', width: 80,
-      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? t('common.active') : t('common.inactive')}</Tag>,
+      render: (active) => (
+        <Tag color={active ? 'green' : 'red'}>
+          {active ? t('common.active') : t('common.inactive')}
+        </Tag>
+      ),
     },
     { title: t('adminUsers.ordersCount'), dataIndex: 'order_count', width: 70 },
     {
       title: '', width: 80,
       render: (_, record) => (
         <Space size={4}>
-          <Button size="small" type="text" icon={<EditOutlined />} onClick={() => navigate(`/admin/users/${record.id}`)} />
           <Button
-            size="small" type="text"
+            size="small"
+            type="text"
+            icon={<EditOutlined />}
+            onClick={(e) => { e.stopPropagation(); navigate(`/admin/users/${record.id}`); }}
+            style={{ color: 'var(--accent)' }}
+          />
+          <Button
+            size="small"
+            type="text"
             danger={record.is_active}
             icon={record.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
-            onClick={() => toggleActive(record)}
+            onClick={(e) => { e.stopPropagation(); toggleActive(record); }}
           />
         </Space>
       ),
@@ -88,67 +105,161 @@ export default function AdminUsersPage() {
   ];
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-        <Title level={4} style={{ margin: 0 }}>{t('adminUsers.userManagement')}</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/admin/users/new')}>
+    <div className="page-enter">
+      {/* Header */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: 24, flexWrap: 'wrap', gap: 12,
+      }}>
+        <Title level={3} style={{
+          margin: 0, fontWeight: 800, letterSpacing: '-0.02em',
+          color: 'var(--text-primary)',
+        }}>
+          {t('adminUsers.userManagement')}
+        </Title>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => navigate('/admin/users/new')}
+          style={{
+            background: 'var(--accent)', borderColor: 'var(--accent)',
+            borderRadius: 10, height: 40, fontWeight: 600,
+          }}
+        >
           {t('adminUsers.newUser')}
         </Button>
       </div>
 
-      <Card size="small" style={{ marginBottom: 16 }}>
+      {/* Filter bar */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--border-color)',
+        borderRadius: 14,
+        padding: isMobile ? '14px 16px' : '16px 20px',
+        marginBottom: 20,
+        boxShadow: 'var(--shadow-xs)',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          marginBottom: 12, color: 'var(--text-tertiary)',
+        }}>
+          <FilterOutlined style={{ fontSize: 13 }} />
+          <Text style={{
+            fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)',
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}>
+            Filters
+          </Text>
+        </div>
         <Space wrap>
           <Input
-            placeholder={t('common.search')} prefix={<SearchOutlined />} allowClear
-            style={{ width: 200 }} value={search}
+            placeholder={t('common.search')}
+            prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
+            allowClear
+            style={{ width: 220, borderRadius: 10 }}
+            value={search}
             onChange={(e) => setSearch(e.target.value)}
             onPressEnter={() => fetchUsers()}
           />
-          <Select placeholder={t('adminUsers.role')} allowClear style={{ width: 120 }}
-            value={roleFilter || undefined} onChange={(v) => setRoleFilter(v || '')}
-            options={[{ value: 'customer', label: t('adminUsers.customer') }, { value: 'admin', label: t('common.admin') }]} />
-          <Select placeholder={t('adminOrders.status')} allowClear style={{ width: 120 }}
-            value={activeFilter || undefined} onChange={(v) => setActiveFilter(v || '')}
-            options={[{ value: 'true', label: t('common.active') }, { value: 'false', label: t('common.inactive') }]} />
+          <Select
+            placeholder={t('adminUsers.role')}
+            allowClear
+            style={{ width: 130 }}
+            value={roleFilter || undefined}
+            onChange={(v) => setRoleFilter(v || '')}
+            options={[
+              { value: 'customer', label: t('adminUsers.customer') },
+              { value: 'admin', label: t('common.admin') },
+            ]}
+          />
+          <Select
+            placeholder={t('adminOrders.status')}
+            allowClear
+            style={{ width: 130 }}
+            value={activeFilter || undefined}
+            onChange={(v) => setActiveFilter(v || '')}
+            options={[
+              { value: 'true', label: t('common.active') },
+              { value: 'false', label: t('common.inactive') },
+            ]}
+          />
         </Space>
-      </Card>
+      </div>
 
+      {/* Content */}
       {isMobile ? (
         <>
           {loading && users.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>{t('common.loading')}</div>
+            <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-tertiary)' }}>
+              {t('common.loading')}
+            </div>
           ) : users.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>{t('adminUsers.noUsers')}</div>
+            <Empty description={t('adminUsers.noUsers')} />
           ) : (
             <>
               {users.map((u) => (
-                <Card key={u.id} size="small" style={{ marginBottom: 8, cursor: 'pointer' }}
+                <div
+                  key={u.id}
                   onClick={() => navigate(`/admin/users/${u.id}`)}
-                  bodyStyle={{ padding: '12px 16px' }}
+                  style={{
+                    background: 'var(--card-bg)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 14,
+                    padding: '14px 16px',
+                    marginBottom: 10,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong>{u.full_name}</strong>
-                    <Tag color={u.is_active ? 'green' : 'red'}>{u.is_active ? t('common.active') : t('common.inactive')}</Tag>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center', marginBottom: 6,
+                  }}>
+                    <Text style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 15 }}>
+                      {u.full_name}
+                    </Text>
+                    <Tag color={u.is_active ? 'green' : 'red'}>
+                      {u.is_active ? t('common.active') : t('common.inactive')}
+                    </Tag>
                   </div>
-                  <div style={{ fontSize: 13, color: '#666', marginTop: 2 }}>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>
                     {u.email}
                     {u.user_type === 'company' && u.company_name && (
-                      <span style={{ color: '#999' }}> · {u.company_name}</span>
+                      <span style={{ color: 'var(--text-tertiary)' }}> · {u.company_name}</span>
                     )}
-                    {u.company_id && <span style={{ color: '#999' }}> · {u.company_id}</span>}
+                    {u.company_id && (
+                      <span style={{ color: 'var(--text-tertiary)' }}> · {u.company_id}</span>
+                    )}
                   </div>
-                  <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
-                    <Tag color={u.role === 'admin' ? 'purple' : 'blue'}>{u.role}</Tag>
-                    <Tag color={u.user_type === 'company' ? 'gold' : 'default'}>
-                      {u.user_type === 'company' ? t('adminUsers.company') : t('adminUsers.personal')}
-                    </Tag>
-                    {u.order_count != null && `${u.order_count} ${t('adminUsers.ordersCount').toLowerCase()}`}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    marginTop: 8,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Tag color={u.role === 'admin' ? 'purple' : 'blue'}>{u.role}</Tag>
+                      <Tag color={u.user_type === 'company' ? 'gold' : 'default'}>
+                        {u.user_type === 'company' ? t('adminUsers.company') : t('adminUsers.personal')}
+                      </Tag>
+                      {u.order_count != null && (
+                        <Text style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                          {u.order_count} {t('adminUsers.ordersCount').toLowerCase()}
+                        </Text>
+                      )}
+                    </div>
+                    <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 11 }} />
                   </div>
-                </Card>
+                </div>
               ))}
               {pagination.current * pagination.pageSize < pagination.total && (
-                <Button block style={{ marginTop: 8, height: 44 }} loading={loading}
-                  onClick={() => fetchUsers(pagination.current + 1)}>
+                <Button
+                  block
+                  loading={loading}
+                  onClick={() => fetchUsers(pagination.current + 1)}
+                  style={{
+                    marginTop: 12, height: 46, borderRadius: 12,
+                    fontWeight: 600, border: '1px solid var(--border-color)',
+                  }}
+                >
                   {t('common.loadMore')}
                 </Button>
               )}
@@ -156,11 +267,28 @@ export default function AdminUsersPage() {
           )}
         </>
       ) : (
-        <Card bodyStyle={{ padding: 0 }}>
-          <Table columns={columns} dataSource={users} rowKey="id" loading={loading} size="middle"
+        <div style={{
+          background: 'var(--card-bg)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 16,
+          overflow: 'hidden',
+          boxShadow: 'var(--shadow-xs)',
+        }}>
+          <Table
+            columns={columns}
+            dataSource={users}
+            rowKey="id"
+            loading={loading}
+            size="middle"
             scroll={{ x: 700 }}
-            pagination={{ ...pagination, onChange: fetchUsers, showSizeChanger: false }} />
-        </Card>
+            pagination={{
+              ...pagination,
+              onChange: fetchUsers,
+              showSizeChanger: false,
+              style: { padding: '0 16px' },
+            }}
+          />
+        </div>
       )}
     </div>
   );

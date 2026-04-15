@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Card, Form, Input, Button, Select, Switch, Typography, message, Spin, Space,
+  Form, Input, Button, Select, Switch, Typography, message, Spin,
 } from 'antd';
-import { ArrowLeftOutlined, UserOutlined, MailOutlined, PhoneOutlined, LockOutlined, BankOutlined } from '@ant-design/icons';
+import {
+  ArrowLeftOutlined, UserOutlined, MailOutlined, PhoneOutlined,
+  LockOutlined, BankOutlined,
+} from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 export default function AdminUserFormPage() {
   const { id } = useParams();
@@ -52,95 +55,215 @@ export default function AdminUserFormPage() {
     }
   };
 
-  if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /></div>;
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 80 }}>
+      <Spin size="large" />
+    </div>
+  );
 
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto' }}>
-      <Space style={{ marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin/users')}>{t('common.back')}</Button>
-        <Title level={4} style={{ margin: 0 }}>{isEdit ? t('adminUsers.editUser') : t('adminUsers.createUser')}</Title>
-      </Space>
+    <div style={{ maxWidth: 620, margin: '0 auto' }} className="page-enter">
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        marginBottom: 28,
+      }}>
+        <Button
+          icon={<ArrowLeftOutlined />}
+          onClick={() => navigate('/admin/users')}
+          style={{ borderRadius: 10, border: '1px solid var(--border-color)' }}
+        >
+          {t('common.back')}
+        </Button>
+        <Title level={3} style={{
+          margin: 0, fontWeight: 800, letterSpacing: '-0.02em',
+          color: 'var(--text-primary)',
+        }}>
+          {isEdit ? t('adminUsers.editUser') : t('adminUsers.createUser')}
+        </Title>
+      </div>
 
-      <Card>
-        <Form form={form} layout="vertical" onFinish={onFinish}
-          initialValues={{ role: 'customer', user_type: 'personal', is_active: true }}>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Form.Item name="first_name" label={t('auth.firstName')} rules={[{ required: true, message: t('common.required') }]} style={{ flex: 1, minWidth: 200 }}>
-              <Input prefix={<UserOutlined />} />
+      {/* Form card */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--border-color)',
+        borderRadius: 16,
+        padding: 28,
+        boxShadow: 'var(--shadow-sm)',
+      }}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={onFinish}
+          initialValues={{ role: 'customer', user_type: 'personal', is_active: true }}
+          requiredMark={false}
+        >
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <Form.Item
+              name="first_name"
+              label={<span style={{ fontWeight: 600 }}>{t('auth.firstName')}</span>}
+              rules={[{ required: true, message: t('common.required') }]}
+              style={{ flex: 1, minWidth: 200 }}
+            >
+              <Input prefix={<UserOutlined style={{ color: 'var(--text-tertiary)' }} />} style={{ borderRadius: 10 }} />
             </Form.Item>
-            <Form.Item name="last_name" label={t('auth.lastName')} rules={[{ required: true, message: t('common.required') }]} style={{ flex: 1, minWidth: 200 }}>
-              <Input prefix={<UserOutlined />} />
+            <Form.Item
+              name="last_name"
+              label={<span style={{ fontWeight: 600 }}>{t('auth.lastName')}</span>}
+              rules={[{ required: true, message: t('common.required') }]}
+              style={{ flex: 1, minWidth: 200 }}
+            >
+              <Input prefix={<UserOutlined style={{ color: 'var(--text-tertiary)' }} />} style={{ borderRadius: 10 }} />
             </Form.Item>
           </div>
 
-          <Form.Item name="email" label={t('auth.email')} rules={[
-            { required: true, message: t('common.required') },
-            { type: 'email', message: t('auth.invalidEmail') },
-          ]}>
-            <Input prefix={<MailOutlined />} disabled={isEdit} inputMode="email" autoComplete="email" />
+          <Form.Item
+            name="email"
+            label={<span style={{ fontWeight: 600 }}>{t('auth.email')}</span>}
+            rules={[
+              { required: true, message: t('common.required') },
+              { type: 'email', message: t('auth.invalidEmail') },
+            ]}
+          >
+            <Input
+              prefix={<MailOutlined style={{ color: 'var(--text-tertiary)' }} />}
+              disabled={isEdit}
+              inputMode="email"
+              autoComplete="email"
+              style={{ borderRadius: 10 }}
+            />
           </Form.Item>
 
-          <Form.Item name="phone_number" label={t('auth.phone')}>
-            <Input prefix={<PhoneOutlined />} inputMode="tel" autoComplete="tel" />
+          <Form.Item
+            name="phone_number"
+            label={<span style={{ fontWeight: 600 }}>{t('auth.phone')}</span>}
+          >
+            <Input
+              prefix={<PhoneOutlined style={{ color: 'var(--text-tertiary)' }} />}
+              inputMode="tel"
+              autoComplete="tel"
+              style={{ borderRadius: 10 }}
+            />
           </Form.Item>
 
-          <Form.Item name="role" label={t('adminUsers.role')} rules={[{ required: true, message: t('common.required') }]}>
-            <Select options={[
-              { value: 'customer', label: t('adminUsers.customer') },
-              { value: 'admin', label: t('common.admin') },
-            ]} />
-          </Form.Item>
-
-          <Form.Item name="user_type" label={t('adminUsers.userType')} rules={[{ required: true, message: t('common.required') }]}>
-            <Select options={[
-              { value: 'personal', label: t('adminUsers.personal') },
-              { value: 'company', label: t('adminUsers.company') },
-            ]} />
-          </Form.Item>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <Form.Item
+              name="role"
+              label={<span style={{ fontWeight: 600 }}>{t('adminUsers.role')}</span>}
+              rules={[{ required: true, message: t('common.required') }]}
+              style={{ flex: 1, minWidth: 200 }}
+            >
+              <Select
+                options={[
+                  { value: 'customer', label: t('adminUsers.customer') },
+                  { value: 'admin', label: t('common.admin') },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item
+              name="user_type"
+              label={<span style={{ fontWeight: 600 }}>{t('adminUsers.userType')}</span>}
+              rules={[{ required: true, message: t('common.required') }]}
+              style={{ flex: 1, minWidth: 200 }}
+            >
+              <Select
+                options={[
+                  { value: 'personal', label: t('adminUsers.personal') },
+                  { value: 'company', label: t('adminUsers.company') },
+                ]}
+              />
+            </Form.Item>
+          </div>
 
           <Form.Item noStyle shouldUpdate={(prev, cur) => prev.user_type !== cur.user_type}>
             {({ getFieldValue }) =>
               getFieldValue('user_type') === 'company' ? (
-                <>
-                  <Form.Item name="company_name" label={t('adminUsers.companyName')} rules={[{ required: true, message: t('common.required') }]}>
-                    <Input prefix={<BankOutlined />} />
+                <div style={{
+                  background: 'var(--accent-bg)',
+                  border: '1px solid var(--accent-bg-strong)',
+                  borderRadius: 12,
+                  padding: '20px 20px 4px',
+                  marginBottom: 20,
+                }}>
+                  <Form.Item
+                    name="company_name"
+                    label={<span style={{ fontWeight: 600 }}>{t('adminUsers.companyName')}</span>}
+                    rules={[{ required: true, message: t('common.required') }]}
+                  >
+                    <Input prefix={<BankOutlined style={{ color: 'var(--text-tertiary)' }} />} style={{ borderRadius: 10 }} />
                   </Form.Item>
                   <Form.Item
                     name="company_id"
-                    label={t('auth.companyId')}
+                    label={<span style={{ fontWeight: 600 }}>{t('auth.companyId')}</span>}
                     rules={[
                       { required: true, message: t('common.required') },
                       { pattern: /^\d{11}$/, message: t('auth.companyIdInvalid') },
                     ]}
-                    extra={t('auth.companyIdHelp')}
+                    extra={<span style={{ color: 'var(--text-tertiary)' }}>{t('auth.companyIdHelp')}</span>}
                   >
-                    <Input placeholder={t('auth.companyIdPlaceholder')} maxLength={11} inputMode="numeric" />
+                    <Input
+                      placeholder={t('auth.companyIdPlaceholder')}
+                      maxLength={11}
+                      inputMode="numeric"
+                      style={{ borderRadius: 10 }}
+                    />
                   </Form.Item>
-                </>
+                </div>
               ) : null
             }
           </Form.Item>
 
-          <Form.Item name="is_active" label={t('common.active')} valuePropName="checked">
-            <Switch />
-          </Form.Item>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '14px 16px', background: 'var(--bg-secondary)',
+            borderRadius: 12, marginBottom: 20,
+          }}>
+            <div>
+              <Text style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{t('common.active')}</Text>
+              <br />
+              <Text style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                Allow user to sign in
+              </Text>
+            </div>
+            <Form.Item name="is_active" valuePropName="checked" style={{ margin: 0 }}>
+              <Switch />
+            </Form.Item>
+          </div>
 
           {!isEdit && (
-            <Form.Item name="password" label={t('auth.password')} rules={[
-              { required: true, message: t('common.required') },
-              { min: 8, message: t('auth.minPassword') },
-            ]}>
-              <Input.Password prefix={<LockOutlined />} />
+            <Form.Item
+              name="password"
+              label={<span style={{ fontWeight: 600 }}>{t('auth.password')}</span>}
+              rules={[
+                { required: true, message: t('common.required') },
+                { min: 8, message: t('auth.minPassword') },
+              ]}
+            >
+              <Input.Password
+                prefix={<LockOutlined style={{ color: 'var(--text-tertiary)' }} />}
+                style={{ borderRadius: 10 }}
+              />
             </Form.Item>
           )}
 
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={saving} block>
+          <Form.Item style={{ marginBottom: 0, marginTop: 8 }}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              loading={saving}
+              block
+              size="large"
+              style={{
+                background: 'var(--accent)', borderColor: 'var(--accent)',
+                borderRadius: 12, height: 48, fontWeight: 700,
+                fontSize: 15,
+              }}
+            >
               {isEdit ? t('profile.saveChanges') : t('adminUsers.createUser')}
             </Button>
           </Form.Item>
         </Form>
-      </Card>
+      </div>
     </div>
   );
 }

@@ -38,6 +38,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: /api
     command: sh -c "cp -a /usr/share/nginx/html/. /out/"
     volumes:
       - frontend_build:/out

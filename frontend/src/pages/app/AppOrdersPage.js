@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Spin, Empty } from 'antd';
+import { Spin, Empty, Grid } from 'antd';
 import {
   RightOutlined, ClockCircleOutlined,
   CheckCircleOutlined, FileTextOutlined, PlusOutlined,
@@ -10,8 +10,10 @@ import { useLang } from '../../contexts/LanguageContext';
 import { STATUS_CONFIG, URGENCY_CONFIG } from '../../utils/status';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 
+const { useBreakpoint } = Grid;
+
 const STATUS_BADGE_COLORS = {
-  new: '#6366f1',
+  new: '#00B856',
   under_review: '#f59e0b',
   approved: '#06b6d4',
   in_progress: '#3b82f6',
@@ -23,6 +25,8 @@ const STATUS_BADGE_COLORS = {
 export default function AppOrdersPage() {
   const navigate = useNavigate();
   const { t } = useLang();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [activeTab, setActiveTab] = useState('active');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,12 +56,33 @@ export default function AppOrdersPage() {
     <div style={{ background: 'var(--bg-secondary)', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{
-        padding: '16px 20px 0',
-        paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
+        padding: isMobile ? '20px 20px 0' : '24px 40px 0',
+        paddingTop: isMobile ? 'calc(20px + env(safe-area-inset-top, 0px))' : 24,
         background: 'var(--bg-primary)',
+        borderBottom: '1px solid var(--border-light)',
       }}>
-        <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 16, letterSpacing: -0.5 }}>
-          {t('orders.myOrders')}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 20,
+        }}>
+          <div style={{
+            fontSize: 26, fontWeight: 800, color: 'var(--text-primary)',
+            letterSpacing: -0.5,
+          }}>
+            {t('orders.myOrders')}
+          </div>
+          <div
+            onClick={() => navigate('/app/order/new')}
+            style={{
+              width: 38, height: 38, borderRadius: 12,
+              background: 'var(--accent-bg-strong)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: 'var(--accent)', fontSize: 16,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <PlusOutlined />
+          </div>
         </div>
 
         {/* Tab bar */}
@@ -68,70 +93,88 @@ export default function AppOrdersPage() {
           padding: 4,
           marginBottom: 16,
         }}>
-          {tabs.map((tab) => (
-            <div
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              style={{
-                flex: 1,
-                textAlign: 'center',
-                padding: '10px 0',
-                fontSize: 13,
-                fontWeight: activeTab === tab.key ? 600 : 500,
-                color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-tertiary)',
-                background: activeTab === tab.key ? 'var(--card-bg)' : 'transparent',
-                borderRadius: 10,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 5,
-                transition: 'all 0.2s ease',
-                boxShadow: activeTab === tab.key ? 'var(--shadow-sm)' : 'none',
-              }}
-            >
-              {tab.icon}
-              {tab.label}
-            </div>
-          ))}
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <div
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  flex: 1,
+                  textAlign: 'center',
+                  padding: '10px 0',
+                  fontSize: 13,
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? 'var(--accent)' : 'var(--text-tertiary)',
+                  background: isActive ? 'var(--card-bg)' : 'transparent',
+                  borderRadius: 10,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  transition: 'all 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
+                  boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
+                  position: 'relative',
+                }}
+              >
+                {tab.icon}
+                {tab.label}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Order list */}
-      <div style={{ padding: '4px 16px 16px' }}>
+      <div style={{ padding: isMobile ? '12px 16px 24px' : '20px 40px 32px' }}>
         {loading ? (
-          <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
+          <div style={{ textAlign: 'center', padding: 80 }}>
+            <Spin size="large" />
+          </div>
         ) : orders.length === 0 ? (
           <div style={{
-            textAlign: 'center', padding: '60px 20px',
+            textAlign: 'center', padding: '60px 24px',
             background: 'var(--card-bg)', borderRadius: 20,
-            marginTop: 8, boxShadow: 'var(--shadow-sm)',
+            marginTop: 4, boxShadow: 'var(--shadow-sm)',
+            border: '1px solid var(--border-color)',
+            animation: 'fadeInUp 0.4s ease-out both',
           }}>
             <div style={{
-              width: 64, height: 64, borderRadius: 20,
+              width: 72, height: 72, borderRadius: 22,
               background: 'var(--accent-bg)',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 28, color: 'var(--accent)', marginBottom: 16,
+              fontSize: 32, color: 'var(--accent)', marginBottom: 20,
             }}>
               <FileTextOutlined />
             </div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
+            <div style={{
+              fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6,
+              letterSpacing: -0.2,
+            }}>
               {activeTab === 'active'
                 ? t('orders.noActive')
                 : activeTab === 'history'
                 ? t('orders.noCompleted')
                 : t('orders.noOrders')}
             </div>
+            <div style={{
+              fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 20,
+              lineHeight: 1.5, maxWidth: 240, margin: '0 auto 20px',
+            }}>
+              {activeTab !== 'history' && t('orders.placeFirst')}
+            </div>
             {activeTab !== 'history' && (
               <div
                 onClick={() => navigate('/app/order/new')}
                 style={{
-                  marginTop: 16, color: '#fff', fontWeight: 600,
+                  color: '#fff', fontWeight: 600,
                   fontSize: 14, cursor: 'pointer',
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  background: 'var(--header-gradient)',
-                  padding: '10px 20px', borderRadius: 12,
-                  boxShadow: '0 4px 12px rgba(99,102,241,0.25)',
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  background: 'var(--fab-gradient)',
+                  padding: '12px 24px', borderRadius: 14,
+                  boxShadow: 'var(--fab-shadow)',
+                  transition: 'all 0.2s ease',
                 }}
               >
                 <PlusOutlined /> {t('orders.placeFirst')}
@@ -156,6 +199,7 @@ export default function AppOrdersPage() {
 
 function OrderCard({ order, onClick, t, delay = 0 }) {
   const badgeColor = STATUS_BADGE_COLORS[order.status] || '#8e93ab';
+  const catColor = order.selected_category_color || 'var(--accent)';
 
   return (
     <div
@@ -164,58 +208,88 @@ function OrderCard({ order, onClick, t, delay = 0 }) {
       style={{
         background: 'var(--card-bg)',
         borderRadius: 16,
-        padding: '16px',
+        padding: '0',
         marginBottom: 10,
         display: 'flex',
-        alignItems: 'center',
-        gap: 14,
+        alignItems: 'stretch',
         boxShadow: 'var(--shadow-sm)',
         border: '1px solid var(--border-color)',
+        overflow: 'hidden',
         animation: `fadeInUp 0.4s ease-out ${delay}s both`,
       }}
     >
+      {/* Left accent border */}
       <div style={{
-        width: 48, height: 48, borderRadius: 14,
-        background: `${order.selected_category_color || 'var(--accent)'}12`,
-        display: 'flex',
-        alignItems: 'center', justifyContent: 'center',
-        fontSize: 22, color: order.selected_category_color || 'var(--accent)', flexShrink: 0,
+        width: 4, flexShrink: 0,
+        background: badgeColor,
+        borderRadius: '4px 0 0 4px',
+      }} />
+
+      <div style={{
+        flex: 1, display: 'flex', alignItems: 'center', gap: 14,
+        padding: '14px 14px 14px 12px',
       }}>
-        {getCategoryIcon(order.selected_category_icon)}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontSize: 15, fontWeight: 600, color: 'var(--text-primary)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          width: 48, height: 48, borderRadius: 14,
+          background: `${catColor}12`,
+          display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          fontSize: 22, color: catColor, flexShrink: 0,
         }}>
-          {order.pickup_location}
+          {getCategoryIcon(order.selected_category_icon)}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 3 }}>
-          #{order.id} · {order.requested_date} · {order.selected_category_name || ''}
-        </div>
-        {(order.urgency === 'urgent' || order.urgency === 'high') && (
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            marginTop: 5,
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            fontSize: 11, fontWeight: 600,
-            color: order.urgency === 'urgent' ? '#ef4444' : '#f59e0b',
-            background: order.urgency === 'urgent' ? '#ef444414' : '#f59e0b14',
-            padding: '2px 8px', borderRadius: 6,
+            fontSize: 15, fontWeight: 600, color: 'var(--text-primary)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            letterSpacing: -0.1,
           }}>
-            {t('urgency.' + order.urgency)}
+            {order.pickup_location}
           </div>
-        )}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
-        <div style={{
-          fontSize: 11, fontWeight: 600, color: badgeColor,
-          background: `${badgeColor}14`,
-          padding: '4px 10px',
-          borderRadius: 8,
-        }}>
-          {t('status.' + order.status) || order.status}
+          <div style={{
+            fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4,
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}>
+            <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>#{order.id}</span>
+            <span style={{ opacity: 0.4 }}>&middot;</span>
+            {order.requested_date}
+            {order.selected_category_name && (
+              <>
+                <span style={{ opacity: 0.4 }}>&middot;</span>
+                <span style={{
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  maxWidth: 80,
+                }}>
+                  {order.selected_category_name}
+                </span>
+              </>
+            )}
+          </div>
+          {(order.urgency === 'urgent' || order.urgency === 'high') && (
+            <div style={{
+              marginTop: 6,
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              fontSize: 11, fontWeight: 600,
+              color: order.urgency === 'urgent' ? '#ef4444' : '#f59e0b',
+              background: order.urgency === 'urgent' ? 'var(--danger-bg)' : '#f59e0b14',
+              padding: '2px 8px', borderRadius: 6,
+            }}>
+            {t('urgency.' + order.urgency)}
+            </div>
+          )}
         </div>
-        <RightOutlined style={{ color: 'var(--text-placeholder)', fontSize: 11 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: badgeColor,
+            background: `${badgeColor}14`,
+            padding: '4px 10px',
+            borderRadius: 8,
+            whiteSpace: 'nowrap',
+          }}>
+            {t('status.' + order.status) || order.status}
+          </div>
+          <RightOutlined style={{ color: 'var(--text-placeholder)', fontSize: 11 }} />
+        </div>
       </div>
     </div>
   );
