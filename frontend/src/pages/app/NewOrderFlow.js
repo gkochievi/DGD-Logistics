@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Form, Input, Button, Select, DatePicker, TimePicker, Upload, message, Spin } from 'antd';
+import { Form, Input, Button, Select, DatePicker, TimePicker, Upload, message, Spin, Grid } from 'antd';
 import {
   ArrowLeftOutlined, EnvironmentOutlined,
   CalendarOutlined, UserOutlined, PhoneOutlined, CameraOutlined,
@@ -17,11 +17,14 @@ import MapPicker from '../../components/map/MapPicker';
 import LocationAutocomplete from '../../components/common/LocationAutocomplete';
 
 const { TextArea } = Input;
+const { useBreakpoint } = Grid;
 
 export default function NewOrderFlow() {
   const [form] = Form.useForm();
   const { user } = useAuth();
   const { t } = useLang();
+  const screens = useBreakpoint();
+  const isDesktop = screens.md;
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -484,9 +487,17 @@ export default function NewOrderFlow() {
             icon={<EnvironmentOutlined />}
             title={needsDest ? t('newOrder.fromTo') : t('newOrder.workLocation')}
           >
+            <div style={{
+              display: isDesktop ? 'flex' : 'block',
+              gap: isDesktop ? 20 : 0,
+              alignItems: 'stretch',
+            }}>
+            {/* Left column: Location inputs + distance */}
+            <div style={{ flex: isDesktop ? 1 : undefined, minWidth: 0 }}>
             {/* Location inputs card */}
             <div style={{
-              background: 'var(--card-bg)', borderRadius: 16, padding: 16,
+              background: 'var(--card-bg)', borderRadius: 16,
+              padding: isDesktop ? 20 : 16,
               border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)',
               marginBottom: 12,
             }}>
@@ -711,9 +722,67 @@ export default function NewOrderFlow() {
               </div>
             )}
 
+            {/* Inline Date & Time — shown in left column on desktop when short (no dest, single stop) */}
+            {isDesktop && !needsDest && pickupStops.length <= 1 && (
+              <div style={{
+                background: 'var(--card-bg)', borderRadius: 16, padding: 20,
+                border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)',
+                marginTop: 4,
+              }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+                }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 8,
+                    background: 'var(--accent-bg)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 13, color: 'var(--accent)',
+                  }}>
+                    <CalendarOutlined />
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: -0.2 }}>
+                    {t('newOrder.when')}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <Form.Item name="requested_date" style={{ flex: 1, marginBottom: 0 }}
+                    rules={[{ required: true, message: t('newOrder.selectDate') }]}>
+                    <DatePicker
+                      style={{ width: '100%', height: 46, borderRadius: 12, fontSize: 14 }}
+                      placeholder={t('newOrder.selectDate')}
+                      disabledDate={(d) => d && d < dayjs().startOf('day')}
+                      inputReadOnly suffixIcon={<CalendarOutlined />}
+                    />
+                  </Form.Item>
+                  <Form.Item name="requested_time" style={{ flex: 1, marginBottom: 0 }}>
+                    <TimePicker
+                      format="HH:mm"
+                      style={{ width: '100%', height: 46, borderRadius: 12, fontSize: 14 }}
+                      placeholder={t('newOrder.preferredTime')}
+                      inputReadOnly suffixIcon={<ClockCircleOutlined />}
+                    />
+                  </Form.Item>
+                </div>
+              </div>
+            )}
+            </div>{/* end left column */}
+
+            {/* Right column: Map */}
+            <div style={{
+              flex: isDesktop ? 1 : undefined,
+              minWidth: 0,
+              position: isDesktop ? 'sticky' : 'static',
+              top: isDesktop ? 20 : undefined,
+              alignSelf: isDesktop ? 'flex-start' : undefined,
+              background: isDesktop ? 'var(--card-bg)' : 'transparent',
+              borderRadius: isDesktop ? 16 : 0,
+              padding: isDesktop ? 16 : 0,
+              border: isDesktop ? '1px solid var(--border-color)' : 'none',
+              boxShadow: isDesktop ? 'var(--shadow-sm)' : 'none',
+            }}>
             {/* ── Map tab pills ── */}
             <div style={{
-              display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap',
+              display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap',
             }}>
               {pickupStops.map((_, idx) => (
                 <button
@@ -756,7 +825,11 @@ export default function NewOrderFlow() {
               ))}
             </div>
 
-            <div style={{ borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{
+              borderRadius: isDesktop ? 12 : 14,
+              overflow: 'hidden',
+              border: isDesktop ? 'none' : '1px solid var(--border-color)',
+            }}>
               <MapPicker
                 position={activePosition}
                 onSelect={({ lat, lng, address }) => {
@@ -765,7 +838,7 @@ export default function NewOrderFlow() {
                     coords: { lat, lng },
                   });
                 }}
-                height={220}
+                height={isDesktop ? 340 : 220}
                 markerColor={activeStop.type === 'dest' ? 'red' : 'green'}
                 placeholder={
                   activeStop.type === 'dest'
@@ -775,9 +848,12 @@ export default function NewOrderFlow() {
                 extraMarkers={extraMarkers}
               />
             </div>
+            </div>{/* end right column */}
+            </div>{/* end flex row */}
           </FormSection>
 
-          {/* ── SECTION: Date & Time ── */}
+          {/* ── SECTION: Date & Time (standalone — hidden on desktop when inline in left column) ── */}
+          {(!isDesktop || needsDest || pickupStops.length > 1) && (
           <FormSection icon={<CalendarOutlined />} title={t('newOrder.when')}>
             <div style={{ display: 'flex', gap: 10 }}>
               <Form.Item name="requested_date" style={{ flex: 1, marginBottom: 0 }}
@@ -799,6 +875,7 @@ export default function NewOrderFlow() {
               </Form.Item>
             </div>
           </FormSection>
+          )}
 
           {/* ── SECTION: Description & Cargo ── */}
           <FormSection
