@@ -29,6 +29,7 @@ import AdminUserFormPage from './pages/admin/AdminUserFormPage';
 import AdminCategoriesPage from './pages/admin/AdminCategoriesPage';
 import AdminVehiclesPage from './pages/admin/AdminVehiclesPage';
 import AdminAnalyticsPage from './pages/admin/AdminAnalyticsPage';
+import AdminLandingPage from './pages/admin/AdminLandingPage';
 
 export default function App() {
   return (
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="/admin/users/:id" element={<AdminUserFormPage />} />
           <Route path="/admin/categories" element={<AdminCategoriesPage />} />
           <Route path="/admin/vehicles" element={<AdminVehiclesPage />} />
+          <Route path="/admin/landing" element={<AdminLandingPage />} />
         </Route>
 
         {/* Old dashboard routes redirect to new app */}

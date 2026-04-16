@@ -262,6 +262,17 @@ body {
   box-shadow: 0 0 0 3px var(--ring-color) !important;
 }
 
+/* ─── Auth form input fix — prevent text clipping ─── */
+.ant-input-affix-wrapper.ant-input-affix-wrapper-lg {
+  padding: 14px 16px !important;
+  line-height: 1.5 !important;
+}
+.ant-input-affix-wrapper.ant-input-affix-wrapper-lg > input.ant-input {
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+  padding: 0 !important;
+}
+
 /* ─── Ant Design card refinements ─── */
 .ant-card {
   border-color: var(--border-color) !important;

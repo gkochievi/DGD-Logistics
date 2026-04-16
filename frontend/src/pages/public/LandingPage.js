@@ -1,33 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Row, Col, Grid } from 'antd';
 import {
-  EnvironmentOutlined, CarOutlined, ToolOutlined,
-  BuildOutlined, ThunderboltOutlined,
-  RocketOutlined, SafetyOutlined, ClockCircleOutlined,
-  ArrowRightOutlined, FileTextOutlined, SearchOutlined,
-  DollarOutlined, AimOutlined,
+  EnvironmentOutlined, CarOutlined,
+  ArrowRightOutlined, AimOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLang } from '../../contexts/LanguageContext';
 import LocationAutocomplete from '../../components/common/LocationAutocomplete';
+import { getCategoryIcon } from '../../utils/categoryIcons';
 
 const { useBreakpoint } = Grid;
 
 const CATEGORY_ICONS = {
   'tow-truck-recovery-vehicle': <CarOutlined />,
-  'tractor': <ToolOutlined />,
-  'cement-mixer-concrete-mixer-truck': <BuildOutlined />,
-  'bulldozer': <ThunderboltOutlined />,
+  'tractor': getCategoryIcon('tool'),
+  'cement-mixer-concrete-mixer-truck': getCategoryIcon('build'),
+  'bulldozer': getCategoryIcon('thunderbolt'),
 };
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const screens = useBreakpoint();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const { user } = useAuth();
   const [categories, setCategories] = useState([]);
+  const [landing, setLanding] = useState(null);
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [pickupLocation, setPickupLocation] = useState(null);
@@ -38,9 +37,22 @@ export default function LandingPage() {
     api.get('/categories/').then(({ data }) => {
       setCategories(Array.isArray(data) ? data : data.results || []);
     }).catch(() => {});
+    api.get('/landing/').then(({ data }) => {
+      setLanding(data);
+    }).catch(() => {});
   }, []);
 
   const isMobile = !screens.md;
+
+  // Helper: get i18n text from landing data, fallback to translation key
+  const lt = (field, fallbackKey) => {
+    if (landing && landing[field]) {
+      const val = landing[field];
+      if (typeof val === 'string') return val;
+      if (typeof val === 'object') return val[lang] || val['en'] || '';
+    }
+    return fallbackKey ? t(fallbackKey) : '';
+  };
 
   const handleGetOffers = () => {
     const locationState = {
@@ -61,6 +73,48 @@ export default function LandingPage() {
       navigate('/register');
     }
   };
+
+  // Build stats from API or fallback
+  const stats = (landing?.stats && landing.stats.length > 0)
+    ? landing.stats.map((s) => ({
+        num: s.number,
+        label: (typeof s.label === 'object') ? (s.label[lang] || s.label['en'] || '') : (s.label || ''),
+      }))
+    : [
+        { num: '500+', label: t('landing.statsOrders') },
+        { num: '50+', label: t('landing.statsVehicles') },
+        { num: '98%', label: t('landing.statsRating') },
+      ];
+
+  // Build steps from API or fallback
+  const steps = (landing?.steps && landing.steps.length > 0)
+    ? landing.steps.map((s, i) => ({
+        icon: getCategoryIcon(s.icon),
+        title: (typeof s.title === 'object') ? (s.title[lang] || s.title['en'] || '') : (s.title || ''),
+        desc: (typeof s.description === 'object') ? (s.description[lang] || s.description['en'] || '') : (s.description || ''),
+        num: String(i + 1).padStart(2, '0'),
+      }))
+    : [
+        { icon: getCategoryIcon('build'), title: t('landing.step1Title'), desc: t('landing.step1Desc'), num: '01' },
+        { icon: getCategoryIcon('tool'), title: t('landing.step2Title'), desc: t('landing.step2Desc'), num: '02' },
+        { icon: getCategoryIcon('car'), title: t('landing.step3Title'), desc: t('landing.step3Desc'), num: '03' },
+      ];
+
+  // Build benefits from API or fallback
+  const benefits = (landing?.benefits && landing.benefits.length > 0)
+    ? landing.benefits.map((b) => ({
+        icon: getCategoryIcon(b.icon),
+        title: (typeof b.title === 'object') ? (b.title[lang] || b.title['en'] || '') : (b.title || ''),
+        desc: (typeof b.description === 'object') ? (b.description[lang] || b.description['en'] || '') : (b.description || ''),
+        color: b.color || '#00B856',
+        bg: `${b.color || '#00B856'}1a`,
+      }))
+    : [
+        { icon: getCategoryIcon('rocket'), title: t('landing.fastTitle'), desc: t('landing.fastDesc'), color: '#00B856', bg: 'rgba(0,184,86,0.1)' },
+        { icon: getCategoryIcon('build'), title: t('landing.reliableTitle'), desc: t('landing.reliableDesc'), color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
+        { icon: getCategoryIcon('thunderbolt'), title: t('landing.trackingTitle'), desc: t('landing.trackingDesc'), color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+        { icon: getCategoryIcon('database'), title: t('landing.smartTitle'), desc: t('landing.smartDesc'), color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
+      ];
 
   return (
     <div>
@@ -168,7 +222,7 @@ export default function LandingPage() {
             color: 'var(--accent)',
             letterSpacing: '0.02em',
           }}>
-            Heawy Way
+            {landing?.hero_badge || 'Heawy Way'}
           </div>
 
           <h1 style={{
@@ -179,7 +233,7 @@ export default function LandingPage() {
             lineHeight: 1.1,
             margin: '0 0 16px',
           }}>
-            {t('landing.heroTitle')}
+            {lt('hero_title', 'landing.heroTitle')}
           </h1>
 
           <p style={{
@@ -189,7 +243,7 @@ export default function LandingPage() {
             maxWidth: 580,
             margin: '0 auto 36px',
           }}>
-            {t('landing.heroDesc')}
+            {lt('hero_description', 'landing.heroDesc')}
           </p>
 
           {/* ── Search Form Bar ── */}
@@ -258,11 +312,7 @@ export default function LandingPage() {
             marginTop: 36,
             flexWrap: 'wrap',
           }}>
-            {[
-              { num: '500+', label: t('landing.statsOrders') },
-              { num: '50+', label: t('landing.statsVehicles') },
-              { num: '98%', label: t('landing.statsRating') },
-            ].map((s, i) => (
+            {stats.map((s, i) => (
               <div key={i} style={{ textAlign: 'center' }}>
                 <div style={{
                   fontSize: 24, fontWeight: 800,
@@ -354,179 +404,135 @@ export default function LandingPage() {
       )}
 
       {/* ══════════════════════════════════════════
-          HOW IT WORKS (3 steps)
+          HOW IT WORKS
       ══════════════════════════════════════════ */}
-      <section style={{
-        padding: isMobile ? '56px 20px' : '88px 48px',
-        background: 'var(--bg-primary)',
-      }}>
-        <div style={{ maxWidth: 960, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: isMobile ? 36 : 56 }}>
-            <p style={{
-              fontSize: 13, fontWeight: 700, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 12,
-            }}>
-              {t('landing.howItWorks')}
-            </p>
-            <h2 style={{
-              fontSize: isMobile ? 26 : 36, fontWeight: 800,
-              color: 'var(--text-primary)', letterSpacing: '-0.03em',
-              lineHeight: 1.2, margin: 0,
-            }}>
-              {t('landing.howItWorks')}
-            </h2>
-          </div>
+      {steps.length > 0 && (
+        <section style={{
+          padding: isMobile ? '56px 20px' : '88px 48px',
+          background: 'var(--bg-primary)',
+        }}>
+          <div style={{ maxWidth: 960, margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: isMobile ? 36 : 56 }}>
+              <p style={{
+                fontSize: 13, fontWeight: 700, letterSpacing: '0.08em',
+                textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 12,
+              }}>
+                {lt('steps_title', 'landing.howItWorks') || t('landing.howItWorks')}
+              </p>
+              <h2 style={{
+                fontSize: isMobile ? 26 : 36, fontWeight: 800,
+                color: 'var(--text-primary)', letterSpacing: '-0.03em',
+                lineHeight: 1.2, margin: 0,
+              }}>
+                {lt('steps_title', 'landing.howItWorks') || t('landing.howItWorks')}
+              </h2>
+            </div>
 
-          <Row gutter={[24, 24]}>
-            {[
-              {
-                icon: <FileTextOutlined style={{ fontSize: 28 }} />,
-                title: t('landing.step1Title'),
-                desc: t('landing.step1Desc'),
-                num: '01',
-              },
-              {
-                icon: <SearchOutlined style={{ fontSize: 28 }} />,
-                title: t('landing.step2Title'),
-                desc: t('landing.step2Desc'),
-                num: '02',
-              },
-              {
-                icon: <CarOutlined style={{ fontSize: 28 }} />,
-                title: t('landing.step3Title'),
-                desc: t('landing.step3Desc'),
-                num: '03',
-              },
-            ].map((step, i) => (
-              <Col xs={24} md={8} key={i}>
-                <div
-                  className="lt-step-card"
-                  style={{
-                    animation: `fadeInUp ${0.4 + i * 0.12}s cubic-bezier(0.22,1,0.36,1)`,
-                  }}
-                >
-                  <div style={{
-                    width: 56, height: 56, borderRadius: 16,
-                    background: 'var(--accent-bg)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    margin: '0 auto 20px', color: 'var(--accent)',
-                  }}>
-                    {step.icon}
-                  </div>
-                  <div style={{
-                    fontSize: 12, fontWeight: 700, color: 'var(--accent)',
-                    letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10,
-                  }}>
-                    {step.num}
-                  </div>
-                  <h4 style={{
-                    fontSize: 18, fontWeight: 700, color: 'var(--text-primary)',
-                    letterSpacing: '-0.02em', margin: '0 0 8px',
-                  }}>
-                    {step.title}
-                  </h4>
-                  <p style={{
-                    fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0,
-                  }}>
-                    {step.desc}
-                  </p>
-                </div>
-              </Col>
-            ))}
-          </Row>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════
-          WHY CHOOSE US (Benefits)
-      ══════════════════════════════════════════ */}
-      <section style={{
-        padding: isMobile ? '56px 20px' : '88px 48px',
-        background: 'var(--bg-secondary)',
-      }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: isMobile ? 36 : 56 }}>
-            <p style={{
-              fontSize: 13, fontWeight: 700, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 12,
-            }}>
-              {t('landing.whyChoose')}
-            </p>
-            <h2 style={{
-              fontSize: isMobile ? 26 : 36, fontWeight: 800,
-              color: 'var(--text-primary)', letterSpacing: '-0.03em',
-              lineHeight: 1.2, margin: 0,
-            }}>
-              {t('landing.whyChoose')}
-            </h2>
-          </div>
-
-          <Row gutter={[20, 20]}>
-            {[
-              {
-                icon: <RocketOutlined style={{ fontSize: 22 }} />,
-                title: t('landing.fastTitle'),
-                desc: t('landing.fastDesc'),
-                color: '#00B856',
-                bg: 'rgba(0,184,86,0.1)',
-              },
-              {
-                icon: <SafetyOutlined style={{ fontSize: 22 }} />,
-                title: t('landing.reliableTitle'),
-                desc: t('landing.reliableDesc'),
-                color: '#10b981',
-                bg: 'rgba(16,185,129,0.1)',
-              },
-              {
-                icon: <ClockCircleOutlined style={{ fontSize: 22 }} />,
-                title: t('landing.trackingTitle'),
-                desc: t('landing.trackingDesc'),
-                color: '#f59e0b',
-                bg: 'rgba(245,158,11,0.1)',
-              },
-              {
-                icon: <DollarOutlined style={{ fontSize: 22 }} />,
-                title: t('landing.smartTitle'),
-                desc: t('landing.smartDesc'),
-                color: '#3b82f6',
-                bg: 'rgba(59,130,246,0.1)',
-              },
-            ].map((b, i) => (
-              <Col xs={24} sm={12} key={i}>
-                <div
-                  className="lt-benefit-card"
-                  style={{
-                    display: 'flex', gap: 18, alignItems: 'flex-start',
-                    animation: `fadeInUp ${0.4 + i * 0.1}s cubic-bezier(0.22,1,0.36,1)`,
-                  }}
-                >
-                  <div style={{
-                    width: 48, height: 48, minWidth: 48, borderRadius: 14,
-                    background: b.bg,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: b.color,
-                  }}>
-                    {b.icon}
-                  </div>
-                  <div>
-                    <h4 style={{
-                      fontSize: 16, fontWeight: 700, color: 'var(--text-primary)',
-                      letterSpacing: '-0.02em', margin: '0 0 6px',
+            <Row gutter={[24, 24]}>
+              {steps.map((step, i) => (
+                <Col xs={24} md={8} key={i}>
+                  <div
+                    className="lt-step-card"
+                    style={{
+                      animation: `fadeInUp ${0.4 + i * 0.12}s cubic-bezier(0.22,1,0.36,1)`,
+                    }}
+                  >
+                    <div style={{
+                      width: 56, height: 56, borderRadius: 16,
+                      background: 'var(--accent-bg)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      margin: '0 auto 20px', color: 'var(--accent)', fontSize: 28,
                     }}>
-                      {b.title}
+                      {step.icon}
+                    </div>
+                    <div style={{
+                      fontSize: 12, fontWeight: 700, color: 'var(--accent)',
+                      letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10,
+                    }}>
+                      {step.num}
+                    </div>
+                    <h4 style={{
+                      fontSize: 18, fontWeight: 700, color: 'var(--text-primary)',
+                      letterSpacing: '-0.02em', margin: '0 0 8px',
+                    }}>
+                      {step.title}
                     </h4>
                     <p style={{
                       fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0,
                     }}>
-                      {b.desc}
+                      {step.desc}
                     </p>
                   </div>
-                </div>
-              </Col>
-            ))}
-          </Row>
-        </div>
-      </section>
+                </Col>
+              ))}
+            </Row>
+          </div>
+        </section>
+      )}
+
+      {/* ══════════════════════════════════════════
+          WHY CHOOSE US (Benefits)
+      ══════════════════════════════════════════ */}
+      {benefits.length > 0 && (
+        <section style={{
+          padding: isMobile ? '56px 20px' : '88px 48px',
+          background: 'var(--bg-secondary)',
+        }}>
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: isMobile ? 36 : 56 }}>
+              <p style={{
+                fontSize: 13, fontWeight: 700, letterSpacing: '0.08em',
+                textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 12,
+              }}>
+                {lt('benefits_title', 'landing.whyChoose') || t('landing.whyChoose')}
+              </p>
+              <h2 style={{
+                fontSize: isMobile ? 26 : 36, fontWeight: 800,
+                color: 'var(--text-primary)', letterSpacing: '-0.03em',
+                lineHeight: 1.2, margin: 0,
+              }}>
+                {lt('benefits_title', 'landing.whyChoose') || t('landing.whyChoose')}
+              </h2>
+            </div>
+
+            <Row gutter={[20, 20]}>
+              {benefits.map((b, i) => (
+                <Col xs={24} sm={12} key={i}>
+                  <div
+                    className="lt-benefit-card"
+                    style={{
+                      display: 'flex', gap: 18, alignItems: 'flex-start',
+                      animation: `fadeInUp ${0.4 + i * 0.1}s cubic-bezier(0.22,1,0.36,1)`,
+                    }}
+                  >
+                    <div style={{
+                      width: 48, height: 48, minWidth: 48, borderRadius: 14,
+                      background: b.bg,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: b.color, fontSize: 22,
+                    }}>
+                      {b.icon}
+                    </div>
+                    <div>
+                      <h4 style={{
+                        fontSize: 16, fontWeight: 700, color: 'var(--text-primary)',
+                        letterSpacing: '-0.02em', margin: '0 0 6px',
+                      }}>
+                        {b.title}
+                      </h4>
+                      <p style={{
+                        fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0,
+                      }}>
+                        {b.desc}
+                      </p>
+                    </div>
+                  </div>
+                </Col>
+              ))}
+            </Row>
+          </div>
+        </section>
+      )}
 
       {/* ══════════════════════════════════════════
           CTA SECTION
@@ -564,7 +570,7 @@ export default function LandingPage() {
             lineHeight: 1.2,
             margin: '0 0 14px',
           }}>
-            {t('landing.readyTitle')}
+            {lt('cta_title', 'landing.readyTitle')}
           </h2>
           <p style={{
             color: 'rgba(255,255,255,0.8)',
@@ -572,7 +578,7 @@ export default function LandingPage() {
             lineHeight: 1.6,
             margin: '0 0 36px',
           }}>
-            {t('landing.readyDesc')}
+            {lt('cta_description', 'landing.readyDesc')}
           </p>
           <Button
             size="large"
@@ -588,7 +594,7 @@ export default function LandingPage() {
               gap: 8,
             }}
           >
-            {t('landing.getStarted')} <ArrowRightOutlined />
+            {lt('cta_button_text', 'landing.getStarted')} <ArrowRightOutlined />
           </Button>
         </div>
       </section>

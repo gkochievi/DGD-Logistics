@@ -4,7 +4,7 @@ import {
   DashboardOutlined, FileTextOutlined,
   TeamOutlined, AppstoreOutlined, UserOutlined, LogoutOutlined,
   CarOutlined, MoonFilled, SunFilled, BarChartOutlined,
-  GlobalOutlined,
+  GlobalOutlined, DesktopOutlined, ExportOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -30,6 +30,7 @@ export default function AdminLayout() {
     { key: '/admin/vehicles', icon: <CarOutlined />, label: t('nav.vehicles') },
     { key: '/admin/users', icon: <TeamOutlined />, label: t('nav.users') },
     { key: '/admin/categories', icon: <AppstoreOutlined />, label: t('nav.categories') },
+    { key: '/admin/landing', icon: <DesktopOutlined />, label: t('nav.landing') },
   ];
 
   const selectedKey = MENU_ITEMS.find((item) =>
@@ -151,7 +152,22 @@ export default function AdminLayout() {
             </nav>
           )}
 
-          {/* Right: user dropdown */}
+          {/* Right: go to website + user dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div
+            onClick={() => window.open('/', '_blank')}
+            title={t('adminLanding.goToWebsite')}
+            style={{
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 36, height: 36, borderRadius: 10,
+              color: 'var(--text-secondary)', fontSize: 16,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <ExportOutlined />
+          </div>
           <Dropdown
             menu={{
               items: userMenuItems,
@@ -183,6 +199,7 @@ export default function AdminLayout() {
               )}
             </div>
           </Dropdown>
+          </div>
         </div>
       </div>
 

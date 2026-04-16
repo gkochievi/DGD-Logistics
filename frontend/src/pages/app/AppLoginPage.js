@@ -112,7 +112,7 @@ export default function AppLoginPage() {
               inputMode="email"
               autoComplete="email"
               style={{
-                height: 56, borderRadius: 16, fontSize: 16,
+                padding: '14px 16px', borderRadius: 16, fontSize: 16,
                 background: 'var(--input-bg)',
                 border: '1.5px solid var(--input-border)',
               }}
@@ -124,7 +124,7 @@ export default function AppLoginPage() {
               placeholder={t('auth.password')}
               autoComplete="current-password"
               style={{
-                height: 56, borderRadius: 16, fontSize: 16,
+                padding: '14px 16px', borderRadius: 16, fontSize: 16,
                 background: 'var(--input-bg)',
                 border: '1.5px solid var(--input-border)',
               }}

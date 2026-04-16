@@ -37,7 +37,7 @@ export default function AppRegisterPage() {
   };
 
   const inputStyle = {
-    height: 54, borderRadius: 16, fontSize: 15,
+    padding: '13px 16px', borderRadius: 16, fontSize: 15,
     background: 'var(--input-bg)',
     border: '1.5px solid var(--input-border)',
   };
@@ -148,7 +148,10 @@ export default function AppRegisterPage() {
             />
           </Form.Item>
 
-          <Form.Item name="phone_number" rules={[{ required: true, message: t('newOrder.enterPhone') }]}>
+          <Form.Item name="phone_number" rules={[
+            { required: true, message: t('newOrder.enterPhone') },
+            { pattern: /^[\d\s+\-()]+$/, message: t('auth.phoneOnlyDigits') },
+          ]}>
             <Input
               prefix={<PhoneOutlined style={{ color: 'var(--text-placeholder)' }} />}
               placeholder={t('auth.phone')}
@@ -207,6 +210,17 @@ export default function AppRegisterPage() {
           <Form.Item name="password" rules={[
             { required: true, message: t('auth.createPassword') },
             { min: 8, message: t('auth.minPassword') },
+            () => ({
+              validator(_, value) {
+                if (!value) return Promise.resolve();
+                const hasUpper = /[A-Z]/.test(value);
+                const hasLower = /[a-z]/.test(value);
+                const hasDigit = /\d/.test(value);
+                const hasSpecial = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(value);
+                if (hasUpper && hasLower && hasDigit && hasSpecial) return Promise.resolve();
+                return Promise.reject(new Error(t('auth.passwordStrength')));
+              },
+            }),
           ]}>
             <Input.Password
               prefix={<LockOutlined style={{ color: 'var(--text-placeholder)' }} />}
@@ -290,7 +304,7 @@ function UserTypeToggle({ value, onChange, t }) {
             style={{
               flex: 1,
               textAlign: 'center',
-              height: 54,
+              padding: '14px 16px',
               borderRadius: 16,
               fontSize: 15,
               fontWeight: 650,
