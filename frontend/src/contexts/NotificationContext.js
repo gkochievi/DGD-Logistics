@@ -5,10 +5,12 @@ import api from '../api/client';
 import { useAuth } from './AuthContext';
 import { playNotificationSound, primeAudio } from '../utils/soundAlerts';
 
-const POLL_INTERVAL_MS = Math.max(
-  1000,
-  parseInt(process.env.REACT_APP_NOTIFICATION_POLL_MS, 10) || 15000,
-);
+const DEFAULT_POLL_INTERVAL_MS = 10000;
+const POLL_INTERVAL_MS = (() => {
+  const raw = parseInt(process.env.REACT_APP_NOTIFICATION_POLL_MS, 10);
+  if (!raw || raw <= 0) return DEFAULT_POLL_INTERVAL_MS;
+  return Math.max(1000, raw);
+})();
 const NotificationContext = createContext(null);
 
 const MUTE_KEY = 'notifications:muted';

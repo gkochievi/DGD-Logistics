@@ -40,7 +40,7 @@ services:
       dockerfile: Dockerfile
       args:
         REACT_APP_API_URL: ${REACT_APP_API_URL:-/api}
-        REACT_APP_NOTIFICATION_POLL_MS: ${REACT_APP_NOTIFICATION_POLL_MS:-15000}
+        REACT_APP_NOTIFICATION_POLL_MS: ${REACT_APP_NOTIFICATION_POLL_MS:-}
     command: sh -c "cp -a /usr/share/nginx/html/. /out/"
     volumes:
       - frontend_build:/out
