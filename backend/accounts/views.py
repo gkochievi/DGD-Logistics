@@ -407,11 +407,11 @@ class AdminAnalyticsView(APIView):
         top_customers_qs = (
             period_orders
             .values(
-                user_id=F('user__id'),
-                first_name=F('user__first_name'),
-                last_name=F('user__last_name'),
-                email=F('user__email'),
-                user_type=F('user__user_type'),
+                'user__id',
+                'user__first_name',
+                'user__last_name',
+                'user__email',
+                'user__user_type',
             )
             .annotate(
                 orders=Count('id'),
@@ -425,10 +425,10 @@ class AdminAnalyticsView(APIView):
         )
         top_customers = [
             {
-                'user_id': c['user_id'],
-                'name': f"{c['first_name'] or ''} {c['last_name'] or ''}".strip() or c['email'],
-                'email': c['email'],
-                'user_type': c['user_type'],
+                'user_id': c['user__id'],
+                'name': f"{c['user__first_name'] or ''} {c['user__last_name'] or ''}".strip() or c['user__email'],
+                'email': c['user__email'],
+                'user_type': c['user__user_type'],
                 'orders': c['orders'],
                 'completed': c['completed'],
                 'revenue': float(c['revenue'] or 0),

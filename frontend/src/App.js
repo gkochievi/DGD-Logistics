@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import { ProtectedRoute, AppAuthGuard, ForcePasswordChangeGuard } from './components/common/ProtectedRoute';
 import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
 
@@ -36,6 +37,7 @@ import AdminLandingPage from './pages/admin/AdminLandingPage';
 export default function App() {
   return (
     <AuthProvider>
+      <NotificationProvider>
       <Routes>
         {/* ─── Public / marketing site ─── */}
         <Route element={<PublicLayout />}>
@@ -95,6 +97,7 @@ export default function App() {
         <Route path="/dashboard/*" element={<Navigate to="/app" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </NotificationProvider>
     </AuthProvider>
   );
 }

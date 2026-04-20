@@ -115,6 +115,27 @@ export const translations = {
       urgent: 'Urgent',
     },
 
+    // ── Notifications ──
+    notifications: {
+      title: 'Notifications',
+      noUnread: 'No new notifications',
+      viewAll: 'View all orders',
+      markAllRead: 'Mark all as read',
+      mute: 'Mute sound',
+      unmute: 'Unmute sound',
+      unread: 'Unread',
+      justNow: 'just now',
+      minutesAgo: '{count}m ago',
+      hoursAgo: '{count}h ago',
+      daysAgo: '{count}d ago',
+      eventCreated: 'New order created',
+      eventUpdated: 'Order updated',
+      eventCancelled: 'Order cancelled',
+      eventImages: 'New photos added',
+      eventStatus: 'Status changed to {status}',
+      eventUpdate: 'Order update',
+    },
+
     // ── Customer Home ──
     home: {
       greeting: {
@@ -774,6 +795,26 @@ export const translations = {
       urgent: 'სასწრაფო',
     },
 
+    notifications: {
+      title: 'შეტყობინებები',
+      noUnread: 'ახალი შეტყობინებები არ არის',
+      viewAll: 'ყველა შეკვეთის ნახვა',
+      markAllRead: 'ყველას წაკითხულად მონიშვნა',
+      mute: 'ხმის გამორთვა',
+      unmute: 'ხმის ჩართვა',
+      unread: 'წაუკითხავი',
+      justNow: 'ახლახან',
+      minutesAgo: '{count} წუთის წინ',
+      hoursAgo: '{count} საათის წინ',
+      daysAgo: '{count} დღის წინ',
+      eventCreated: 'ახალი შეკვეთა შეიქმნა',
+      eventUpdated: 'შეკვეთა განახლდა',
+      eventCancelled: 'შეკვეთა გაუქმდა',
+      eventImages: 'დაემატა ფოტოები',
+      eventStatus: 'სტატუსი შეიცვალა: {status}',
+      eventUpdate: 'შეკვეთის განახლება',
+    },
+
     home: {
       greeting: {
         morning: 'დილა',
@@ -1415,6 +1456,26 @@ export const translations = {
       normal: 'Обычная',
       high: 'Высокая',
       urgent: 'Срочная',
+    },
+
+    notifications: {
+      title: 'Уведомления',
+      noUnread: 'Нет новых уведомлений',
+      viewAll: 'Все заказы',
+      markAllRead: 'Отметить все как прочитанные',
+      mute: 'Выключить звук',
+      unmute: 'Включить звук',
+      unread: 'Непрочитано',
+      justNow: 'только что',
+      minutesAgo: '{count} мин назад',
+      hoursAgo: '{count} ч назад',
+      daysAgo: '{count} д назад',
+      eventCreated: 'Новый заказ',
+      eventUpdated: 'Заказ обновлён',
+      eventCancelled: 'Заказ отменён',
+      eventImages: 'Добавлены фото',
+      eventStatus: 'Новый статус: {status}',
+      eventUpdate: 'Обновление заказа',
     },
 
     home: {

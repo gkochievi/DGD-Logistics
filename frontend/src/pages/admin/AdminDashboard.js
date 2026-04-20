@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Card, Row, Col, Typography, List, Spin, Button, Grid, Progress } from 'antd';
 import {
   TeamOutlined, FileTextOutlined, CheckCircleOutlined,
@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { useLang } from '../../contexts/LanguageContext';
+import { useRealtimeRefresh } from '../../contexts/NotificationContext';
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -24,8 +25,9 @@ export default function AdminDashboard() {
 
   const isMobile = !screens.md;
 
-  useEffect(() => {
-    Promise.all([
+  const loadDashboard = useCallback(({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    return Promise.all([
       api.get('/auth/admin/dashboard/'),
       api.get('/orders/admin/?page=1'),
       api.get('/vehicles/admin/'),
@@ -36,8 +38,14 @@ export default function AdminDashboard() {
       const vResults = vehiclesRes.data.results || vehiclesRes.data;
       setVehicleCount(Array.isArray(vResults) ? vResults.length : 0);
     }).catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => { if (!silent) setLoading(false); });
   }, []);
+
+  useEffect(() => { loadDashboard(); }, [loadDashboard]);
+
+  useRealtimeRefresh(useCallback(() => {
+    loadDashboard({ silent: true });
+  }, [loadDashboard]));
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 80 }}>

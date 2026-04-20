@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Grid, Dropdown, Avatar, Switch, Select } from 'antd';
+import { Grid, Dropdown, Avatar, Switch, Select, Badge } from 'antd';
 import {
   HomeOutlined, HomeFilled,
   FileTextOutlined, FileTextFilled,
@@ -14,6 +14,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLang } from '../../contexts/LanguageContext';
 import { useBranding } from '../../contexts/BrandingContext';
+import { useNotifications } from '../../contexts/NotificationContext';
+import NotificationsBell from '../common/NotificationsBell';
 
 const { useBreakpoint } = Grid;
 
@@ -26,17 +28,34 @@ export default function AppLayout() {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const { t, lang, changeLang, SUPPORTED_LANGS, LANG_LABELS, LANG_FLAGS } = useLang();
+  const { unreadCount } = useNotifications();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const ordersBadge = unreadCount || 0;
 
   const TAB_ITEMS = [
     { key: '/app', icon: <HomeOutlined />, activeIcon: <HomeFilled />, label: t('nav.home') },
-    { key: '/app/orders', icon: <FileTextOutlined />, activeIcon: <FileTextFilled />, label: t('nav.orders') },
+    {
+      key: '/app/orders',
+      icon: <FileTextOutlined />,
+      activeIcon: <FileTextFilled />,
+      label: t('nav.orders'),
+      badge: ordersBadge,
+    },
     { key: '/app/profile', icon: <UserOutlined />, activeIcon: <UserOutlined />, label: t('nav.profile') },
   ];
 
   const NAV_ITEMS = [
     { key: '/app', icon: <HomeOutlined />, label: t('nav.home') },
-    { key: '/app/orders', icon: <FileTextOutlined />, label: t('nav.orders') },
+    {
+      key: '/app/orders',
+      icon: (
+        <Badge count={ordersBadge} size="small" overflowCount={99} offset={[6, -2]}>
+          <FileTextOutlined />
+        </Badge>
+      ),
+      label: t('nav.orders'),
+    },
   ];
 
   const activeTab = TAB_ITEMS.find((item) =>
@@ -290,6 +309,11 @@ export default function AppLayout() {
             {t('orders.newOrder')}
           </div>
 
+          {/* Notifications bell */}
+          <div style={{ marginRight: 4 }}>
+            <NotificationsBell variant="customer" />
+          </div>
+
           {/* User dropdown */}
           <Dropdown
             menu={{
@@ -336,6 +360,13 @@ export default function AppLayout() {
 }
 
 function TabItem({ item, isActive, onClick }) {
+  const iconNode = isActive ? item.activeIcon : item.icon;
+  const wrappedIcon = item.badge > 0 ? (
+    <Badge count={item.badge} size="small" overflowCount={99} offset={[4, -2]}>
+      {iconNode}
+    </Badge>
+  ) : iconNode;
+
   return (
     <div
       onClick={onClick}
@@ -371,7 +402,7 @@ function TabItem({ item, isActive, onClick }) {
         transition: 'transform 0.2s ease',
         transform: isActive ? 'scale(1.1)' : 'scale(1)',
       }}>
-        {isActive ? item.activeIcon : item.icon}
+        {wrappedIcon}
       </span>
       <span style={{
         fontSize: 10,

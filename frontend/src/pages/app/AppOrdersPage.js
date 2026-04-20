@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Spin, Empty, Grid } from 'antd';
 import {
   RightOutlined, ClockCircleOutlined,
@@ -7,6 +7,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
+import { useRealtimeRefresh } from '../../contexts/NotificationContext';
 import { STATUS_CONFIG, URGENCY_CONFIG } from '../../utils/status';
 import { CategoryImage } from '../../utils/categoryIcons';
 
@@ -31,20 +32,22 @@ export default function AppOrdersPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchOrders();
-  }, [activeTab]); // eslint-disable-line
-
-  const fetchOrders = () => {
-    setLoading(true);
+  const fetchOrders = useCallback(({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     const endpoint = activeTab === 'active' ? '/orders/active/' : '/orders/';
     const params = activeTab === 'history' ? { status: 'completed' } : {};
-    api.get(endpoint, { params }).then(({ data }) => {
+    return api.get(endpoint, { params }).then(({ data }) => {
       const results = Array.isArray(data) ? data : data.results || [];
       setOrders(results);
     }).catch(() => {})
-      .finally(() => setLoading(false));
-  };
+      .finally(() => { if (!silent) setLoading(false); });
+  }, [activeTab]);
+
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  useRealtimeRefresh(useCallback(() => {
+    fetchOrders({ silent: true });
+  }, [fetchOrders]));
 
   const tabs = [
     { key: 'active', label: t('orders.activeTab'), icon: <ClockCircleOutlined /> },
@@ -214,11 +217,20 @@ function OrderCard({ order, onClick, t, lang, delay = 0 }) {
         display: 'flex',
         alignItems: 'stretch',
         boxShadow: 'var(--shadow-sm)',
-        border: '1px solid var(--border-color)',
+        border: `1px solid ${order.is_unread ? 'var(--accent)' : 'var(--border-color)'}`,
         overflow: 'hidden',
         animation: `fadeInUp 0.4s ease-out ${delay}s both`,
+        position: 'relative',
       }}
     >
+      {order.is_unread && (
+        <div style={{
+          position: 'absolute', top: 10, right: 10,
+          width: 8, height: 8, borderRadius: '50%',
+          background: '#ef4444', boxShadow: '0 0 0 3px rgba(239,68,68,0.18)',
+          zIndex: 2,
+        }} />
+      )}
       {/* Left accent border */}
       <div style={{
         width: 4, flexShrink: 0,

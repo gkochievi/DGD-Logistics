@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dropdown, Avatar, Grid, Switch } from 'antd';
+import { Dropdown, Avatar, Grid, Switch, Badge } from 'antd';
 import {
   DashboardOutlined, FileTextOutlined,
   TeamOutlined, AppstoreOutlined, UserOutlined, LogoutOutlined,
@@ -11,6 +11,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLang } from '../../contexts/LanguageContext';
 import { useBranding } from '../../contexts/BrandingContext';
+import { useNotifications } from '../../contexts/NotificationContext';
+import NotificationsBell from '../common/NotificationsBell';
 
 const { useBreakpoint } = Grid;
 
@@ -24,10 +26,23 @@ export default function AdminLayout() {
   const screens = useBreakpoint();
 
   const isMobile = !screens.md;
+  const { unreadCount } = useNotifications();
+
+  const ordersIcon = (
+    <Badge
+      count={unreadCount}
+      size="small"
+      overflowCount={99}
+      offset={[6, -2]}
+      styles={{ indicator: { boxShadow: '0 0 0 2px var(--bg-primary)' } }}
+    >
+      <FileTextOutlined />
+    </Badge>
+  );
 
   const MENU_ITEMS = [
     { key: '/admin', icon: <DashboardOutlined />, label: t('nav.overview') },
-    { key: '/admin/orders', icon: <FileTextOutlined />, label: t('nav.orders') },
+    { key: '/admin/orders', icon: ordersIcon, label: t('nav.orders') },
     { key: '/admin/users', icon: <TeamOutlined />, label: t('nav.users') },
     { key: '/admin/vehicles', icon: <CarOutlined />, label: t('nav.vehicles') },
     { key: '/admin/drivers', icon: <IdcardOutlined />, label: t('nav.drivers') },
@@ -161,8 +176,9 @@ export default function AdminLayout() {
             </nav>
           )}
 
-          {/* Right: go to website + user dropdown */}
+          {/* Right: notifications + go to website + user dropdown */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <NotificationsBell variant="admin" />
           <div
             onClick={() => window.open('/', '_blank')}
             title={t('adminLanding.goToWebsite')}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Spin, Image, Button, Modal, message, Grid } from 'antd';
 import {
   ArrowLeftOutlined, EnvironmentOutlined, CalendarOutlined,
@@ -9,6 +9,7 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
+import { useRealtimeRefresh, useNotifications } from '../../contexts/NotificationContext';
 import { MapView } from '../../components/map/MapPicker';
 import { CategoryImage } from '../../utils/categoryIcons';
 
@@ -39,15 +40,23 @@ export default function AppOrderDetailPage() {
   const isDesktop = screens.md;
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { refresh: refreshNotifications } = useNotifications();
 
-  const fetchOrder = () => {
-    setLoading(true);
-    api.get(`/orders/${id}/`).then(({ data }) => setOrder(data))
-      .catch(() => message.error(t('orders.orderDetail', { id })))
-      .finally(() => setLoading(false));
-  };
+  const fetchOrder = useCallback(({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    return api.get(`/orders/${id}/`).then(({ data }) => {
+      setOrder(data);
+      refreshNotifications();
+    })
+      .catch(() => { if (!silent) message.error(t('orders.orderDetail', { id })); })
+      .finally(() => { if (!silent) setLoading(false); });
+  }, [id, t, refreshNotifications]);
 
-  useEffect(() => { fetchOrder(); }, [id]); // eslint-disable-line
+  useEffect(() => { fetchOrder(); }, [fetchOrder]);
+
+  useRealtimeRefresh(useCallback(() => {
+    fetchOrder({ silent: true });
+  }, [fetchOrder]));
 
   const handleCancel = () => {
     Modal.confirm({

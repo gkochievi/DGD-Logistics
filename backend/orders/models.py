@@ -72,6 +72,11 @@ class Order(models.Model):
     user_note = models.TextField(blank=True)
     route_stops = models.TextField(blank=True, default='')
 
+    is_read_by_admin = models.BooleanField(default=False)
+    is_read_by_customer = models.BooleanField(default=True)
+    last_event_at = models.DateTimeField(auto_now_add=True)
+    last_event_type = models.CharField(max_length=32, blank=True, default='created')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

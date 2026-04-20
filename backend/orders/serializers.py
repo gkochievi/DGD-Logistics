@@ -33,6 +33,17 @@ class OrderListSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     urgency_display = serializers.CharField(source='get_urgency_display', read_only=True)
     image_count = serializers.IntegerField(source='images.count', read_only=True)
+    is_unread = serializers.SerializerMethodField()
+
+    def get_is_unread(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        if request.user.role == 'admin':
+            return not obj.is_read_by_admin
+        if obj.user_id == request.user.id:
+            return not obj.is_read_by_customer
+        return False
 
     def get_selected_category_name(self, obj):
         if obj.selected_category:
@@ -60,6 +71,7 @@ class OrderListSerializer(serializers.ModelSerializer):
             'urgency', 'urgency_display', 'selected_category_name',
             'selected_category_icon', 'selected_category_image', 'selected_category_color',
             'final_category_name', 'is_cancellable', 'image_count', 'created_at',
+            'is_unread', 'last_event_at', 'last_event_type',
         ]
 
 
@@ -122,7 +134,13 @@ class OrderCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         images_data = validated_data.pop('images', [])
         user = self.context['request'].user
-        order = Order.objects.create(user=user, **validated_data)
+        order = Order.objects.create(
+            user=user,
+            is_read_by_admin=False,
+            is_read_by_customer=True,
+            last_event_type='created',
+            **validated_data,
+        )
 
         for image_file in images_data:
             OrderImage.objects.create(order=order, image=image_file)
@@ -140,8 +158,10 @@ class AdminOrderUpdateSerializer(serializers.ModelSerializer):
         fields = ['final_category', 'assigned_vehicle', 'admin_comment', 'status', 'urgency']
 
     def update(self, instance, validated_data):
+        from django.utils import timezone
         new_status = validated_data.get('status')
-        if new_status and new_status != instance.status:
+        status_changed = bool(new_status) and new_status != instance.status
+        if status_changed:
             OrderStatusHistory.objects.create(
                 order=instance,
                 old_status=instance.status,
@@ -149,6 +169,13 @@ class AdminOrderUpdateSerializer(serializers.ModelSerializer):
                 changed_by=self.context['request'].user,
                 comment=validated_data.get('admin_comment', ''),
             )
+            instance.is_read_by_customer = False
+            instance.last_event_type = f'status:{new_status}'
+            instance.last_event_at = timezone.now()
+        elif validated_data:
+            instance.is_read_by_customer = False
+            instance.last_event_type = 'updated'
+            instance.last_event_at = timezone.now()
         return super().update(instance, validated_data)
 
 

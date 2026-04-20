@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Table, Select, Button, Input, Typography, Space, Grid, Empty,
+  Table, Select, Button, Input, Typography, Space, Grid, Empty, Badge,
 } from 'antd';
 import { EyeOutlined, SearchOutlined, RightOutlined, FilterOutlined, UserOutlined, CloseOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -8,6 +8,7 @@ import api from '../../api/client';
 import { StatusBadge, UrgencyBadge } from '../../components/common/StatusBadge';
 import { STATUS_OPTIONS, URGENCY_OPTIONS } from '../../utils/status';
 import { useLang } from '../../contexts/LanguageContext';
+import { useRealtimeRefresh } from '../../contexts/NotificationContext';
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -34,8 +35,8 @@ export default function AdminOrdersPage({ historyMode = false }) {
     });
   }, []);
 
-  const fetchOrders = (page = 1) => {
-    setLoading(true);
+  const fetchOrders = useCallback((page = 1, { silent = false } = {}) => {
+    if (!silent) setLoading(true);
     const params = { page };
 
     const status = searchParams.get('status');
@@ -53,15 +54,19 @@ export default function AdminOrdersPage({ historyMode = false }) {
       if (!status) params.status = 'completed';
     }
 
-    api.get('/orders/admin/', { params }).then(({ data }) => {
+    return api.get('/orders/admin/', { params }).then(({ data }) => {
       const results = data.results || data;
       setOrders(Array.isArray(results) ? results : []);
       setPagination((p) => ({ ...p, current: page, total: data.count || results.length }));
     }).catch(() => {})
-      .finally(() => setLoading(false));
-  };
+      .finally(() => { if (!silent) setLoading(false); });
+  }, [searchParams, search, historyMode]);
 
   useEffect(() => { fetchOrders(); }, [searchParams, historyMode]); // eslint-disable-line
+
+  useRealtimeRefresh(useCallback(() => {
+    fetchOrders(pagination.current, { silent: true });
+  }, [fetchOrders, pagination.current]));
 
   const updateFilter = (key, val) => {
     const params = Object.fromEntries(searchParams.entries());
@@ -73,9 +78,20 @@ export default function AdminOrdersPage({ historyMode = false }) {
 
   const columns = [
     {
-      title: 'ID', dataIndex: 'id', width: 70,
-      render: (id) => (
-        <span style={{ fontWeight: 600, color: 'var(--accent)' }}>#{id}</span>
+      title: 'ID', dataIndex: 'id', width: 90,
+      render: (id, record) => (
+        <span style={{ fontWeight: 600, color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {record.is_unread && (
+            <span
+              title={t('notifications.unread')}
+              style={{
+                display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
+                background: '#ef4444', boxShadow: '0 0 0 3px rgba(239,68,68,0.18)',
+              }}
+            />
+          )}
+          #{id}
+        </span>
       ),
     },
     {
@@ -222,19 +238,26 @@ export default function AdminOrdersPage({ historyMode = false }) {
                   onClick={() => navigate(`/admin/orders/${order.id}`)}
                   style={{
                     background: 'var(--card-bg)',
-                    border: '1px solid var(--border-color)',
+                    border: `1px solid ${order.is_unread ? 'var(--accent)' : 'var(--border-color)'}`,
                     borderRadius: 14,
                     padding: '14px 16px',
                     marginBottom: 10,
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
+                    position: 'relative',
                   }}
                 >
                   <div style={{
                     display: 'flex', justifyContent: 'space-between',
                     alignItems: 'center', marginBottom: 8,
                   }}>
-                    <Text style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 14 }}>
+                    <Text style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {order.is_unread && (
+                        <span style={{
+                          display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                          background: '#ef4444', boxShadow: '0 0 0 3px rgba(239,68,68,0.18)',
+                        }} />
+                      )}
                       #{order.id}
                     </Text>
                     <StatusBadge status={order.status} />

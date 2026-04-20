@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Typography, Spin, Input, Grid } from 'antd';
 import {
   RocketOutlined, ClockCircleOutlined,
@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLang } from '../../contexts/LanguageContext';
+import { useRealtimeRefresh } from '../../contexts/NotificationContext';
 import { STATUS_CONFIG } from '../../utils/status';
 import { CategoryImage } from '../../utils/categoryIcons';
 
@@ -41,6 +42,13 @@ export default function AppHome() {
   const [catSearch, setCatSearch] = useState('');
   const [showAllCats, setShowAllCats] = useState(false);
 
+  const refreshActiveOrders = useCallback(() => {
+    return api.get('/orders/active/').then(({ data }) => {
+      const orders = Array.isArray(data) ? data : data.results || [];
+      setActiveOrders(orders);
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     Promise.all([
       api.get('/categories/'),
@@ -53,6 +61,8 @@ export default function AppHome() {
     }).catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useRealtimeRefresh(refreshActiveOrders);
 
   if (loading) {
     return (

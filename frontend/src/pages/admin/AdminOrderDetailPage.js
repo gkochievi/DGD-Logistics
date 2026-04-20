@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Descriptions, Typography, Spin, Button, Timeline, Image, Space,
   Select, Input, message, Empty, Grid, Divider,
 } from 'antd';
+import { useRealtimeRefresh, useNotifications } from '../../contexts/NotificationContext';
 import {
   ArrowLeftOutlined, TagOutlined, CarOutlined, SyncOutlined,
   CommentOutlined, EnvironmentOutlined, PictureOutlined, HistoryOutlined,
@@ -39,6 +40,7 @@ export default function AdminOrderDetailPage() {
   const [newStatus, setNewStatus] = useState('');
   const [comment, setComment] = useState('');
   const [updating, setUpdating] = useState(false);
+  const { refresh: refreshNotifications } = useNotifications();
 
   useEffect(() => {
     api.get('/categories/').then(({ data }) => {
@@ -50,14 +52,20 @@ export default function AdminOrderDetailPage() {
     });
   }, []);
 
-  const fetchOrder = () => {
-    setLoading(true);
-    api.get(`/orders/admin/${id}/`).then(({ data }) => {
+  const fetchOrder = useCallback(({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    return api.get(`/orders/admin/${id}/`).then(({ data }) => {
       setOrder(data);
-      setNewStatus(data.status);
-    }).catch(() => message.error(t('adminOrderDetail.orderNotFound')))
-      .finally(() => setLoading(false));
-  };
+      setNewStatus((prev) => prev || data.status);
+      // backend auto-marks this order as read; refresh the bell badge quickly
+      refreshNotifications();
+    }).catch(() => { if (!silent) message.error(t('adminOrderDetail.orderNotFound')); })
+      .finally(() => { if (!silent) setLoading(false); });
+  }, [id, t, refreshNotifications]);
+
+  useRealtimeRefresh(useCallback(() => {
+    fetchOrder({ silent: true });
+  }, [fetchOrder]));
 
   useEffect(() => { fetchOrder(); }, [id]); // eslint-disable-line
 
