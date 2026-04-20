@@ -1,12 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import {
   Table, Button, Typography, Tag, Modal, Form, Input, Select, InputNumber, Switch, Space,
-  message, Grid, Empty,
+  message, Grid, Empty, Upload, Dropdown, Tooltip,
 } from 'antd';
-import { PlusOutlined, EditOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined, EditOutlined, PictureOutlined, DeleteOutlined,
+  PoweroffOutlined, DownOutlined,
+} from '@ant-design/icons';
 import api from '../../api/client';
 import { CategoryImage } from '../../utils/categoryIcons';
 import { useLang } from '../../contexts/LanguageContext';
+import { useBranding } from '../../contexts/BrandingContext';
+import {
+  LICENSE_CATEGORIES, parseLicenseCategories, formatLicenseCategories,
+} from '../../utils/licenseCategories';
+import { DEFAULT_CURRENCY } from '../../utils/currency';
+
+const MAX_VEHICLE_IMAGES = 5;
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -21,7 +31,13 @@ const VEHICLE_STATUS_COLORS = {
 
 export default function AdminVehiclesPage() {
   const screens = useBreakpoint();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const { currency = DEFAULT_CURRENCY } = useBranding();
+  const localized = (v) => {
+    if (!v) return '';
+    if (typeof v === 'string') return v;
+    return v[lang] || v['en'] || '';
+  };
   const [vehicles, setVehicles] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +45,8 @@ export default function AdminVehiclesPage() {
   const [editingVehicle, setEditingVehicle] = useState(null);
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [vehicleImages, setVehicleImages] = useState([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   const VEHICLE_STATUS_OPTIONS = [
     { value: 'available', label: t('adminVehicles.available') },
@@ -56,10 +74,15 @@ export default function AdminVehiclesPage() {
   const openModal = (vehicle = null) => {
     setEditingVehicle(vehicle);
     if (vehicle) {
-      form.setFieldsValue(vehicle);
+      form.setFieldsValue({
+        ...vehicle,
+        license_categories: parseLicenseCategories(vehicle.license_categories),
+      });
+      setVehicleImages(vehicle.images || []);
     } else {
       form.resetFields();
-      form.setFieldsValue({ status: 'available', is_active: true });
+      form.setFieldsValue({ status: 'available', is_active: true, license_categories: [] });
+      setVehicleImages([]);
     }
     setModalOpen(true);
   };
@@ -67,11 +90,15 @@ export default function AdminVehiclesPage() {
   const handleSave = async (values) => {
     setSaving(true);
     try {
+      const payload = {
+        ...values,
+        license_categories: formatLicenseCategories(values.license_categories),
+      };
       if (editingVehicle) {
-        await api.patch(`/vehicles/admin/${editingVehicle.id}/`, values);
+        await api.patch(`/vehicles/admin/${editingVehicle.id}/`, payload);
         message.success(t('adminVehicles.vehicleUpdated'));
       } else {
-        await api.post('/vehicles/admin/', values);
+        await api.post('/vehicles/admin/', payload);
         message.success(t('adminVehicles.vehicleCreated'));
       }
       setModalOpen(false);
@@ -82,6 +109,57 @@ export default function AdminVehiclesPage() {
       message.error(typeof firstErr === 'string' ? firstErr : t('adminVehicles.vehicleUpdated'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const uploadPhotos = async (files) => {
+    if (!editingVehicle) {
+      message.info(t('adminVehicles.saveFirst'));
+      return;
+    }
+    const remaining = MAX_VEHICLE_IMAGES - vehicleImages.length;
+    if (remaining <= 0) {
+      message.warning(t('adminVehicles.maxImagesReached'));
+      return;
+    }
+    const toUpload = files.slice(0, remaining);
+    const fd = new FormData();
+    toUpload.forEach((f) => fd.append('images', f));
+    setUploadingImages(true);
+    try {
+      const { data } = await api.post(
+        `/vehicles/admin/${editingVehicle.id}/images/`, fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      setVehicleImages((prev) => [...prev, ...data]);
+      fetchVehicles();
+    } catch (err) {
+      const detail = err.response?.data?.detail || t('adminVehicles.uploadFailed');
+      message.error(detail);
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  const quickUpdate = async (vehicle, patch) => {
+    try {
+      await api.patch(`/vehicles/admin/${vehicle.id}/`, patch);
+      setVehicles((prev) => prev.map((v) => (v.id === vehicle.id ? { ...v, ...patch } : v)));
+      message.success(t('adminVehicles.vehicleUpdated'));
+    } catch {
+      message.error(t('adminVehicles.vehicleUpdated'));
+      fetchVehicles();
+    }
+  };
+
+  const deletePhoto = async (imageId) => {
+    if (!editingVehicle) return;
+    try {
+      await api.delete(`/vehicles/admin/${editingVehicle.id}/images/${imageId}/`);
+      setVehicleImages((prev) => prev.filter((i) => i.id !== imageId));
+      fetchVehicles();
+    } catch {
+      message.error(t('adminVehicles.deleteFailed'));
     }
   };
 
@@ -116,29 +194,80 @@ export default function AdminVehiclesPage() {
       render: (name) => <span style={{ fontWeight: 600 }}>{name}</span>,
     },
     { title: t('adminVehicles.plateNumber'), dataIndex: 'plate_number', width: 110 },
-    { title: t('adminOrders.category'), dataIndex: 'category_name', width: 140, ellipsis: true },
-    { title: t('adminVehicles.capacity'), dataIndex: 'capacity', width: 100, ellipsis: true },
     {
-      title: t('adminVehicles.pricePerHour'), dataIndex: 'price_per_hour', width: 100,
+      title: t('adminOrders.category'), dataIndex: 'category_name', width: 140, ellipsis: true,
+      render: (v) => localized(v),
+    },
+    { title: t('adminVehicles.capacity'), dataIndex: 'capacity', width: 90, ellipsis: true },
+    {
+      title: t('adminVehicles.licenseCategories'), dataIndex: 'license_categories', width: 130,
+      render: (v) => {
+        const cats = parseLicenseCategories(v);
+        if (cats.length === 0) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>;
+        return (
+          <Space size={4} wrap>
+            {cats.map((c) => <Tag key={c} style={{ margin: 0 }}>{c}</Tag>)}
+          </Space>
+        );
+      },
+    },
+    {
+      title: t('adminVehicles.pricePerHour', { currency: currency.symbol }), dataIndex: 'price_per_hour', width: 90,
       render: (v) => v ? (
-        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>${v}</span>
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{currency.symbol}{v}</span>
       ) : (
         <span style={{ color: 'var(--text-tertiary)' }}>—</span>
       ),
     },
     {
-      title: t('adminVehicles.status'), dataIndex: 'status', width: 130,
-      render: (s) => <Tag color={VEHICLE_STATUS_COLORS[s]}>{getVehicleStatusLabel(s)}</Tag>,
+      title: t('adminVehicles.status'), dataIndex: 'status', width: 150,
+      render: (s, record) => (
+        <Dropdown
+          trigger={['click']}
+          menu={{
+            items: VEHICLE_STATUS_OPTIONS.map((opt) => ({
+              key: opt.value,
+              label: (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Tag color={VEHICLE_STATUS_COLORS[opt.value]} style={{ margin: 0 }}>
+                    {opt.label}
+                  </Tag>
+                  {s === opt.value && <span style={{ color: 'var(--accent)' }}>✓</span>}
+                </span>
+              ),
+              onClick: () => { if (s !== opt.value) quickUpdate(record, { status: opt.value }); },
+            })),
+          }}
+        >
+          <Tag
+            color={VEHICLE_STATUS_COLORS[s]}
+            style={{ cursor: 'pointer', margin: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {getVehicleStatusLabel(s)} <DownOutlined style={{ fontSize: 9 }} />
+          </Tag>
+        </Dropdown>
+      ),
     },
     {
-      title: '', width: 50,
+      title: '', width: 90,
       render: (_, record) => (
-        <Button
-          size="small" type="text"
-          icon={<EditOutlined />}
-          onClick={(e) => { e.stopPropagation(); openModal(record); }}
-          style={{ color: 'var(--accent)' }}
-        />
+        <Space size={2} onClick={(e) => e.stopPropagation()}>
+          <Tooltip title={record.is_active ? t('adminVehicles.disable') : t('adminVehicles.enable')}>
+            <Button
+              size="small" type="text"
+              icon={<PoweroffOutlined />}
+              onClick={() => quickUpdate(record, { is_active: !record.is_active })}
+              style={{ color: record.is_active ? 'var(--accent)' : 'var(--text-tertiary)' }}
+            />
+          </Tooltip>
+          <Button
+            size="small" type="text"
+            icon={<EditOutlined />}
+            onClick={() => openModal(record)}
+            style={{ color: 'var(--accent)' }}
+          />
+        </Space>
       ),
     },
   ];
@@ -206,19 +335,63 @@ export default function AdminVehiclesPage() {
                     {v.name}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                    {v.plate_number} · {v.category_name} · {v.capacity || '—'}
+                    {v.plate_number} · {localized(v.category_name)} · {v.capacity || '—'}
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                  <Tag color={VEHICLE_STATUS_COLORS[v.status]} style={{ margin: 0 }}>
-                    {getVehicleStatusLabel(v.status)}
-                  </Tag>
+                  <Dropdown
+                    trigger={['click']}
+                    menu={{
+                      items: VEHICLE_STATUS_OPTIONS.map((opt) => ({
+                        key: opt.value,
+                        label: (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Tag color={VEHICLE_STATUS_COLORS[opt.value]} style={{ margin: 0 }}>
+                              {opt.label}
+                            </Tag>
+                            {v.status === opt.value && <span style={{ color: 'var(--accent)' }}>✓</span>}
+                          </span>
+                        ),
+                        onClick: () => { if (v.status !== opt.value) quickUpdate(v, { status: opt.value }); },
+                      })),
+                    }}
+                  >
+                    <Tag
+                      color={VEHICLE_STATUS_COLORS[v.status]}
+                      style={{ margin: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {getVehicleStatusLabel(v.status)} <DownOutlined style={{ fontSize: 9 }} />
+                    </Tag>
+                  </Dropdown>
                   {v.price_per_hour && (
                     <Text style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 600 }}>
-                      ${v.price_per_hour}/{t('common.perHour')}
+                      {currency.symbol}{v.price_per_hour}/{t('common.perHour')}
                     </Text>
                   )}
                 </div>
+              </div>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-color)',
+              }}>
+                <Space size={4} wrap onClick={(e) => e.stopPropagation()}>
+                  {parseLicenseCategories(v.license_categories).length > 0 ? (
+                    parseLicenseCategories(v.license_categories).map((c) => (
+                      <Tag key={c} style={{ margin: 0, fontSize: 11 }}>{c}</Tag>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                      {t('adminVehicles.licenseCategories')}: —
+                    </span>
+                  )}
+                </Space>
+                <Button
+                  size="small" type="text"
+                  icon={<PoweroffOutlined />}
+                  onClick={(e) => { e.stopPropagation(); quickUpdate(v, { is_active: !v.is_active }); }}
+                  style={{ color: v.is_active ? 'var(--accent)' : 'var(--text-tertiary)' }}
+                />
               </div>
             </div>
           ))
@@ -253,11 +426,11 @@ export default function AdminVehiclesPage() {
         onCancel={() => setModalOpen(false)}
         footer={null}
         destroyOnClose
-        width={580}
+        width={isMobile ? '94vw' : 580}
         styles={{
           content: { borderRadius: 16, padding: 0 },
-          header: { padding: '20px 24px 0', borderBottom: 'none' },
-          body: { padding: '16px 24px 24px' },
+          header: { padding: isMobile ? '16px 18px 0' : '20px 24px 0', borderBottom: 'none' },
+          body: { padding: isMobile ? '12px 18px 18px' : '16px 24px 24px' },
         }}
       >
         <Form form={form} layout="vertical" onFinish={handleSave} requiredMark={false}>
@@ -269,7 +442,7 @@ export default function AdminVehiclesPage() {
             <Input placeholder={t('adminVehicles.vehicleNamePlaceholder')} style={{ borderRadius: 10 }} />
           </Form.Item>
 
-          <div style={{ display: 'flex', gap: 14 }}>
+          <div style={{ display: 'flex', gap: 14, flexDirection: isMobile ? 'column' : 'row' }}>
             <Form.Item
               name="category"
               label={<span style={{ fontWeight: 600 }}>{t('adminOrders.category')}</span>}
@@ -280,7 +453,7 @@ export default function AdminVehiclesPage() {
                 placeholder={t('adminOrderDetail.selectFinalCategory')}
                 showSearch
                 filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-                options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                options={categories.map((c) => ({ value: c.id, label: localized(c.name) }))}
               />
             </Form.Item>
             <Form.Item
@@ -293,7 +466,7 @@ export default function AdminVehiclesPage() {
             </Form.Item>
           </div>
 
-          <div style={{ display: 'flex', gap: 14 }}>
+          <div style={{ display: 'flex', gap: 14, flexDirection: isMobile ? 'column' : 'row' }}>
             <Form.Item
               name="year"
               label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.year')}</span>}
@@ -310,22 +483,35 @@ export default function AdminVehiclesPage() {
             </Form.Item>
           </div>
 
-          <div style={{ display: 'flex', gap: 14 }}>
+          <div style={{ display: 'flex', gap: 14, flexDirection: isMobile ? 'column' : 'row' }}>
             <Form.Item
               name="price_per_hour"
-              label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.pricePerHour')}</span>}
+              label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.pricePerHour', { currency: currency.symbol })}</span>}
               style={{ flex: 1 }}
             >
               <InputNumber placeholder="85.00" style={{ width: '100%', borderRadius: 10 }} min={0} step={5} />
             </Form.Item>
             <Form.Item
               name="price_per_km"
-              label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.pricePerKm')}</span>}
+              label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.pricePerKm', { currency: currency.symbol })}</span>}
               style={{ flex: 1 }}
             >
               <InputNumber placeholder="3.50" style={{ width: '100%', borderRadius: 10 }} min={0} step={0.5} />
             </Form.Item>
           </div>
+
+          <Form.Item
+            name="license_categories"
+            label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.licenseCategories')}</span>}
+            tooltip={t('adminVehicles.licenseCategoriesHint')}
+          >
+            <Select
+              mode="multiple"
+              placeholder={t('adminDrivers.selectCategories')}
+              options={LICENSE_CATEGORIES}
+              style={{ borderRadius: 10 }}
+            />
+          </Form.Item>
 
           <Form.Item
             name="description"
@@ -334,7 +520,84 @@ export default function AdminVehiclesPage() {
             <TextArea rows={3} placeholder={t('adminVehicles.vehicleNamePlaceholder')} style={{ borderRadius: 10 }} />
           </Form.Item>
 
-          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+          {/* Vehicle photos (max 5) */}
+          <Form.Item
+            label={
+              <span style={{ fontWeight: 600 }}>
+                {t('adminVehicles.photos')}{' '}
+                <Text style={{ fontWeight: 400, color: 'var(--text-tertiary)', fontSize: 12 }}>
+                  ({vehicleImages.length}/{MAX_VEHICLE_IMAGES})
+                </Text>
+              </span>
+            }
+          >
+            {!editingVehicle ? (
+              <div style={{
+                padding: 12, background: 'var(--bg-secondary)', borderRadius: 10,
+                color: 'var(--text-tertiary)', fontSize: 13,
+              }}>
+                {t('adminVehicles.saveFirst')}
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                  {vehicleImages.map((img) => (
+                    <div
+                      key={img.id}
+                      style={{
+                        position: 'relative', width: 88, height: 88,
+                        borderRadius: 10, overflow: 'hidden',
+                        border: '1px solid var(--border-color)',
+                      }}
+                    >
+                      <img
+                        src={img.image}
+                        alt=""
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <Button
+                        size="small"
+                        danger
+                        type="primary"
+                        shape="circle"
+                        icon={<DeleteOutlined />}
+                        onClick={() => deletePhoto(img.id)}
+                        style={{
+                          position: 'absolute', top: 4, right: 4,
+                          width: 22, height: 22, minWidth: 22,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <Upload
+                  multiple
+                  accept="image/*"
+                  showUploadList={false}
+                  beforeUpload={() => false}
+                  disabled={vehicleImages.length >= MAX_VEHICLE_IMAGES}
+                  onChange={({ fileList }) => {
+                    const files = fileList
+                      .filter((f) => f.originFileObj)
+                      .map((f) => f.originFileObj);
+                    if (files.length) uploadPhotos(files);
+                  }}
+                >
+                  <Button
+                    icon={<PictureOutlined />}
+                    loading={uploadingImages}
+                    disabled={vehicleImages.length >= MAX_VEHICLE_IMAGES}
+                    style={{ borderRadius: 10 }}
+                  >
+                    {t('adminVehicles.addPhotos')}
+                  </Button>
+                </Upload>
+              </>
+            )}
+          </Form.Item>
+
+          <div style={{ display: 'flex', gap: 14, alignItems: isMobile ? 'stretch' : 'flex-start', flexDirection: isMobile ? 'column' : 'row' }}>
             <Form.Item
               name="status"
               label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.status')}</span>}
@@ -345,7 +608,8 @@ export default function AdminVehiclesPage() {
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '10px 14px', background: 'var(--bg-secondary)',
-              borderRadius: 12, marginTop: 30, minWidth: 120, gap: 10,
+              borderRadius: 12, marginTop: isMobile ? 0 : 30, marginBottom: isMobile ? 16 : 0,
+              minWidth: isMobile ? 'auto' : 120, gap: 10,
             }}>
               <Text style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
                 {t('common.active')}

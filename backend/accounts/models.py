@@ -41,9 +41,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     company_id = models.CharField(max_length=11, blank=True, help_text='საიდენტიფიკაციო კოდი (11 digits)')
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
+    avatar = models.ImageField(upload_to='avatars/%Y/%m/', blank=True, null=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=CUSTOMER)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    must_change_password = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

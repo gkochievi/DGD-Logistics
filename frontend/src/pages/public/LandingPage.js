@@ -243,15 +243,17 @@ export default function LandingPage() {
           <div className="lt-hero-form" style={{
             background: 'var(--card-bg)',
             borderRadius: isMobile ? 16 : 60,
-            padding: isMobile ? 16 : '6px 6px 6px 24px',
+            padding: isMobile ? 12 : '6px 6px 6px 24px',
             boxShadow: 'var(--shadow-xl)',
             border: '1px solid var(--border-color)',
             display: 'flex',
             flexDirection: isMobile ? 'column' : 'row',
-            gap: isMobile ? 12 : 0,
+            gap: isMobile ? 10 : 0,
             alignItems: isMobile ? 'stretch' : 'center',
             maxWidth: 720,
             margin: '0 auto',
+            width: '100%',
+            boxSizing: 'border-box',
           }}>
             <LocationAutocomplete
               prefix={<EnvironmentOutlined style={{ color: 'var(--accent)', fontSize: 16 }} />}
@@ -282,15 +284,17 @@ export default function LandingPage() {
               type="primary"
               size="large"
               onClick={handleGetOffers}
+              block={isMobile}
               style={{
-                height: 48,
-                paddingInline: isMobile ? 24 : 28,
+                height: isMobile ? 46 : 48,
+                paddingInline: isMobile ? 20 : 28,
                 borderRadius: isMobile ? 12 : 40,
                 fontWeight: 700,
                 fontSize: 15,
                 flexShrink: 0,
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: 8,
               }}
             >

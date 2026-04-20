@@ -75,9 +75,9 @@ export default function DashboardHome() {
       {/* Stat cards */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: 16,
-        marginBottom: 28,
+        gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+        gap: isMobile ? 10 : 16,
+        marginBottom: isMobile ? 20 : 28,
       }}>
         {statCards.map((s, i) => (
           <div key={i} style={{

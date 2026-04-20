@@ -25,6 +25,10 @@ class Vehicle(models.Model):
         help_text='e.g. 20 tons, 15m3, 5 cars'
     )
     description = models.TextField(blank=True)
+    license_categories = models.CharField(
+        max_length=50, blank=True,
+        help_text='Comma-separated required license categories, e.g. "C,CE"'
+    )
     price_per_hour = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True,
         help_text='Hourly rate in local currency'
@@ -44,3 +48,18 @@ class Vehicle(models.Model):
 
     def __str__(self):
         return f'{self.name} ({self.plate_number})'
+
+
+class VehicleImage(models.Model):
+    MAX_IMAGES = 5
+
+    vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='images')
+    image = models.ImageField(upload_to='vehicle_images/%Y/%m/')
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['order', 'created_at']
+
+    def __str__(self):
+        return f'Image for Vehicle #{self.vehicle_id}'

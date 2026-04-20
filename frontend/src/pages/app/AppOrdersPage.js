@@ -188,6 +188,7 @@ export default function AppOrdersPage() {
               order={order}
               onClick={() => navigate(`/app/orders/${order.id}`)}
               t={t}
+              lang={lang}
               delay={idx * 0.04}
             />
           ))
@@ -197,7 +198,7 @@ export default function AppOrdersPage() {
   );
 }
 
-function OrderCard({ order, onClick, t, delay = 0 }) {
+function OrderCard({ order, onClick, t, lang, delay = 0 }) {
   const badgeColor = STATUS_BADGE_COLORS[order.status] || '#8e93ab';
   const catColor = order.selected_category_color || 'var(--accent)';
 

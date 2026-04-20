@@ -5,7 +5,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
-from django.db.models import Count, Sum, Avg, F, Q
+from django.db.models import Count, Sum, Avg, F, Q, ExpressionWrapper, DurationField
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
 from datetime import timedelta
@@ -13,6 +13,7 @@ from datetime import timedelta
 from .serializers import (
     RegisterSerializer, UserSerializer, ProfileUpdateSerializer,
     ChangePasswordSerializer, AdminUserSerializer, AdminCreateUserSerializer,
+    AdminResetPasswordSerializer,
 )
 from .permissions import IsAdmin
 
@@ -76,6 +77,7 @@ class ChangePasswordView(APIView):
         serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         request.user.set_password(serializer.validated_data['new_password'])
+        request.user.must_change_password = False
         request.user.save()
         return Response({'detail': 'Password updated successfully.'})
 
@@ -116,6 +118,22 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = AdminUserSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
     queryset = User.objects.annotate(order_count=Count('orders'))
+
+
+class AdminResetUserPasswordView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def post(self, request, pk):
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = AdminResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        target.set_password(serializer.validated_data['new_password'])
+        target.must_change_password = True
+        target.save()
+        return Response({'detail': 'Password reset. User must change it on next login.'})
 
 
 class AdminDashboardStatsView(APIView):
@@ -353,6 +371,71 @@ class AdminAnalyticsView(APIView):
             .order_by('-count')
         )
 
+        # ── Completion / cancellation / rejection rates (period) ──
+        period_total = period_orders.count()
+        period_completed = period_orders.filter(status='completed').count()
+        period_cancelled = period_orders.filter(status='cancelled').count()
+        period_rejected = period_orders.filter(status='rejected').count()
+
+        def _pct(n, d):
+            return round((n / d) * 100, 1) if d else 0.0
+
+        completion_rate = _pct(period_completed, period_total)
+        cancellation_rate = _pct(period_cancelled, period_total)
+        rejection_rate = _pct(period_rejected, period_total)
+
+        # ── Avg completion time (hours) — uses status history 'completed' entry ──
+        from orders.models import OrderStatusHistory
+        completed_durations = (
+            OrderStatusHistory.objects
+            .filter(
+                new_status='completed',
+                order__created_at__date__gte=start_date,
+            )
+            .annotate(duration=ExpressionWrapper(
+                F('created_at') - F('order__created_at'),
+                output_field=DurationField(),
+            ))
+            .aggregate(avg=Avg('duration'))
+        )
+        avg_duration = completed_durations['avg']
+        avg_completion_hours = (
+            round(avg_duration.total_seconds() / 3600, 1) if avg_duration else 0.0
+        )
+
+        # ── Top customers (period, by order count, with est. revenue) ──
+        top_customers_qs = (
+            period_orders
+            .values(
+                user_id=F('user__id'),
+                first_name=F('user__first_name'),
+                last_name=F('user__last_name'),
+                email=F('user__email'),
+                user_type=F('user__user_type'),
+            )
+            .annotate(
+                orders=Count('id'),
+                completed=Count('id', filter=Q(status='completed')),
+                revenue=Sum(
+                    'assigned_vehicle__price_per_hour',
+                    filter=Q(status='completed', assigned_vehicle__price_per_hour__isnull=False),
+                ),
+            )
+            .order_by('-orders')[:10]
+        )
+        top_customers = [
+            {
+                'user_id': c['user_id'],
+                'name': f"{c['first_name'] or ''} {c['last_name'] or ''}".strip() or c['email'],
+                'email': c['email'],
+                'user_type': c['user_type'],
+                'orders': c['orders'],
+                'completed': c['completed'],
+                'revenue': float(c['revenue'] or 0),
+            }
+            for c in top_customers_qs
+        ]
+
         return Response({
             'period_days': days_param,
             'today_orders': today_orders,
@@ -384,4 +467,11 @@ class AdminAnalyticsView(APIView):
             'total_personal_users': total_personal,
             'total_company_users': total_company,
             'orders_by_user_type': orders_by_user_type,
+            'rates': {
+                'completion': completion_rate,
+                'cancellation': cancellation_rate,
+                'rejection': rejection_rate,
+            },
+            'avg_completion_hours': avg_completion_hours,
+            'top_customers': top_customers,
         })

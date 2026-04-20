@@ -36,9 +36,9 @@ api.interceptors.response.use(
         } catch {
           localStorage.removeItem('tokens');
           localStorage.removeItem('user');
-          // Redirect to appropriate login page
-          const isAppRoute = window.location.pathname.startsWith('/app');
-          window.location.href = isAppRoute ? '/app/login' : '/login';
+          // Admin still needs the dedicated login; everyone else lands on the public homepage.
+          const isAdminRoute = window.location.pathname.startsWith('/admin');
+          window.location.href = isAdminRoute ? '/login' : '/';
         }
       }
     }

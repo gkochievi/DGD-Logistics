@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import api from '../api/client';
 import { applyColorTheme, DEFAULT_COLOR_THEME } from '../utils/colorThemes';
+import { deriveCurrencyFromLanding, DEFAULT_CURRENCY } from '../utils/currency';
 
 const BrandingContext = createContext({});
 
@@ -10,6 +11,7 @@ export function BrandingProvider({ children }) {
     siteIconUrl: null,
     faviconUrl: null,
     colorTheme: DEFAULT_COLOR_THEME,
+    currency: DEFAULT_CURRENCY,
   });
 
   const setColorTheme = useCallback((themeKey) => {
@@ -25,6 +27,7 @@ export function BrandingProvider({ children }) {
         siteIconUrl: data.site_icon_url || null,
         faviconUrl: data.favicon_url || null,
         colorTheme: themeKey,
+        currency: deriveCurrencyFromLanding(data),
       });
       applyColorTheme(themeKey);
 

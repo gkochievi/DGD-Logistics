@@ -132,7 +132,12 @@ export default function NewOrderFlow() {
       setFormValues(values);
       setStep(1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch { /* validation errors shown */ }
+    } catch (err) {
+      if (err?.errorFields?.length) {
+        message.warning(t('newOrder.fixFormErrors'));
+        form.scrollToField(err.errorFields[0].name, { behavior: 'smooth', block: 'center' });
+      }
+    }
   };
 
   const handleSubmit = async () => {
@@ -849,7 +854,7 @@ export default function NewOrderFlow() {
                   <BulbOutlined style={{ color: 'var(--accent)', fontSize: 16 }} />
                 </div>
                 <div style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>
-                  {t('newOrder.suggested')} <strong>{suggestion.name}</strong>
+                  {t('newOrder.suggested')} <strong>{localized(suggestion.name)}</strong>
                 </div>
                 <Button size="small" type="link" onClick={applySuggestion}
                   style={{ color: 'var(--accent)', fontWeight: 700, padding: '0 8px' }}>
@@ -869,25 +874,29 @@ export default function NewOrderFlow() {
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
                 {t('newOrder.cargoDetails')}
               </span>
-              <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 500 }}>
-                ({t('newOrder.optionalLabel')})
+              <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
+                {t('newOrder.requiredLabel')}
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <Form.Item name="cargo_length" style={{ flex: 1, marginBottom: 0 }}>
+              <Form.Item name="cargo_length" style={{ flex: 1, marginBottom: 0 }}
+                rules={[{ required: true, message: t('newOrder.enterLength') }]}>
                 <Input placeholder={t('newOrder.length')} suffix={t('newOrder.cm')}
                   inputMode="decimal" style={{ borderRadius: 12, fontSize: 14, height: 44 }} />
               </Form.Item>
-              <Form.Item name="cargo_width" style={{ flex: 1, marginBottom: 0 }}>
+              <Form.Item name="cargo_width" style={{ flex: 1, marginBottom: 0 }}
+                rules={[{ required: true, message: t('newOrder.enterWidth') }]}>
                 <Input placeholder={t('newOrder.width')} suffix={t('newOrder.cm')}
                   inputMode="decimal" style={{ borderRadius: 12, fontSize: 14, height: 44 }} />
               </Form.Item>
-              <Form.Item name="cargo_height" style={{ flex: 1, marginBottom: 0 }}>
+              <Form.Item name="cargo_height" style={{ flex: 1, marginBottom: 0 }}
+                rules={[{ required: true, message: t('newOrder.enterHeight') }]}>
                 <Input placeholder={t('newOrder.height')} suffix={t('newOrder.cm')}
                   inputMode="decimal" style={{ borderRadius: 12, fontSize: 14, height: 44 }} />
               </Form.Item>
             </div>
-            <Form.Item name="cargo_weight" style={{ marginBottom: 0 }}>
+            <Form.Item name="cargo_weight" style={{ marginBottom: 0 }}
+              rules={[{ required: true, message: t('newOrder.enterWeight') }]}>
               <Input placeholder={t('newOrder.weight')} suffix={t('newOrder.kg')}
                 inputMode="decimal" style={{ borderRadius: 12, fontSize: 14, height: 44 }} />
             </Form.Item>
@@ -958,6 +967,52 @@ export default function NewOrderFlow() {
   }
 
   // ─── STEP 1: CONFIRMATION ───
+  // Guard: if essential state is missing (e.g. hard refresh on step 1), show a fallback
+  if (!selectedCategory || !formValues.description) {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '40px 20px',
+      }} className="app-bg">
+        <div style={{
+          background: 'var(--card-bg)', borderRadius: 18,
+          padding: '32px 28px', maxWidth: 420, width: '100%',
+          border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)',
+          textAlign: 'center',
+        }}>
+          <div style={{
+            width: 64, height: 64, borderRadius: 20,
+            background: 'var(--accent-bg)', margin: '0 auto 16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--accent)', fontSize: 28,
+          }}>
+            <FileTextOutlined />
+          </div>
+          <div style={{
+            fontSize: 18, fontWeight: 700, color: 'var(--text-primary)',
+            marginBottom: 8, letterSpacing: -0.2,
+          }}>
+            {t('newOrder.orderDetails')}
+          </div>
+          <div style={{
+            fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.5,
+          }}>
+            {t('newOrder.fillDetailsFirst')}
+          </div>
+          <Button type="primary" block onClick={() => setStep(0)}
+            style={{
+              height: 48, borderRadius: 12, fontSize: 15, fontWeight: 700,
+              background: 'var(--fab-gradient)', border: 'none',
+              boxShadow: 'var(--fab-shadow)',
+            }}>
+            <ArrowLeftOutlined style={{ fontSize: 13, marginRight: 6 }} />
+            {t('newOrder.backToForm')}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', paddingBottom: 40, maxWidth: 1200, margin: '0 auto' }} className="app-bg page-enter">
       {/* Header */}
@@ -1032,7 +1087,7 @@ export default function NewOrderFlow() {
               <CategoryImage imageUrl={selectedCategory?.image_url} icon={selectedCategory?.icon || 'inbox'} size={28} />
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {selectedCategory?.name}
+              {localized(selectedCategory?.name)}
             </div>
           </div>
         </ConfirmSection>

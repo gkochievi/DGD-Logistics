@@ -377,10 +377,11 @@ export default function AdminCategoriesPage() {
         onCancel={() => setModalOpen(false)}
         footer={null}
         destroyOnClose
+        width={isMobile ? '94vw' : 600}
         styles={{
           content: { borderRadius: 16, padding: 0 },
-          header: { padding: '20px 24px 0', borderBottom: 'none' },
-          body: { padding: '16px 24px 24px' },
+          header: { padding: isMobile ? '16px 18px 0' : '20px 24px 0', borderBottom: 'none' },
+          body: { padding: isMobile ? '12px 18px 18px' : '16px 24px 24px' },
         }}
       >
         <Form layout="vertical" requiredMark={false}>
@@ -552,8 +553,8 @@ export default function AdminCategoriesPage() {
               ) : (
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))',
-                  gap: 8,
+                  gridTemplateColumns: `repeat(auto-fill, minmax(${isMobile ? 42 : 48}px, 1fr))`,
+                  gap: isMobile ? 6 : 8,
                 }}>
                   {filteredIcons.map((iconKey) => {
                     const selected = catIcon === iconKey;

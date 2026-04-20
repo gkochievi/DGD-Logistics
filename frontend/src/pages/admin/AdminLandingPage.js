@@ -236,9 +236,9 @@ export default function AdminLandingPage() {
             </div>
           </Form.Item>
 
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: isMobile ? 12 : 24, flexWrap: 'wrap', flexDirection: isMobile ? 'column' : 'row' }}>
             {/* Site Icon */}
-            <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ flex: 1, minWidth: isMobile ? '100%' : 200 }}>
               <Form.Item label={<span style={{ fontWeight: 600 }}>{t('adminLanding.siteIcon')}</span>}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   {siteIconPreview && (
@@ -285,7 +285,7 @@ export default function AdminLandingPage() {
             </div>
 
             {/* Favicon */}
-            <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ flex: 1, minWidth: isMobile ? '100%' : 200 }}>
               <Form.Item label={<span style={{ fontWeight: 600 }}>{t('adminLanding.favicon')}</span>}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   {faviconPreview && (
@@ -592,7 +592,7 @@ export default function AdminLandingPage() {
               </Button>
             </div>
             <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-              <div style={{ flex: '0 0 150px' }}>
+              <div style={{ flex: isMobile ? '1 1 100%' : '0 0 150px' }}>
                 <Text style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)' }}>
                   {t('adminLanding.stepIcon')}
                 </Text>
@@ -679,7 +679,7 @@ export default function AdminLandingPage() {
               </Button>
             </div>
             <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-              <div style={{ flex: '0 0 150px' }}>
+              <div style={{ flex: isMobile ? '1 1 100%' : '0 0 150px' }}>
                 <Text style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)' }}>
                   {t('adminLanding.benefitIcon')}
                 </Text>

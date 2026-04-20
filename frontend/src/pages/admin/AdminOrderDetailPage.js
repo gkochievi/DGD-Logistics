@@ -14,6 +14,8 @@ import { StatusBadge, UrgencyBadge } from '../../components/common/StatusBadge';
 import { STATUS_OPTIONS, STATUS_CONFIG } from '../../utils/status';
 import { MapView } from '../../components/map/MapPicker';
 import { useLang } from '../../contexts/LanguageContext';
+import { useBranding } from '../../contexts/BrandingContext';
+import { DEFAULT_CURRENCY } from '../../utils/currency';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -24,6 +26,7 @@ export default function AdminOrderDetailPage() {
   const navigate = useNavigate();
   const screens = useBreakpoint();
   const { t, lang } = useLang();
+  const { currency = DEFAULT_CURRENCY } = useBranding();
   const localized = (v) => {
     if (!v) return '';
     if (typeof v === 'string') return v;
@@ -134,7 +137,7 @@ export default function AdminOrderDetailPage() {
   };
 
   const sectionHeaderStyle = {
-    padding: '16px 24px',
+    padding: isMobile ? '14px 16px' : '16px 24px',
     borderBottom: '1px solid var(--border-color)',
     display: 'flex',
     alignItems: 'center',
@@ -150,8 +153,8 @@ export default function AdminOrderDetailPage() {
     <div style={{ maxWidth: 920, margin: '0 auto' }} className="page-enter">
       {/* Header */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        marginBottom: 24, flexWrap: 'wrap',
+        display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12,
+        marginBottom: isMobile ? 16 : 24, flexWrap: 'wrap',
       }}>
         <Button
           icon={<ArrowLeftOutlined />}
@@ -161,9 +164,9 @@ export default function AdminOrderDetailPage() {
         >
           {isMobile ? '' : t('common.back')}
         </Button>
-        <Title level={3} style={{
+        <Title level={isMobile ? 4 : 3} style={{
           margin: 0, fontWeight: 800, letterSpacing: '-0.02em',
-          color: 'var(--text-primary)',
+          color: 'var(--text-primary)', flex: isMobile ? 1 : 'initial', minWidth: 0,
         }}>
           {t('orders.orderDetail', { id: order.id })}
         </Title>
@@ -277,7 +280,7 @@ export default function AdminOrderDetailPage() {
                 border: '1px solid var(--accent-bg-strong)',
               }}>
                 {order.assigned_vehicle_detail.name} · {order.assigned_vehicle_detail.plate_number}
-                {order.assigned_vehicle_detail.price_per_hour && ` · $${order.assigned_vehicle_detail.price_per_hour}/hr`}
+                {order.assigned_vehicle_detail.price_per_hour && ` · ${currency.symbol}${order.assigned_vehicle_detail.price_per_hour}/hr`}
               </div>
             )}
           </div>

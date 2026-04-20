@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Typography, Spin, Select, Row, Col, Grid } from 'antd';
+import { Typography, Spin, Select, Row, Col, Grid, Button, Table, Tag } from 'antd';
 import {
   RiseOutlined, FallOutlined, ShoppingCartOutlined,
   CalendarOutlined, DollarOutlined,
-  UserAddOutlined, BarChartOutlined,
+  UserAddOutlined, BarChartOutlined, CheckCircleOutlined,
+  ClockCircleOutlined, DownloadOutlined,
 } from '@ant-design/icons';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -15,6 +16,8 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useLang } from '../../contexts/LanguageContext';
 import { useBranding } from '../../contexts/BrandingContext';
 import { COLOR_THEMES, DEFAULT_COLOR_THEME } from '../../utils/colorThemes';
+import { DEFAULT_CURRENCY } from '../../utils/currency';
+import { downloadCsv, joinSheets } from '../../utils/exportCsv';
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -53,7 +56,7 @@ const PIE_COLORS = ['#00B856', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#009
 export default function AdminAnalyticsPage() {
   const screens = useBreakpoint();
   const { isDark } = useTheme();
-  const { colorTheme } = useBranding();
+  const { colorTheme, currency = DEFAULT_CURRENCY } = useBranding();
   const { t } = useLang();
   const palette = (COLOR_THEMES[colorTheme] || COLOR_THEMES[DEFAULT_COLOR_THEME])[isDark ? 'dark' : 'light'];
   const ACCENT = palette.accent;
@@ -126,6 +129,10 @@ export default function AdminAnalyticsPage() {
     padding: '16px 12px 16px 0',
   };
 
+  const rates = data.rates || { completion: 0, cancellation: 0, rejection: 0 };
+  const avgCompletionHours = data.avg_completion_hours || 0;
+  const topCustomers = data.top_customers || [];
+
   const statCards = [
     {
       title: t('analytics.today'),
@@ -161,19 +168,77 @@ export default function AdminAnalyticsPage() {
     },
     {
       title: t('analytics.estRevenue'),
-      value: `$${data.revenue.total_estimated.toLocaleString()}`,
+      value: `${currency.symbol}${data.revenue.total_estimated.toLocaleString()}`,
       icon: <DollarOutlined />,
       color: '#f59e0b',
       isStr: true,
     },
     {
-      title: t('analytics.avgPerHour'),
-      value: `$${data.revenue.avg_price_per_hour}`,
-      icon: <DollarOutlined />,
+      title: t('analytics.completionRate'),
+      value: `${rates.completion}%`,
+      icon: <CheckCircleOutlined />,
+      color: '#10b981',
+      isStr: true,
+    },
+    {
+      title: t('analytics.cancellationRate'),
+      value: `${rates.cancellation}%`,
+      icon: <FallOutlined />,
+      color: '#ef4444',
+      isStr: true,
+    },
+    {
+      title: t('analytics.avgCompletionTime'),
+      value: `${avgCompletionHours} ${t('analytics.hours')}`,
+      icon: <ClockCircleOutlined />,
       color: '#ec4899',
       isStr: true,
     },
   ];
+
+  const handleExportCsv = () => {
+    const fmt = (n) => (n == null ? '' : Number(n));
+    const sections = [
+      {
+        title: `${t('analytics.summary')} (${t('analytics.last30').replace('30', period)})`,
+        headers: [t('analytics.metric'), t('analytics.value')],
+        rows: [
+          [t('analytics.today'), data.today_orders],
+          [t('analytics.thisWeek'), data.this_week_orders],
+          [t('analytics.thisMonth'), data.this_month_orders],
+          [t('analytics.periodOrders', { days: period }), comparison.current_orders],
+          [t('analytics.estRevenue'), `${currency.symbol}${data.revenue.total_estimated}`],
+          [t('analytics.completionRate'), `${rates.completion}%`],
+          [t('analytics.cancellationRate'), `${rates.cancellation}%`],
+          [`${t('analytics.avgCompletionTime')} (${t('analytics.hours')})`, avgCompletionHours],
+        ],
+      },
+      {
+        title: t('analytics.dailyOrders'),
+        headers: ['Date', t('analytics.total'), t('status.completed'), 'Cancelled', 'Rejected'],
+        rows: (data.daily_orders || []).map((d) => [
+          d.date, d.total, d.completed, d.cancelled, d.rejected,
+        ]),
+      },
+      {
+        title: t('analytics.ordersByCategory'),
+        headers: [t('adminOrders.category'), t('analytics.orders')],
+        rows: (data.by_category || []).map((c) => [c.name, c.count]),
+      },
+      {
+        title: t('analytics.revenueByCategory'),
+        headers: [t('adminOrders.category'), t('analytics.orders'), `${t('analytics.revenue')} (${currency.code})`],
+        rows: (data.revenue.by_category || []).map((c) => [c.name, c.orders, fmt(c.revenue)]),
+      },
+      {
+        title: t('analytics.topCustomers'),
+        headers: [t('analytics.customer'), 'Email', t('analytics.orders'), t('analytics.completed'), `${t('analytics.revenue')} (${currency.code})`],
+        rows: topCustomers.map((c) => [c.name, c.email, c.orders, c.completed, fmt(c.revenue)]),
+      },
+    ];
+    const today = new Date().toISOString().slice(0, 10);
+    downloadCsv(`analytics-${period}d-${today}.csv`, joinSheets(sections));
+  };
 
   return (
     <div className="page-enter">
@@ -189,24 +254,33 @@ export default function AdminAnalyticsPage() {
           <BarChartOutlined style={{ marginRight: 10, color: 'var(--accent)' }} />
           {t('analytics.title')}
         </Title>
-        <Select
-          value={period}
-          onChange={setPeriod}
-          style={{ width: 150 }}
-          options={[
-            { value: 7, label: t('analytics.last7') },
-            { value: 14, label: t('analytics.last14') },
-            { value: 30, label: t('analytics.last30') },
-            { value: 60, label: t('analytics.last60') },
-            { value: 90, label: t('analytics.last90') },
-          ]}
-        />
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Select
+            value={period}
+            onChange={setPeriod}
+            style={{ width: isMobile ? 130 : 150 }}
+            options={[
+              { value: 7, label: t('analytics.last7') },
+              { value: 14, label: t('analytics.last14') },
+              { value: 30, label: t('analytics.last30') },
+              { value: 60, label: t('analytics.last60') },
+              { value: 90, label: t('analytics.last90') },
+            ]}
+          />
+          <Button
+            icon={<DownloadOutlined />}
+            onClick={handleExportCsv}
+            style={{ borderRadius: 10, fontWeight: 600 }}
+          >
+            {!isMobile && t('analytics.exportCsv')}
+          </Button>
+        </div>
       </div>
 
       {/* Quick Stats */}
       <Row gutter={[16, 16]} style={{ marginBottom: 28 }}>
         {statCards.map((s, i) => (
-          <Col xs={12} sm={8} md={8} lg={4} key={i}>
+          <Col xs={12} sm={8} md={6} lg={6} key={i}>
             <div style={{
               background: 'var(--card-bg)',
               border: '1px solid var(--border-color)',
@@ -249,7 +323,7 @@ export default function AdminAnalyticsPage() {
           <div style={chartCardStyle}>
             <div style={chartHeaderStyle}>{t('analytics.dailyOrders')}</div>
             <div style={chartBodyStyle}>
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={isMobile ? 220 : 280}>
                 <AreaChart data={data.daily_orders}>
                   <defs>
                     <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
@@ -281,7 +355,7 @@ export default function AdminAnalyticsPage() {
           <div style={chartCardStyle}>
             <div style={chartHeaderStyle}>{t('analytics.ordersByStatus')}</div>
             <div style={chartBodyStyle}>
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
                 <PieChart>
                   <Pie
                     data={data.by_status.map((s) => ({ ...s, name: t('status.' + s.status) }))}
@@ -313,7 +387,7 @@ export default function AdminAnalyticsPage() {
           <div style={chartCardStyle}>
             <div style={chartHeaderStyle}>{t('analytics.ordersByCategory')}</div>
             <div style={chartBodyStyle}>
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
                 <BarChart data={data.by_category} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                   <XAxis type="number" tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor} allowDecimals={false} />
@@ -338,12 +412,12 @@ export default function AdminAnalyticsPage() {
             <div style={chartHeaderStyle}>{t('analytics.revenueByCategory')}</div>
             <div style={chartBodyStyle}>
               {data.revenue.by_category.length > 0 ? (
-                <ResponsiveContainer width="100%" height={280}>
+                <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
                   <BarChart data={data.revenue.by_category} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                     <XAxis
                       type="number" tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor}
-                      tickFormatter={(v) => `$${v}`}
+                      tickFormatter={(v) => `${currency.symbol}${v}`}
                     />
                     <YAxis
                       dataKey="name" type="category" width={isMobile ? 80 : 120}
@@ -351,9 +425,9 @@ export default function AdminAnalyticsPage() {
                     />
                     <Tooltip
                       {...customTooltip}
-                      formatter={(value, name) => [`$${Number(value).toLocaleString()}`, name]}
+                      formatter={(value, name) => [`${currency.symbol}${Number(value).toLocaleString()}`, name]}
                     />
-                    <Bar dataKey="revenue" name={`${t('analytics.revenue')} ($)`} fill="#f59e0b" radius={[0, 6, 6, 0]}>
+                    <Bar dataKey="revenue" name={`${t('analytics.revenue')} (${currency.symbol})`} fill="#f59e0b" radius={[0, 6, 6, 0]}>
                       {data.revenue.by_category.map((entry, i) => (
                         <Cell key={i} fill={entry.color || PIE_COLORS[i % PIE_COLORS.length]} />
                       ))}
@@ -370,52 +444,26 @@ export default function AdminAnalyticsPage() {
         </Col>
       </Row>
 
-      {/* Weekly / Monthly Trends */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} lg={12}>
-          <div style={chartCardStyle}>
-            <div style={chartHeaderStyle}>{t('analytics.weeklyTrend')}</div>
-            <div style={chartBodyStyle}>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={data.weekly_orders}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis
-                    dataKey="week" tickFormatter={(v) => v.slice(5, 10)}
-                    tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor}
-                  />
-                  <YAxis tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor} allowDecimals={false} />
-                  <Tooltip {...customTooltip} labelFormatter={(v) => `${t('analytics.weekOf')} ${v}`} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="total" name={t('analytics.total')} fill={ACCENT} radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="completed" name={t('status.completed')} fill="#10b981" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </Col>
-
-        <Col xs={24} lg={12}>
-          <div style={chartCardStyle}>
-            <div style={chartHeaderStyle}>{t('analytics.monthlyTrend')}</div>
-            <div style={chartBodyStyle}>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={data.monthly_orders}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis
-                    dataKey="month" tickFormatter={(v) => v.slice(5)}
-                    tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor}
-                  />
-                  <YAxis tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor} allowDecimals={false} />
-                  <Tooltip {...customTooltip} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Line type="monotone" dataKey="total" stroke={ACCENT} name={t('analytics.total')} strokeWidth={2.5} dot={{ r: 4, fill: ACCENT }} />
-                  <Line type="monotone" dataKey="completed" stroke="#10b981" name={t('status.completed')} strokeWidth={2.5} dot={{ r: 4, fill: '#10b981' }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </Col>
-      </Row>
+      {/* Monthly Trend */}
+      <div style={{ ...chartCardStyle, marginBottom: 24 }}>
+        <div style={chartHeaderStyle}>{t('analytics.monthlyTrend')}</div>
+        <div style={chartBodyStyle}>
+          <ResponsiveContainer width="100%" height={isMobile ? 220 : 260}>
+            <LineChart data={data.monthly_orders}>
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+              <XAxis
+                dataKey="month" tickFormatter={(v) => v.slice(5)}
+                tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor}
+              />
+              <YAxis tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor} allowDecimals={false} />
+              <Tooltip {...customTooltip} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Line type="monotone" dataKey="total" stroke={ACCENT} name={t('analytics.total')} strokeWidth={2.5} dot={{ r: 4, fill: ACCENT }} />
+              <Line type="monotone" dataKey="completed" stroke="#10b981" name={t('status.completed')} strokeWidth={2.5} dot={{ r: 4, fill: '#10b981' }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
       {/* Urgency, Fleet, New Users */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
@@ -423,7 +471,7 @@ export default function AdminAnalyticsPage() {
           <div style={chartCardStyle}>
             <div style={chartHeaderStyle}>{t('analytics.ordersByUrgency')}</div>
             <div style={chartBodyStyle}>
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={isMobile ? 200 : 220}>
                 <PieChart>
                   <Pie
                     data={data.by_urgency.map((u) => ({
@@ -454,7 +502,7 @@ export default function AdminAnalyticsPage() {
           <div style={chartCardStyle}>
             <div style={chartHeaderStyle}>{t('analytics.fleetStatus')}</div>
             <div style={chartBodyStyle}>
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={isMobile ? 200 : 220}>
                 <PieChart>
                   <Pie
                     data={data.fleet_by_status.map((f) => ({
@@ -492,7 +540,7 @@ export default function AdminAnalyticsPage() {
               <UserAddOutlined style={{ color: 'var(--text-tertiary)', fontSize: 16 }} />
             </div>
             <div style={chartBodyStyle}>
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={isMobile ? 200 : 220}>
                 <AreaChart data={data.new_users_daily}>
                   <defs>
                     <linearGradient id="gradUsers" x1="0" y1="0" x2="0" y2="1">
@@ -540,48 +588,13 @@ export default function AdminAnalyticsPage() {
         </div>
       )}
 
-      {/* Users by Type & Orders by User Type */}
+      {/* Orders by User Type & Top Customers */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={12}>
-          <div style={chartCardStyle}>
-            <div style={chartHeaderStyle}>{t('analytics.usersByType')}</div>
-            <div style={chartBodyStyle}>
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie
-                    data={[
-                      { name: t('analytics.personalUsers'), count: data.total_personal_users || 0, type: 'personal' },
-                      { name: t('analytics.companyUsers'), count: data.total_company_users || 0, type: 'company' },
-                    ].filter((d) => d.count > 0)}
-                    dataKey="count"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={70}
-                    innerRadius={35}
-                    paddingAngle={2}
-                    label={({ name, count }) => `${name} (${count})`}
-                    labelLine={{ stroke: subTextColor }}
-                  >
-                    {[
-                      { type: 'personal' },
-                      { type: 'company' },
-                    ].map((d, i) => (
-                      <Cell key={i} fill={USER_TYPE_COLORS[d.type]} />
-                    ))}
-                  </Pie>
-                  <Tooltip {...customTooltip} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </Col>
-
-        <Col xs={24} sm={12}>
+        <Col xs={24} lg={10}>
           <div style={chartCardStyle}>
             <div style={chartHeaderStyle}>{t('analytics.ordersByUserType')}</div>
             <div style={chartBodyStyle}>
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={isMobile ? 220 : 280}>
                 <PieChart>
                   <Pie
                     data={(data.orders_by_user_type || []).map((d) => ({
@@ -593,8 +606,8 @@ export default function AdminAnalyticsPage() {
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    outerRadius={70}
-                    innerRadius={35}
+                    outerRadius={isMobile ? 70 : 90}
+                    innerRadius={isMobile ? 35 : 45}
                     paddingAngle={2}
                     label={({ name, count }) => `${name} (${count})`}
                     labelLine={{ stroke: subTextColor }}
@@ -606,6 +619,61 @@ export default function AdminAnalyticsPage() {
                   <Tooltip {...customTooltip} />
                 </PieChart>
               </ResponsiveContainer>
+            </div>
+          </div>
+        </Col>
+
+        <Col xs={24} lg={14}>
+          <div style={chartCardStyle}>
+            <div style={chartHeaderStyle}>{t('analytics.topCustomers')}</div>
+            <div style={{ padding: '12px 16px 16px' }}>
+              <Table
+                size="small"
+                pagination={false}
+                rowKey="user_id"
+                dataSource={topCustomers}
+                locale={{ emptyText: t('common.noData') }}
+                columns={[
+                  {
+                    title: t('analytics.customer'),
+                    dataIndex: 'name',
+                    render: (name, r) => (
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{name}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{r.email}</span>
+                      </div>
+                    ),
+                  },
+                  {
+                    title: t('analytics.ordersByUserType').split(' ')[0],
+                    dataIndex: 'user_type',
+                    width: 90,
+                    render: (type) => (
+                      <Tag color={type === 'company' ? 'orange' : 'green'} style={{ margin: 0 }}>
+                        {type === 'company' ? t('analytics.companyUsers') : t('analytics.personalUsers')}
+                      </Tag>
+                    ),
+                  },
+                  {
+                    title: t('analytics.orders'),
+                    dataIndex: 'orders',
+                    width: 70,
+                    align: 'right',
+                    render: (v) => <span style={{ fontWeight: 600 }}>{v}</span>,
+                  },
+                  {
+                    title: t('analytics.revenue'),
+                    dataIndex: 'revenue',
+                    width: 100,
+                    align: 'right',
+                    render: (v) => (
+                      <span style={{ fontWeight: 600, color: '#f59e0b' }}>
+                        {currency.symbol}{Number(v || 0).toLocaleString()}
+                      </span>
+                    ),
+                  },
+                ]}
+              />
             </div>
           </div>
         </Col>
@@ -631,11 +699,11 @@ export default function AdminAnalyticsPage() {
                 />
                 <YAxis
                   tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor}
-                  tickFormatter={(v) => `$${v}`}
+                  tickFormatter={(v) => `${currency.symbol}${v}`}
                 />
                 <Tooltip
                   {...customTooltip}
-                  formatter={(value) => [`$${Number(value).toLocaleString()}`, t('analytics.revenue')]}
+                  formatter={(value) => [`${currency.symbol}${Number(value).toLocaleString()}`, t('analytics.revenue')]}
                 />
                 <Area type="monotone" dataKey="revenue" stroke="#f59e0b" fill="url(#gradRevenue)" strokeWidth={2} />
               </AreaChart>

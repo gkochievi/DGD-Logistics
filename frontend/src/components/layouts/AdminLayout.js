@@ -4,7 +4,7 @@ import {
   DashboardOutlined, FileTextOutlined,
   TeamOutlined, AppstoreOutlined, UserOutlined, LogoutOutlined,
   CarOutlined, MoonFilled, SunFilled, BarChartOutlined,
-  GlobalOutlined, DesktopOutlined, ExportOutlined,
+  GlobalOutlined, DesktopOutlined, ExportOutlined, IdcardOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -28,9 +28,10 @@ export default function AdminLayout() {
   const MENU_ITEMS = [
     { key: '/admin', icon: <DashboardOutlined />, label: t('nav.overview') },
     { key: '/admin/orders', icon: <FileTextOutlined />, label: t('nav.orders') },
-    { key: '/admin/analytics', icon: <BarChartOutlined />, label: t('nav.analytics') },
-    { key: '/admin/vehicles', icon: <CarOutlined />, label: t('nav.vehicles') },
     { key: '/admin/users', icon: <TeamOutlined />, label: t('nav.users') },
+    { key: '/admin/vehicles', icon: <CarOutlined />, label: t('nav.vehicles') },
+    { key: '/admin/drivers', icon: <IdcardOutlined />, label: t('nav.drivers') },
+    { key: '/admin/analytics', icon: <BarChartOutlined />, label: t('nav.analytics') },
     { key: '/admin/categories', icon: <AppstoreOutlined />, label: t('nav.categories') },
     { key: '/admin/landing', icon: <DesktopOutlined />, label: t('nav.landing') },
   ];
@@ -261,7 +262,14 @@ export default function AdminLayout() {
                 }}
               >
                 {item.icon}
-                <span style={{ fontSize: 10, fontWeight: isActive ? 600 : 400 }}>{item.label}</span>
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: isActive ? 600 : 400,
+                  textAlign: 'center',
+                  lineHeight: 1.15,
+                  width: '100%',
+                  padding: '0 2px',
+                }}>{item.label}</span>
               </div>
             );
           })}

@@ -34,32 +34,70 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             'id', 'email', 'phone_number', 'first_name', 'last_name',
             'full_name', 'role', 'user_type', 'company_name', 'company_id',
-            'is_active', 'created_at', 'updated_at',
+            'avatar', 'avatar_url',
+            'is_active', 'must_change_password', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'avatar', 'must_change_password', 'created_at', 'updated_at']
+
+    def get_avatar_url(self, obj):
+        if not obj.avatar:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.avatar.url) if request else obj.avatar.url
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = User
-        fields = ['first_name', 'last_name', 'phone_number', 'user_type', 'company_name']
+        fields = ['first_name', 'last_name', 'phone_number', 'user_type', 'company_name', 'avatar', 'avatar_url']
+
+    def get_avatar_url(self, obj):
+        if not obj.avatar:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.avatar.url) if request else obj.avatar.url
+
+    def to_internal_value(self, data):
+        # Allow clearing the avatar by sending empty string
+        if hasattr(data, 'get') and data.get('avatar') == '':
+            mutable = {k: data[k] for k in data}
+            mutable['avatar'] = None
+            return super().to_internal_value(mutable)
+        return super().to_internal_value(data)
 
 
 class ChangePasswordSerializer(serializers.Serializer):
-    old_password = serializers.CharField(required=True)
+    old_password = serializers.CharField(required=False, allow_blank=True)
     new_password = serializers.CharField(required=True, validators=[validate_password])
+    confirm_password = serializers.CharField(required=False, allow_blank=True)
 
-    def validate_old_password(self, value):
+    def validate(self, attrs):
         user = self.context['request'].user
-        if not user.check_password(value):
-            raise serializers.ValidationError('Current password is incorrect.')
-        return value
+        old_pw = attrs.get('old_password') or ''
+        new_pw = attrs.get('new_password')
+        confirm = attrs.get('confirm_password')
+
+        # When forced to change password, old_password is not required.
+        if not user.must_change_password:
+            if not old_pw:
+                raise serializers.ValidationError({'old_password': 'Current password is required.'})
+            if not user.check_password(old_pw):
+                raise serializers.ValidationError({'old_password': 'Current password is incorrect.'})
+
+        if confirm is not None and confirm != '' and new_pw != confirm:
+            raise serializers.ValidationError({'confirm_password': 'Passwords do not match.'})
+        if old_pw and new_pw and new_pw == old_pw:
+            raise serializers.ValidationError({'new_password': 'New password must be different from the current one.'})
+        return attrs
 
 
 class AdminUserSerializer(serializers.ModelSerializer):
@@ -71,10 +109,14 @@ class AdminUserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'email', 'phone_number', 'first_name', 'last_name',
             'full_name', 'role', 'user_type', 'company_name', 'company_id',
-            'is_active', 'created_at', 'updated_at',
+            'is_active', 'must_change_password', 'created_at', 'updated_at',
             'order_count',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'must_change_password', 'created_at', 'updated_at']
+
+
+class AdminResetPasswordSerializer(serializers.Serializer):
+    new_password = serializers.CharField(required=True, validators=[validate_password])
 
 
 class AdminCreateUserSerializer(serializers.ModelSerializer):

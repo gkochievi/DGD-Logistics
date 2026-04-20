@@ -1,7 +1,8 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import { ProtectedRoute, AppAuthGuard } from './components/common/ProtectedRoute';
+import { ProtectedRoute, AppAuthGuard, ForcePasswordChangeGuard } from './components/common/ProtectedRoute';
+import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
 
 // Public / marketing
 import PublicLayout from './components/layouts/PublicLayout';
@@ -28,6 +29,7 @@ import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminUserFormPage from './pages/admin/AdminUserFormPage';
 import AdminCategoriesPage from './pages/admin/AdminCategoriesPage';
 import AdminVehiclesPage from './pages/admin/AdminVehiclesPage';
+import AdminDriversPage from './pages/admin/AdminDriversPage';
 import AdminAnalyticsPage from './pages/admin/AdminAnalyticsPage';
 import AdminLandingPage from './pages/admin/AdminLandingPage';
 
@@ -75,8 +77,19 @@ export default function App() {
           <Route path="/admin/users/:id" element={<AdminUserFormPage />} />
           <Route path="/admin/categories" element={<AdminCategoriesPage />} />
           <Route path="/admin/vehicles" element={<AdminVehiclesPage />} />
+          <Route path="/admin/drivers" element={<AdminDriversPage />} />
           <Route path="/admin/landing" element={<AdminLandingPage />} />
         </Route>
+
+        {/* Forced password change (after admin reset) */}
+        <Route
+          path="/force-password-change"
+          element={
+            <ForcePasswordChangeGuard>
+              <ForcePasswordChangePage />
+            </ForcePasswordChangeGuard>
+          }
+        />
 
         {/* Old dashboard routes redirect to new app */}
         <Route path="/dashboard/*" element={<Navigate to="/app" replace />} />

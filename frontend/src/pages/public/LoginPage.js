@@ -17,6 +17,10 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const user = await login(values.email, values.password);
+      if (user.must_change_password) {
+        navigate('/force-password-change', { replace: true });
+        return;
+      }
       message.success(t('auth.welcome'));
       navigate(user.role === 'admin' ? '/admin' : '/app');
     } catch (err) {

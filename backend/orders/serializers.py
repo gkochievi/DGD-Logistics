@@ -105,6 +105,7 @@ class OrderCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = [
+            'id',
             'selected_category', 'suggested_category',
             'pickup_location', 'pickup_lat', 'pickup_lng',
             'destination_location', 'destination_lat', 'destination_lng',
@@ -113,6 +114,7 @@ class OrderCreateSerializer(serializers.ModelSerializer):
             'description', 'cargo_details',
             'urgency', 'user_note', 'route_stops', 'images',
         ]
+        read_only_fields = ['id']
         extra_kwargs = {
             'selected_category': {'required': False, 'allow_null': True},
         }
