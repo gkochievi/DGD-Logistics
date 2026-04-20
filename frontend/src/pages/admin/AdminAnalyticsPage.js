@@ -13,6 +13,8 @@ import {
 import api from '../../api/client';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLang } from '../../contexts/LanguageContext';
+import { useBranding } from '../../contexts/BrandingContext';
+import { COLOR_THEMES, DEFAULT_COLOR_THEME } from '../../utils/colorThemes';
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -51,7 +53,11 @@ const PIE_COLORS = ['#00B856', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#009
 export default function AdminAnalyticsPage() {
   const screens = useBreakpoint();
   const { isDark } = useTheme();
+  const { colorTheme } = useBranding();
   const { t } = useLang();
+  const palette = (COLOR_THEMES[colorTheme] || COLOR_THEMES[DEFAULT_COLOR_THEME])[isDark ? 'dark' : 'light'];
+  const ACCENT = palette.accent;
+  const ACCENT_DARK = palette.accentDark;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState(30);
@@ -125,7 +131,7 @@ export default function AdminAnalyticsPage() {
       title: t('analytics.today'),
       value: data.today_orders,
       icon: <CalendarOutlined />,
-      color: '#00B856',
+      color: ACCENT,
     },
     {
       title: t('analytics.thisWeek'),
@@ -137,7 +143,7 @@ export default function AdminAnalyticsPage() {
       title: t('analytics.thisMonth'),
       value: data.this_month_orders,
       icon: <ShoppingCartOutlined />,
-      color: '#009E4A',
+      color: ACCENT_DARK,
     },
     {
       title: t('analytics.periodOrders', { days: period }),
@@ -247,8 +253,8 @@ export default function AdminAnalyticsPage() {
                 <AreaChart data={data.daily_orders}>
                   <defs>
                     <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#00B856" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#00B856" stopOpacity={0} />
+                      <stop offset="5%" stopColor={ACCENT} stopOpacity={0.3} />
+                      <stop offset="95%" stopColor={ACCENT} stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gradCompleted" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -263,7 +269,7 @@ export default function AdminAnalyticsPage() {
                   <YAxis tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor} allowDecimals={false} />
                   <Tooltip {...customTooltip} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Area type="monotone" dataKey="total" stroke="#00B856" fill="url(#gradTotal)" name={t('analytics.total')} strokeWidth={2} />
+                  <Area type="monotone" dataKey="total" stroke={ACCENT} fill="url(#gradTotal)" name={t('analytics.total')} strokeWidth={2} />
                   <Area type="monotone" dataKey="completed" stroke="#10b981" fill="url(#gradCompleted)" name={t('status.completed')} strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -380,7 +386,7 @@ export default function AdminAnalyticsPage() {
                   <YAxis tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor} allowDecimals={false} />
                   <Tooltip {...customTooltip} labelFormatter={(v) => `${t('analytics.weekOf')} ${v}`} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="total" name={t('analytics.total')} fill="#00B856" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="total" name={t('analytics.total')} fill={ACCENT} radius={[6, 6, 0, 0]} />
                   <Bar dataKey="completed" name={t('status.completed')} fill="#10b981" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -402,7 +408,7 @@ export default function AdminAnalyticsPage() {
                   <YAxis tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor} allowDecimals={false} />
                   <Tooltip {...customTooltip} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Line type="monotone" dataKey="total" stroke="#00B856" name={t('analytics.total')} strokeWidth={2.5} dot={{ r: 4, fill: '#00B856' }} />
+                  <Line type="monotone" dataKey="total" stroke={ACCENT} name={t('analytics.total')} strokeWidth={2.5} dot={{ r: 4, fill: ACCENT }} />
                   <Line type="monotone" dataKey="completed" stroke="#10b981" name={t('status.completed')} strokeWidth={2.5} dot={{ r: 4, fill: '#10b981' }} />
                 </LineChart>
               </ResponsiveContainer>
@@ -490,8 +496,8 @@ export default function AdminAnalyticsPage() {
                 <AreaChart data={data.new_users_daily}>
                   <defs>
                     <linearGradient id="gradUsers" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#009E4A" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#009E4A" stopOpacity={0} />
+                      <stop offset="5%" stopColor={ACCENT_DARK} stopOpacity={0.3} />
+                      <stop offset="95%" stopColor={ACCENT_DARK} stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
@@ -501,7 +507,7 @@ export default function AdminAnalyticsPage() {
                   />
                   <YAxis tick={{ fontSize: 10, fill: subTextColor }} stroke={gridColor} allowDecimals={false} />
                   <Tooltip {...customTooltip} />
-                  <Area type="monotone" dataKey="count" stroke="#009E4A" fill="url(#gradUsers)" name={t('analytics.newUsers')} strokeWidth={2} />
+                  <Area type="monotone" dataKey="count" stroke={ACCENT_DARK} fill="url(#gradUsers)" name={t('analytics.newUsers')} strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

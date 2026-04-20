@@ -10,7 +10,7 @@ DEBUG = config('DJANGO_DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('DJANGO_ALLOWED_HOSTS', default='*', cast=Csv())
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://e852-2a0b-6201-448d-da00-bdaf-f6a5-fae-40f6.ngrok-free.app',
+    'https://*.ngrok-free.app',
 ]
 
 INSTALLED_APPS = [
@@ -103,7 +103,7 @@ CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bo
 if not CORS_ALLOW_ALL_ORIGINS:
     CORS_ALLOWED_ORIGINS = config(
         'CORS_ALLOWED_ORIGINS',
-        default='http://localhost:3000,https://e852-2a0b-6201-448d-da00-bdaf-f6a5-fae-40f6.ngrok-free.app',
+        default='http://localhost:3000',
         cast=Csv()
     )
 CORS_ALLOW_CREDENTIALS = True

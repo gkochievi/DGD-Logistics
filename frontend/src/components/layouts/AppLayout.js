@@ -13,10 +13,12 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLang } from '../../contexts/LanguageContext';
+import { useBranding } from '../../contexts/BrandingContext';
 
 const { useBreakpoint } = Grid;
 
 export default function AppLayout() {
+  const branding = useBranding();
   const navigate = useNavigate();
   const location = useLocation();
   const screens = useBreakpoint();
@@ -213,16 +215,22 @@ export default function AppLayout() {
               cursor: 'pointer', flexShrink: 0,
             }}
           >
-            <div style={{
-              width: 34, height: 34, borderRadius: 10,
-              background: 'var(--fab-gradient)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 13, fontWeight: 800,
-            }}>
-              HW
-            </div>
+            {branding.siteIconUrl ? (
+              <img src={branding.siteIconUrl} alt="Logo" style={{
+                width: 34, height: 34, borderRadius: 10, objectFit: 'contain',
+              }} />
+            ) : (
+              <div style={{
+                width: 34, height: 34, borderRadius: 10,
+                background: 'var(--fab-gradient)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 13, fontWeight: 800,
+              }}>
+                HW
+              </div>
+            )}
             <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', letterSpacing: -0.3 }}>
-              HeavyWork
+              {branding.siteName || 'HeavyWork'}
             </span>
           </div>
 

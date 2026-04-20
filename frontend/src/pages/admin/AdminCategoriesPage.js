@@ -1,26 +1,49 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Table, Button, Typography, Tag, Modal, Form, Input, Switch, Space, Select,
-  ColorPicker, message, Grid, Empty,
+  Table, Button, Typography, Tag, Modal, Form, Input, Switch, Space,
+  ColorPicker, message, Grid, Empty, Upload, Tabs,
 } from 'antd';
-import { PlusOutlined, EditOutlined, StopOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, StopOutlined, CheckCircleOutlined, CameraOutlined, DeleteOutlined } from '@ant-design/icons';
 import api from '../../api/client';
-import { getCategoryIcon, AVAILABLE_ICONS } from '../../utils/categoryIcons';
+import { CategoryImage } from '../../utils/categoryIcons';
 import { useLang } from '../../contexts/LanguageContext';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { useBreakpoint } = Grid;
 
+const LANG_TABS = [
+  { key: 'en', label: '🇬🇧 EN' },
+  { key: 'ka', label: '🇬🇪 KA' },
+  { key: 'ru', label: '🇷🇺 RU' },
+];
+
 export default function AdminCategoriesPage() {
   const screens = useBreakpoint();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
-  const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+
+  // i18n fields managed as state (not via Form)
+  const [catName, setCatName] = useState({ en: '', ka: '', ru: '' });
+  const [catDesc, setCatDesc] = useState({ en: '', ka: '', ru: '' });
+  // Non-i18n fields
+  const [catColor, setCatColor] = useState('#00B856');
+  const [catKeywords, setCatKeywords] = useState('');
+  const [catRequiresDest, setCatRequiresDest] = useState(false);
+  const [catIsActive, setCatIsActive] = useState(true);
+
+  // Helper: resolve i18n field to current language
+  const localized = (field) => {
+    if (!field) return '';
+    if (typeof field === 'string') return field;
+    return field[lang] || field['en'] || '';
+  };
 
   const fetchCategories = () => {
     setLoading(true);
@@ -35,23 +58,53 @@ export default function AdminCategoriesPage() {
 
   const openModal = (category = null) => {
     setEditingCategory(category);
+    setImageFile(null);
+    setImagePreview(category?.image_url || null);
     if (category) {
-      form.setFieldsValue(category);
+      setCatName(typeof category.name === 'object' ? { en: '', ka: '', ru: '', ...category.name } : { en: category.name || '', ka: '', ru: '' });
+      setCatDesc(typeof category.description === 'object' ? { en: '', ka: '', ru: '', ...category.description } : { en: category.description || '', ka: '', ru: '' });
+      setCatColor(category.color || '#00B856');
+      setCatKeywords(category.suggestion_keywords || '');
+      setCatRequiresDest(category.requires_destination || false);
+      setCatIsActive(category.is_active !== false);
     } else {
-      form.resetFields();
-      form.setFieldsValue({ is_active: true });
+      setCatName({ en: '', ka: '', ru: '' });
+      setCatDesc({ en: '', ka: '', ru: '' });
+      setCatColor('#00B856');
+      setCatKeywords('');
+      setCatRequiresDest(false);
+      setCatIsActive(true);
     }
     setModalOpen(true);
   };
 
-  const handleSave = async (values) => {
+  const handleSave = async () => {
+    if (!catName.en && !catName.ka && !catName.ru) {
+      message.error(t('common.required'));
+      return;
+    }
     setSaving(true);
     try {
+      const formData = new FormData();
+      formData.append('name', JSON.stringify(catName));
+      formData.append('description', JSON.stringify(catDesc));
+      formData.append('color', typeof catColor === 'string' ? catColor : catColor?.toHexString?.() || '#00B856');
+      formData.append('suggestion_keywords', catKeywords);
+      formData.append('requires_destination', catRequiresDest ? 'true' : 'false');
+      formData.append('is_active', catIsActive ? 'true' : 'false');
+      if (imageFile) {
+        formData.append('image', imageFile);
+      }
+
       if (editingCategory) {
-        await api.patch(`/categories/admin/${editingCategory.id}/`, values);
+        await api.patch(`/categories/admin/${editingCategory.id}/`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
         message.success(t('adminCats.categoryUpdated'));
       } else {
-        await api.post('/categories/admin/', values);
+        await api.post('/categories/admin/', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
         message.success(t('adminCats.categoryCreated'));
       }
       setModalOpen(false);
@@ -75,25 +128,54 @@ export default function AdminCategoriesPage() {
     }
   };
 
+  const deleteCategory = (cat) => {
+    Modal.confirm({
+      title: t('adminCats.deleteConfirmTitle'),
+      content: t('adminCats.deleteConfirmContent', { name: localized(cat.name) }),
+      okText: t('adminCats.delete'),
+      okType: 'danger',
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        try {
+          await api.delete(`/categories/admin/${cat.id}/`);
+          message.success(t('adminCats.categoryDeleted'));
+          fetchCategories();
+        } catch {
+          message.error(t('adminCats.failedDeleteCat'));
+        }
+      },
+    });
+  };
+
+  const handleImageSelect = (info) => {
+    const file = info.file;
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => setImagePreview(e.target.result);
+    reader.readAsDataURL(file);
+    return false;
+  };
+
   const isMobile = !screens.md;
 
   const columns = [
     {
-      title: '', width: 52,
+      title: '', width: 60,
       render: (_, record) => (
         <div style={{
-          width: 38, height: 38, borderRadius: 10,
+          width: 44, height: 44, borderRadius: 12,
           background: `color-mix(in srgb, ${record.color || 'var(--accent)'} 12%, transparent)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 17, color: record.color || 'var(--accent)',
+          fontSize: 20, color: record.color || 'var(--accent)',
+          overflow: 'hidden',
         }}>
-          {getCategoryIcon(record.icon)}
+          <CategoryImage imageUrl={record.image_url} icon={record.icon} size={32} />
         </div>
       ),
     },
     {
       title: t('adminUsers.name'), dataIndex: 'name', ellipsis: true,
-      render: (name) => <span style={{ fontWeight: 600 }}>{name}</span>,
+      render: (name) => <span style={{ fontWeight: 600 }}>{localized(name)}</span>,
     },
     {
       title: t('adminCats.typeTransport'), dataIndex: 'requires_destination', width: 130,
@@ -125,7 +207,7 @@ export default function AdminCategoriesPage() {
       ),
     },
     {
-      title: '', width: 80,
+      title: '', width: 120,
       render: (_, record) => (
         <Space size={4}>
           <Button
@@ -139,6 +221,11 @@ export default function AdminCategoriesPage() {
             danger={record.is_active}
             icon={record.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
             onClick={(e) => { e.stopPropagation(); toggleActive(record); }}
+          />
+          <Button
+            size="small" type="text" danger
+            icon={<DeleteOutlined />}
+            onClick={(e) => { e.stopPropagation(); deleteCategory(record); }}
           />
         </Space>
       ),
@@ -194,25 +281,26 @@ export default function AdminCategoriesPage() {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                 <div style={{
-                  width: 42, height: 42, borderRadius: 12,
+                  width: 48, height: 48, borderRadius: 14,
                   background: `color-mix(in srgb, ${cat.color || 'var(--accent)'} 12%, transparent)`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 20, color: cat.color || 'var(--accent)', flexShrink: 0,
+                  fontSize: 22, color: cat.color || 'var(--accent)', flexShrink: 0,
+                  overflow: 'hidden',
                 }}>
-                  {getCategoryIcon(cat.icon)}
+                  <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={36} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Text style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
-                    {cat.name}
+                    {localized(cat.name)}
                   </Text>
                 </div>
                 <Tag color={cat.is_active ? 'green' : 'red'}>
                   {cat.is_active ? t('common.active') : t('common.inactive')}
                 </Tag>
               </div>
-              {cat.description && (
+              {localized(cat.description) && (
                 <Text style={{ fontSize: 13, color: 'var(--text-tertiary)', display: 'block', marginBottom: 8 }}>
-                  {cat.description}
+                  {localized(cat.description)}
                 </Text>
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -229,6 +317,11 @@ export default function AdminCategoriesPage() {
                   danger={cat.is_active}
                   icon={cat.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
                   onClick={() => toggleActive(cat)}
+                />
+                <Button
+                  size="small" type="text" danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => deleteCategory(cat)}
                 />
               </div>
             </div>
@@ -270,68 +363,132 @@ export default function AdminCategoriesPage() {
           body: { padding: '16px 24px 24px' },
         }}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          requiredMark={false}
-          onFinish={(values) => {
-            const color = values.color;
-            const submit = {
-              ...values,
-              color: typeof color === 'string' ? color : color?.toHexString?.() || '#00B856',
-            };
-            handleSave(submit);
-          }}
-        >
+        <Form layout="vertical" requiredMark={false}>
+          {/* Name (i18n) */}
           <Form.Item
-            name="name"
             label={<span style={{ fontWeight: 600 }}>{t('adminUsers.name')}</span>}
-            rules={[{ required: true, message: t('common.required') }]}
+            required
           >
-            <Input placeholder={t('adminCats.categoryName')} style={{ borderRadius: 10 }} />
+            <Tabs
+              size="small"
+              items={LANG_TABS.map((tab) => ({
+                key: tab.key,
+                label: tab.label,
+                children: (
+                  <Input
+                    value={catName[tab.key] || ''}
+                    onChange={(e) => setCatName((prev) => ({ ...prev, [tab.key]: e.target.value }))}
+                    placeholder={t('adminCats.categoryName')}
+                    style={{ borderRadius: 10 }}
+                  />
+                ),
+              }))}
+              style={{ marginTop: -8 }}
+            />
           </Form.Item>
 
+          {/* Description (i18n) */}
           <Form.Item
-            name="description"
             label={<span style={{ fontWeight: 600 }}>{t('orders.description')}</span>}
           >
-            <TextArea rows={3} placeholder={t('adminCats.briefDesc')} style={{ borderRadius: 10 }} />
+            <Tabs
+              size="small"
+              items={LANG_TABS.map((tab) => ({
+                key: tab.key,
+                label: tab.label,
+                children: (
+                  <TextArea
+                    value={catDesc[tab.key] || ''}
+                    onChange={(e) => setCatDesc((prev) => ({ ...prev, [tab.key]: e.target.value }))}
+                    rows={3}
+                    placeholder={t('adminCats.briefDesc')}
+                    style={{ borderRadius: 10 }}
+                  />
+                ),
+              }))}
+              style={{ marginTop: -8 }}
+            />
           </Form.Item>
 
-          <div style={{ display: 'flex', gap: 14 }}>
-            <Form.Item
-              name="icon"
-              label={<span style={{ fontWeight: 600 }}>{t('adminCats.icon')}</span>}
-              style={{ flex: 1 }}
+          {/* Image Upload */}
+          <Form.Item
+            label={<span style={{ fontWeight: 600 }}>{t('adminCats.image') || 'Image'}</span>}
+          >
+            <Upload
+              accept="image/*"
+              showUploadList={false}
+              beforeUpload={(file) => {
+                handleImageSelect({ file });
+                return false;
+              }}
             >
-              <Select
-                placeholder={t('adminCats.selectIcon')}
-                showSearch
-                options={AVAILABLE_ICONS.map((name) => ({
-                  value: name,
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {getCategoryIcon(name)}
-                      <span>{name}</span>
-                    </span>
-                  ),
-                }))}
-              />
-            </Form.Item>
-            <Form.Item
-              name="color"
-              label={<span style={{ fontWeight: 600 }}>{t('adminCats.color')}</span>}
-            >
-              <ColorPicker format="hex" />
-            </Form.Item>
-          </div>
+              <div style={{
+                width: '100%',
+                border: '2px dashed var(--border-color)',
+                borderRadius: 12,
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+                cursor: 'pointer',
+                transition: 'border-color 0.2s',
+                background: 'var(--bg-secondary)',
+              }}>
+                {imagePreview ? (
+                  <div style={{
+                    width: 56, height: 56, borderRadius: 12,
+                    overflow: 'hidden', flexShrink: 0,
+                    border: '1px solid var(--border-color)',
+                  }}>
+                    <img
+                      src={imagePreview}
+                      alt=""
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+                ) : (
+                  <div style={{
+                    width: 56, height: 56, borderRadius: 12,
+                    background: 'var(--bg-tertiary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 22, color: 'var(--text-placeholder)', flexShrink: 0,
+                  }}>
+                    <CameraOutlined />
+                  </div>
+                )}
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {imagePreview ? (t('adminCats.changeImage') || 'Change image') : (t('adminCats.uploadImage') || 'Upload image')}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                    PNG, JPG, SVG
+                  </div>
+                </div>
+              </div>
+            </Upload>
+          </Form.Item>
 
           <Form.Item
-            name="suggestion_keywords"
+            label={<span style={{ fontWeight: 600 }}>{t('adminCats.color')}</span>}
+          >
+            <ColorPicker
+              format="hex"
+              value={catColor}
+              onChange={(c) => setCatColor(c.toHexString())}
+            />
+          </Form.Item>
+
+          <Form.Item
             label={<span style={{ fontWeight: 600 }}>{t('adminCats.suggestionKeywords')}</span>}
             extra={<span style={{ color: 'var(--text-tertiary)' }}>{t('adminCats.keywordsHelp')}</span>}
           >
-            <TextArea rows={2} placeholder="keyword1, keyword2, keyword3" style={{ borderRadius: 10 }} />
+            <TextArea
+              rows={2}
+              value={catKeywords}
+              onChange={(e) => setCatKeywords(e.target.value)}
+              placeholder="keyword1, keyword2, keyword3"
+              style={{ borderRadius: 10 }}
+            />
           </Form.Item>
 
           <div style={{
@@ -348,9 +505,7 @@ export default function AdminCategoriesPage() {
                 {t('adminCats.requiresDestHelp')}
               </Text>
             </div>
-            <Form.Item name="requires_destination" valuePropName="checked" style={{ margin: 0 }}>
-              <Switch />
-            </Form.Item>
+            <Switch checked={catRequiresDest} onChange={setCatRequiresDest} />
           </div>
 
           <div style={{
@@ -361,18 +516,16 @@ export default function AdminCategoriesPage() {
             <Text style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
               {t('common.active')}
             </Text>
-            <Form.Item name="is_active" valuePropName="checked" style={{ margin: 0 }}>
-              <Switch />
-            </Form.Item>
+            <Switch checked={catIsActive} onChange={setCatIsActive} />
           </div>
 
           <Form.Item style={{ marginBottom: 0 }}>
             <Button
               type="primary"
-              htmlType="submit"
               block
               loading={saving}
               size="large"
+              onClick={handleSave}
               style={{
                 background: 'var(--accent)', borderColor: 'var(--accent)',
                 borderRadius: 12, height: 46, fontWeight: 700, fontSize: 15,

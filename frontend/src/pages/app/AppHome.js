@@ -9,7 +9,7 @@ import api from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLang } from '../../contexts/LanguageContext';
 import { STATUS_CONFIG } from '../../utils/status';
-import { getCategoryIcon } from '../../utils/categoryIcons';
+import { CategoryImage } from '../../utils/categoryIcons';
 
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -26,7 +26,12 @@ const STATUS_BADGE_COLORS = {
 
 export default function AppHome() {
   const { user } = useAuth();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const localized = (field) => {
+    if (!field) return '';
+    if (typeof field === 'string') return field;
+    return field[lang] || field['en'] || '';
+  };
   const navigate = useNavigate();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
@@ -209,14 +214,14 @@ export default function AppHome() {
                 }}
               >
                 <div style={{
-                  width: 46, height: 46, borderRadius: 14,
+                  width: 52, height: 52, borderRadius: 14,
                   background: `${order.selected_category_color || 'var(--accent)'}14`,
                   display: 'flex',
                   alignItems: 'center', justifyContent: 'center',
-                  fontSize: 21, color: order.selected_category_color || 'var(--accent)',
-                  flexShrink: 0,
+                  color: order.selected_category_color || 'var(--accent)',
+                  flexShrink: 0, overflow: 'hidden',
                 }}>
-                  {getCategoryIcon(order.selected_category_icon)}
+                  <CategoryImage imageUrl={order.selected_category_image} icon={order.selected_category_icon} size={36} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
@@ -300,7 +305,7 @@ export default function AppHome() {
           if (catSearch) {
             const q = catSearch.toLowerCase();
             filtered = categories.filter(
-              (c) => c.name.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q)
+              (c) => localized(c.name).toLowerCase().includes(q) || localized(c.description).toLowerCase().includes(q)
             );
           }
           const visible = showAllCats ? filtered : filtered.slice(0, 6);
@@ -339,13 +344,13 @@ export default function AppHome() {
                       pointerEvents: 'none',
                     }} />
                     <div style={{
-                      width: 52, height: 52, borderRadius: 16,
+                      width: 64, height: 64, borderRadius: 16,
                       background: `${color}12`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 24, color: color,
+                      color: color, overflow: 'hidden',
                       transition: 'transform 0.25s cubic-bezier(0.22,1,0.36,1)',
                     }}>
-                      {getCategoryIcon(cat.icon)}
+                      <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={44} />
                     </div>
                     <div style={{
                       fontSize: 12, fontWeight: 650, color: 'var(--text-primary)',
@@ -354,7 +359,7 @@ export default function AppHome() {
                       WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
                       letterSpacing: -0.1,
                     }}>
-                      {cat.name}
+                      {localized(cat.name)}
                     </div>
                   </div>
                 );
@@ -376,10 +381,10 @@ export default function AppHome() {
                 }}
               >
                 <div style={{
-                  width: 52, height: 52, borderRadius: 16,
+                  width: 64, height: 64, borderRadius: 16,
                   background: 'var(--badge-muted-bg)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 24, color: 'var(--text-tertiary)',
+                  fontSize: 28, color: 'var(--text-tertiary)',
                 }}>
                   <RocketOutlined />
                 </div>

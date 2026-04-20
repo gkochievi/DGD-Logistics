@@ -16,7 +16,7 @@ const { useBreakpoint } = Grid;
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const screens = useBreakpoint();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [stats, setStats] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
   const [vehicleCount, setVehicleCount] = useState(0);
@@ -52,7 +52,7 @@ export default function AdminDashboard() {
     { title: t('adminDash.newOrders'), value: stats?.new_orders, icon: <PlusCircleOutlined />, color: '#f59e0b' },
     { title: t('adminDash.inProgress'), value: stats?.active_orders, icon: <ClockCircleOutlined />, color: '#06b6d4' },
     { title: t('adminDash.completed'), value: stats?.completed_orders, icon: <CheckCircleOutlined />, color: '#10b981' },
-    { title: t('adminDash.vehicles'), value: vehicleCount, icon: <CarOutlined />, color: '#009E4A' },
+    { title: t('adminDash.vehicles'), value: vehicleCount, icon: <CarOutlined />, color: 'var(--accent)' },
   ];
 
   const distributionItems = [
@@ -65,7 +65,7 @@ export default function AdminDashboard() {
   const quickActions = [
     { label: t('adminDash.newOrders'), icon: <PlusCircleOutlined />, color: '#f59e0b', path: '/admin/orders?status=new' },
     { label: t('adminDash.inProgress'), icon: <ClockCircleOutlined />, color: '#06b6d4', path: '/admin/orders?status=in_progress' },
-    { label: t('adminDash.vehicles'), icon: <CarOutlined />, color: '#009E4A', path: '/admin/vehicles' },
+    { label: t('adminDash.vehicles'), icon: <CarOutlined />, color: 'var(--accent)', path: '/admin/vehicles' },
     { label: t('nav.analytics'), icon: <BarChartOutlined />, color: '#ec4899', path: '/admin/analytics' },
     { label: t('nav.categories'), icon: <AppstoreOutlined />, color: '#64748b', path: '/admin/categories' },
   ];
@@ -293,7 +293,7 @@ export default function AdminDashboard() {
                   #{order.id} — {order.pickup_location}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                  {order.requested_date} · {order.selected_category_name || '—'}
+                  {order.requested_date} · {(typeof order.selected_category_name === 'object' ? (order.selected_category_name[lang] || order.selected_category_name.en || '') : order.selected_category_name) || '—'}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 12 }}>

@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { BrandingProvider } from './contexts/BrandingContext';
 import './theme.css';
 import App from './App';
 
@@ -21,9 +22,11 @@ root.render(
   <React.StrictMode>
     <BrowserRouter>
       <LanguageProvider>
-        <ThemeProvider>
-          <ThemedApp />
-        </ThemeProvider>
+        <BrandingProvider>
+          <ThemeProvider>
+            <ThemedApp />
+          </ThemeProvider>
+        </BrandingProvider>
       </LanguageProvider>
     </BrowserRouter>
   </React.StrictMode>

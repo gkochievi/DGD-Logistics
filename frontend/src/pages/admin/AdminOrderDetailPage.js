@@ -23,7 +23,12 @@ export default function AdminOrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const screens = useBreakpoint();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const localized = (v) => {
+    if (!v) return '';
+    if (typeof v === 'string') return v;
+    return v[lang] || v['en'] || '';
+  };
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState([]);
@@ -178,10 +183,10 @@ export default function AdminOrderDetailPage() {
             </Descriptions.Item>
             <Descriptions.Item label={t('orders.assigned')}><UrgencyBadge urgency={order.urgency} /></Descriptions.Item>
             <Descriptions.Item label={t('adminOrderDetail.selectedCategory')}>
-              {order.selected_category_detail?.name || '—'}
+              {localized(order.selected_category_detail?.name) || '—'}
             </Descriptions.Item>
             <Descriptions.Item label={t('adminOrderDetail.suggestedCategory')}>
-              {order.suggested_category_detail?.name || '—'}
+              {localized(order.suggested_category_detail?.name) || '—'}
             </Descriptions.Item>
             <Descriptions.Item label={t('orders.pickup')} span={isMobile ? 1 : 2}>
               {order.pickup_location}
@@ -236,7 +241,7 @@ export default function AdminOrderDetailPage() {
               value={order.final_category || undefined}
               placeholder={t('adminOrderDetail.selectFinalCategory')}
               onChange={handleCategoryChange}
-              options={categories.map((c) => ({ value: c.id, label: c.name }))}
+              options={categories.map((c) => ({ value: c.id, label: localized(c.name) }))}
             />
           </div>
 
@@ -245,7 +250,7 @@ export default function AdminOrderDetailPage() {
           {/* Assign Vehicle */}
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <CarOutlined style={{ color: '#009E4A', fontSize: 14 }} />
+              <CarOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
               <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
                 {t('adminOrderDetail.assignVehicle')}
               </Text>
@@ -392,7 +397,7 @@ export default function AdminOrderDetailPage() {
       {order.images?.length > 0 && (
         <div style={sectionStyle}>
           <div style={sectionHeaderStyle}>
-            <PictureOutlined style={{ color: '#009E4A', fontSize: 15 }} />
+            <PictureOutlined style={{ color: 'var(--accent)', fontSize: 15 }} />
             <Text style={sectionTitleStyle}>{t('adminOrderDetail.uploadedImages')}</Text>
           </div>
           <div style={{ padding: isMobile ? 16 : 24 }}>

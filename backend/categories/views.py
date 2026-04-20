@@ -1,4 +1,5 @@
 from rest_framework import generics, permissions, status
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -24,13 +25,14 @@ class SuggestCategoryView(APIView):
         description = request.data.get('description', '')
         category = suggest_category(description)
         if category:
-            return Response(TransportCategoryPublicSerializer(category).data)
+            return Response(TransportCategoryPublicSerializer(category, context={'request': request}).data)
         return Response({'detail': 'No suggestion found.'}, status=status.HTTP_200_OK)
 
 
 class AdminCategoryListCreateView(generics.ListCreateAPIView):
     serializer_class = TransportCategorySerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     queryset = TransportCategory.objects.all()
     filterset_fields = ['is_active']
     search_fields = ['name', 'description']
@@ -39,4 +41,5 @@ class AdminCategoryListCreateView(generics.ListCreateAPIView):
 class AdminCategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = TransportCategorySerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     queryset = TransportCategory.objects.all()

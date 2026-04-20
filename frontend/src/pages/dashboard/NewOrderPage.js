@@ -277,7 +277,7 @@ export default function NewOrderPage() {
 
           {/* Contact Section */}
           <div style={{ ...sectionLabelStyle, marginTop: 8 }}>
-            <UserOutlined style={{ color: '#009E4A', fontSize: 15 }} />
+            <UserOutlined style={{ color: 'var(--accent)', fontSize: 15 }} />
             <span style={sectionLabelTextStyle}>Contact Information</span>
             <div
               onClick={() => {

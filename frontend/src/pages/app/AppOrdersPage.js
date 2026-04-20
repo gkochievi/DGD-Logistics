@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
 import { STATUS_CONFIG, URGENCY_CONFIG } from '../../utils/status';
-import { getCategoryIcon } from '../../utils/categoryIcons';
+import { CategoryImage } from '../../utils/categoryIcons';
 
 const { useBreakpoint } = Grid;
 
@@ -24,7 +24,7 @@ const STATUS_BADGE_COLORS = {
 
 export default function AppOrdersPage() {
   const navigate = useNavigate();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
   const [activeTab, setActiveTab] = useState('active');
@@ -230,13 +230,13 @@ function OrderCard({ order, onClick, t, delay = 0 }) {
         padding: '14px 14px 14px 12px',
       }}>
         <div style={{
-          width: 48, height: 48, borderRadius: 14,
+          width: 52, height: 52, borderRadius: 14,
           background: `${catColor}12`,
           display: 'flex',
           alignItems: 'center', justifyContent: 'center',
-          fontSize: 22, color: catColor, flexShrink: 0,
+          color: catColor, flexShrink: 0, overflow: 'hidden',
         }}>
-          {getCategoryIcon(order.selected_category_icon)}
+          <CategoryImage imageUrl={order.selected_category_image} icon={order.selected_category_icon} size={36} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
@@ -260,7 +260,7 @@ function OrderCard({ order, onClick, t, delay = 0 }) {
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   maxWidth: 80,
                 }}>
-                  {order.selected_category_name}
+                  {typeof order.selected_category_name === 'object' ? (order.selected_category_name[lang] || order.selected_category_name.en || '') : order.selected_category_name}
                 </span>
               </>
             )}

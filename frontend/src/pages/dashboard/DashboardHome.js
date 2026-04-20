@@ -179,7 +179,7 @@ export default function DashboardHome() {
                   #{order.id} — {order.pickup_location}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                  {order.requested_date} · {order.selected_category_name || 'No category'}
+                  {order.requested_date} · {(typeof order.selected_category_name === 'object' ? (order.selected_category_name?.en || '') : order.selected_category_name) || 'No category'}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 12 }}>

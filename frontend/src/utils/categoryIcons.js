@@ -32,6 +32,30 @@ export function getCategoryIcon(iconName) {
   return ICON_MAP[iconName] || <CarOutlined />;
 }
 
+/**
+ * Renders a category image if available, falls back to icon.
+ * @param {string|null} imageUrl - The category image URL
+ * @param {string} icon - The icon name (fallback)
+ * @param {number} size - The display size in pixels
+ */
+export function CategoryImage({ imageUrl, icon, size = 32 }) {
+  if (imageUrl) {
+    return (
+      <img
+        src={imageUrl}
+        alt=""
+        style={{
+          width: size,
+          height: size,
+          objectFit: 'contain',
+          borderRadius: size > 40 ? 8 : 4,
+        }}
+      />
+    );
+  }
+  return React.cloneElement(getCategoryIcon(icon), { style: { fontSize: size * 0.6 } });
+}
+
 export const AVAILABLE_ICONS = Object.keys(ICON_MAP);
 
 export default ICON_MAP;

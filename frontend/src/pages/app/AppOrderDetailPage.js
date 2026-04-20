@@ -28,7 +28,12 @@ const STATUS_STEPS = ['new', 'under_review', 'approved', 'in_progress', 'complet
 export default function AppOrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const localized = (v) => {
+    if (!v) return '';
+    if (typeof v === 'string') return v;
+    return v[lang] || v['en'] || '';
+  };
   const screens = useBreakpoint();
   const isMobile = !screens.md;
   const [order, setOrder] = useState(null);
@@ -222,9 +227,9 @@ export default function AppOrderDetailPage() {
 
         {/* Transport type */}
         <DetailCard delay={0.05}>
-          <DetailRow icon={<CarOutlined />} label={t('orders.transport')} value={order.selected_category_detail?.name || '—'} />
+          <DetailRow icon={<CarOutlined />} label={t('orders.transport')} value={localized(order.selected_category_detail?.name) || '—'} />
           {order.final_category_detail?.name && (
-            <DetailRow icon={<CheckCircleOutlined />} label={t('orders.assigned')} value={order.final_category_detail.name} />
+            <DetailRow icon={<CheckCircleOutlined />} label={t('orders.assigned')} value={localized(order.final_category_detail.name)} />
           )}
         </DetailCard>
 

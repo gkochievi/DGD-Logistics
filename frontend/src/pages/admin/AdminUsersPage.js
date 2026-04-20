@@ -4,7 +4,7 @@ import {
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, SearchOutlined, StopOutlined,
-  CheckCircleOutlined, FilterOutlined, RightOutlined,
+  CheckCircleOutlined, FilterOutlined, RightOutlined, ShoppingOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
@@ -80,11 +80,39 @@ export default function AdminUsersPage() {
         </Tag>
       ),
     },
-    { title: t('adminUsers.ordersCount'), dataIndex: 'order_count', width: 70 },
     {
-      title: '', width: 80,
+      title: t('adminUsers.ordersCount'), dataIndex: 'order_count', width: 80,
+      render: (count, record) => record.role === 'customer' && count > 0 ? (
+        <Button
+          type="link"
+          size="small"
+          style={{ padding: 0, fontWeight: 600 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/admin/orders?user_id=${record.id}&user_name=${encodeURIComponent(record.full_name)}`);
+          }}
+        >
+          {count}
+        </Button>
+      ) : count,
+    },
+    {
+      title: '', width: 120,
       render: (_, record) => (
         <Space size={4}>
+          {record.role === 'customer' && (
+            <Button
+              size="small"
+              type="text"
+              icon={<ShoppingOutlined />}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/admin/orders?user_id=${record.id}&user_name=${encodeURIComponent(record.full_name)}`);
+              }}
+              title={t('adminUsers.viewOrders')}
+              style={{ color: 'var(--text-secondary)' }}
+            />
+          )}
           <Button
             size="small"
             type="text"
@@ -240,10 +268,17 @@ export default function AdminUsersPage() {
                       <Tag color={u.user_type === 'company' ? 'gold' : 'default'}>
                         {u.user_type === 'company' ? t('adminUsers.company') : t('adminUsers.personal')}
                       </Tag>
-                      {u.order_count != null && (
-                        <Text style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                          {u.order_count} {t('adminUsers.ordersCount').toLowerCase()}
-                        </Text>
+                      {u.role === 'customer' && u.order_count != null && (
+                        <Tag
+                          color="cyan"
+                          style={{ cursor: 'pointer' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/admin/orders?user_id=${u.id}&user_name=${encodeURIComponent(u.full_name)}`);
+                          }}
+                        >
+                          <ShoppingOutlined /> {u.order_count} {t('adminUsers.ordersCount').toLowerCase()}
+                        </Tag>
                       )}
                     </div>
                     <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 11 }} />

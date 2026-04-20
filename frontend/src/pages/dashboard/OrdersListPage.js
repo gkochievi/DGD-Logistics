@@ -54,7 +54,7 @@ export default function OrdersListPage() {
       title: 'Pickup', dataIndex: 'pickup_location', ellipsis: true,
       render: (text) => <span style={{ fontWeight: 500 }}>{text}</span>,
     },
-    { title: 'Category', dataIndex: 'selected_category_name', ellipsis: true },
+    { title: 'Category', dataIndex: 'selected_category_name', ellipsis: true, render: (v) => (typeof v === 'object' ? (v?.en || '') : v) },
     { title: 'Date', dataIndex: 'requested_date', width: 110 },
     { title: 'Status', dataIndex: 'status', width: 130, render: (s) => <StatusBadge status={s} /> },
     { title: 'Urgency', dataIndex: 'urgency', width: 100, render: (u) => <UrgencyBadge urgency={u} /> },
@@ -156,7 +156,7 @@ export default function OrdersListPage() {
                     alignItems: 'center',
                   }}>
                     <Text style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                      {order.requested_date} · {order.selected_category_name || '—'}
+                      {order.requested_date} · {(typeof order.selected_category_name === 'object' ? (order.selected_category_name?.en || '') : order.selected_category_name) || '—'}
                     </Text>
                     <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 11 }} />
                   </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Row, Col, Grid } from 'antd';
 import {
-  EnvironmentOutlined, CarOutlined,
+  EnvironmentOutlined,
   ArrowRightOutlined, AimOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -9,16 +9,9 @@ import api from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLang } from '../../contexts/LanguageContext';
 import LocationAutocomplete from '../../components/common/LocationAutocomplete';
-import { getCategoryIcon } from '../../utils/categoryIcons';
+import { getCategoryIcon, CategoryImage } from '../../utils/categoryIcons';
 
 const { useBreakpoint } = Grid;
-
-const CATEGORY_ICONS = {
-  'tow-truck-recovery-vehicle': <CarOutlined />,
-  'tractor': getCategoryIcon('tool'),
-  'cement-mixer-concrete-mixer-truck': getCategoryIcon('build'),
-  'bulldozer': getCategoryIcon('thunderbolt'),
-};
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -53,6 +46,21 @@ export default function LandingPage() {
     }
     return fallbackKey ? t(fallbackKey) : '';
   };
+
+  // Derive country code filter from landing search settings
+  const getSearchCountryCode = () => {
+    if (!landing) return 'ge'; // default fallback
+    const scope = landing.search_scope || 'georgia';
+    if (scope === 'georgia') return 'ge';
+    if (scope === 'worldwide') return null; // no filter
+    if (scope === 'custom') {
+      const countries = landing.search_countries || [];
+      return countries.length ? countries.join(',') : null;
+    }
+    return 'ge';
+  };
+
+  const searchCountryCode = getSearchCountryCode();
 
   const handleGetOffers = () => {
     const locationState = {
@@ -106,8 +114,8 @@ export default function LandingPage() {
         icon: getCategoryIcon(b.icon),
         title: (typeof b.title === 'object') ? (b.title[lang] || b.title['en'] || '') : (b.title || ''),
         desc: (typeof b.description === 'object') ? (b.description[lang] || b.description['en'] || '') : (b.description || ''),
-        color: b.color || '#00B856',
-        bg: `${b.color || '#00B856'}1a`,
+        color: b.color || 'var(--accent)',
+        bg: b.color ? `${b.color}1a` : 'var(--accent-bg-strong)',
       }))
     : [
         { icon: getCategoryIcon('rocket'), title: t('landing.fastTitle'), desc: t('landing.fastDesc'), color: '#00B856', bg: 'rgba(0,184,86,0.1)' },
@@ -210,21 +218,6 @@ export default function LandingPage() {
           maxWidth: 880, margin: '0 auto', textAlign: 'center',
           animation: 'fadeInUp 0.6s cubic-bezier(0.22,1,0.36,1)',
         }}>
-          {/* Badge */}
-          <div style={{
-            display: 'inline-block',
-            padding: '6px 16px',
-            borderRadius: 100,
-            background: 'var(--accent-bg)',
-            marginBottom: 20,
-            fontSize: 13,
-            fontWeight: 600,
-            color: 'var(--accent)',
-            letterSpacing: '0.02em',
-          }}>
-            {landing?.hero_badge || 'Heawy Way'}
-          </div>
-
           <h1 style={{
             fontSize: isMobile ? 30 : 52,
             fontWeight: 800,
@@ -269,6 +262,7 @@ export default function LandingPage() {
                 setPickupLocation(loc);
                 setPickupCountryCode(loc.countryCode || null);
               }}
+              countryCode={searchCountryCode}
             />
             {!isMobile && (
               <div style={{
@@ -282,7 +276,7 @@ export default function LandingPage() {
               value={destination}
               onChange={setDestination}
               onSelect={(loc) => setDestinationLocation(loc)}
-              countryCode={pickupCountryCode}
+              countryCode={pickupCountryCode || searchCountryCode}
             />
             <Button
               type="primary"
@@ -369,30 +363,30 @@ export default function LandingPage() {
                     <div
                       className="lt-cat-icon"
                       style={{
-                        width: 56, height: 56, borderRadius: 16,
+                        width: 64, height: 64, borderRadius: 16,
                         background: 'var(--accent-bg)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         margin: '0 auto 14px',
-                        fontSize: 26, color: 'var(--accent)',
+                        color: 'var(--accent)', overflow: 'hidden',
                         transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1)',
                       }}
                     >
-                      {CATEGORY_ICONS[cat.slug] || <CarOutlined />}
+                      <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={44} />
                     </div>
                     <h4 style={{
                       fontSize: 15, fontWeight: 700, color: 'var(--text-primary)',
                       letterSpacing: '-0.01em', margin: '0 0 4px',
                     }}>
-                      {cat.name}
+                      {typeof cat.name === 'object' ? (cat.name[lang] || cat.name.en || '') : cat.name}
                     </h4>
-                    {cat.description && (
+                    {cat.description && (typeof cat.description === 'object' ? (cat.description[lang] || cat.description.en) : cat.description) && (
                       <p style={{
                         fontSize: 13, color: 'var(--text-secondary)',
                         lineHeight: 1.5, margin: 0,
                         display: '-webkit-box', WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical', overflow: 'hidden',
                       }}>
-                        {cat.description}
+                        {typeof cat.description === 'object' ? (cat.description[lang] || cat.description.en || '') : cat.description}
                       </p>
                     )}
                   </div>

@@ -182,7 +182,7 @@ export default function OrderDetailPage() {
       {order.images?.length > 0 && (
         <div style={sectionStyle}>
           <div style={sectionHeaderStyle}>
-            <PictureOutlined style={{ color: '#009E4A', fontSize: 15 }} />
+            <PictureOutlined style={{ color: 'var(--accent)', fontSize: 15 }} />
             <Text style={sectionTitleStyle}>Uploaded Images</Text>
           </div>
           <div style={{ padding: isMobile ? 16 : 24 }}>

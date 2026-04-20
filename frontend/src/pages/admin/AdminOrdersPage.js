@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Table, Select, Button, Input, Typography, Space, Grid, Empty,
 } from 'antd';
-import { EyeOutlined, SearchOutlined, RightOutlined, FilterOutlined } from '@ant-design/icons';
+import { EyeOutlined, SearchOutlined, RightOutlined, FilterOutlined, UserOutlined, CloseOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { StatusBadge, UrgencyBadge } from '../../components/common/StatusBadge';
@@ -15,7 +15,12 @@ const { useBreakpoint } = Grid;
 export default function AdminOrdersPage({ historyMode = false }) {
   const navigate = useNavigate();
   const screens = useBreakpoint();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const localized = (v) => {
+    if (!v) return '';
+    if (typeof v === 'string') return v;
+    return v[lang] || v['en'] || '';
+  };
   const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,10 +41,12 @@ export default function AdminOrdersPage({ historyMode = false }) {
     const status = searchParams.get('status');
     const urgency = searchParams.get('urgency');
     const category = searchParams.get('category');
+    const userId = searchParams.get('user_id');
 
     if (status) params.status = status;
     if (urgency) params.urgency = urgency;
     if (category) params.selected_category = category;
+    if (userId) params.user_id = userId;
     if (search) params.search = search;
 
     if (historyMode) {
@@ -75,7 +82,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
       title: t('orders.pickup'), dataIndex: 'pickup_location', ellipsis: true,
       render: (text) => <span style={{ fontWeight: 500 }}>{text}</span>,
     },
-    { title: t('adminOrders.category'), dataIndex: 'selected_category_name', width: 140, ellipsis: true },
+    { title: t('adminOrders.category'), dataIndex: 'selected_category_name', width: 140, ellipsis: true, render: (v) => localized(v) },
     { title: t('orders.date'), dataIndex: 'requested_date', width: 110 },
     { title: t('adminOrders.status'), dataIndex: 'status', width: 130, render: (s) => <StatusBadge status={s} /> },
     { title: t('adminOrders.urgencyLabel'), dataIndex: 'urgency', width: 100, render: (u) => <UrgencyBadge urgency={u} /> },
@@ -102,6 +109,40 @@ export default function AdminOrdersPage({ historyMode = false }) {
       }}>
         {historyMode ? t('adminOrders.orderHistory') : t('adminOrders.activeOrders')}
       </Title>
+
+      {/* User filter banner */}
+      {searchParams.get('user_id') && (
+        <div style={{
+          background: 'var(--accent-bg, rgba(0, 184, 86, 0.08))',
+          border: '1px solid var(--accent)',
+          borderRadius: 12,
+          padding: '10px 16px',
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <UserOutlined style={{ color: 'var(--accent)', fontSize: 15 }} />
+            <Text style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>
+              {t('adminOrders.showingOrdersFor', { name: searchParams.get('user_name') || `#${searchParams.get('user_id')}` })}
+            </Text>
+          </div>
+          <Button
+            type="text"
+            size="small"
+            icon={<CloseOutlined />}
+            onClick={() => {
+              const params = Object.fromEntries(searchParams.entries());
+              delete params.user_id;
+              delete params.user_name;
+              setSearchParams(params);
+            }}
+            style={{ color: 'var(--text-tertiary)' }}
+          />
+        </div>
+      )}
 
       {/* Filter bar */}
       <div style={{
@@ -209,7 +250,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
                     alignItems: 'center',
                   }}>
                     <Text style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                      {order.requested_date} · {order.selected_category_name || '—'} · <UrgencyBadge urgency={order.urgency} />
+                      {order.requested_date} · {localized(order.selected_category_name) || '—'} · <UrgencyBadge urgency={order.urgency} />
                     </Text>
                     <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 11 }} />
                   </div>

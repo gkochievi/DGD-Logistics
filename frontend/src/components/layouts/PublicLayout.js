@@ -5,11 +5,13 @@ import { ArrowRightOutlined, GlobalOutlined, MoonFilled, SunFilled } from '@ant-
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLang } from '../../contexts/LanguageContext';
+import { useBranding } from '../../contexts/BrandingContext';
 
 const { Content, Footer } = Layout;
 const { useBreakpoint } = Grid;
 
 export default function PublicLayout() {
+  const branding = useBranding();
   const { user } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const { t, lang, changeLang, SUPPORTED_LANGS, LANG_LABELS, LANG_FLAGS } = useLang();
@@ -53,15 +55,21 @@ export default function PublicLayout() {
             textDecoration: 'none', letterSpacing: -0.5,
             display: 'flex', alignItems: 'center', gap: 8,
           }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 10,
-              background: 'var(--fab-gradient)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 13, fontWeight: 800,
-            }}>
-              HW
-            </div>
-            {!isMobile && t('common.appName')}
+            {branding.siteIconUrl ? (
+              <img src={branding.siteIconUrl} alt="Logo" style={{
+                width: 32, height: 32, borderRadius: 10, objectFit: 'contain',
+              }} />
+            ) : (
+              <div style={{
+                width: 32, height: 32, borderRadius: 10,
+                background: 'var(--fab-gradient)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 13, fontWeight: 800,
+              }}>
+                HW
+              </div>
+            )}
+            {!isMobile && (branding.siteName || t('common.appName'))}
           </Link>
 
           <Space size={isMobile ? 4 : 8}>

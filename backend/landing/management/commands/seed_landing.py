@@ -8,7 +8,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         obj = LandingPageSettings.get_instance()
 
-        obj.hero_badge = 'Heawy Way'
         obj.hero_title = {
             'en': 'Best Price for Special Transport',
             'ka': 'საუკეთესო ფასი სპეციალურ ტრანსპორტზე',
@@ -80,6 +79,9 @@ class Command(BaseCommand):
                 'color': '#3b82f6',
             },
         ]
+
+        obj.search_scope = 'georgia'
+        obj.search_countries = []
 
         obj.cta_title = {
             'en': 'Ready to Get Started?',

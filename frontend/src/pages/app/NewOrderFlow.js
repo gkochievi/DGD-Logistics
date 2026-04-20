@@ -13,7 +13,7 @@ import dayjs from 'dayjs';
 import api from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLang } from '../../contexts/LanguageContext';
-import { getCategoryIcon } from '../../utils/categoryIcons';
+import { CategoryImage } from '../../utils/categoryIcons';
 import MapPicker from '../../components/map/MapPicker';
 import LocationAutocomplete from '../../components/common/LocationAutocomplete';
 
@@ -23,7 +23,12 @@ const { useBreakpoint } = Grid;
 export default function NewOrderFlow() {
   const [form] = Form.useForm();
   const { user } = useAuth();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const localized = (field) => {
+    if (!field) return '';
+    if (typeof field === 'string') return field;
+    return field[lang] || field['en'] || '';
+  };
   const screens = useBreakpoint();
   const isDesktop = screens.md;
   const navigate = useNavigate();
@@ -293,7 +298,7 @@ export default function NewOrderFlow() {
   };
 
   const filteredCategories = categories.filter(
-    (c) => !catSearch || c.name.toLowerCase().includes(catSearch.toLowerCase()) || c.description?.toLowerCase().includes(catSearch.toLowerCase())
+    (c) => !catSearch || localized(c.name).toLowerCase().includes(catSearch.toLowerCase()) || localized(c.description).toLowerCase().includes(catSearch.toLowerCase())
   );
 
   const inputStyle = { height: 48, borderRadius: 12, fontSize: 15 };
@@ -438,8 +443,9 @@ export default function NewOrderFlow() {
                     key={cat.id}
                     isActive={isActive}
                     color={color}
-                    icon={getCategoryIcon(cat.icon)}
-                    name={cat.name}
+                    imageUrl={cat.image_url}
+                    icon={cat.icon}
+                    name={localized(cat.name)}
                     badge={cat.requires_destination ? t('newOrder.transportBadge') : null}
                     onClick={() => handleCategorySelect(cat)}
                   />
@@ -496,9 +502,9 @@ export default function NewOrderFlow() {
                         {/* Timeline dot */}
                         <div style={{
                           width: 12, height: 12, borderRadius: '50%',
-                          background: needsDest ? 'var(--success-color)' : 'var(--accent)',
+                          background: 'var(--accent)',
                           flexShrink: 0,
-                          boxShadow: `0 0 0 4px ${needsDest ? '#10b98118' : 'var(--accent-bg)'}`,
+                          boxShadow: '0 0 0 4px var(--accent-bg)',
                           transition: 'all 0.2s ease',
                         }} />
                         {idx === 0 ? (
@@ -1023,7 +1029,7 @@ export default function NewOrderFlow() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 20, color: 'var(--accent)',
             }}>
-              {selectedCategory?.icon ? getCategoryIcon(selectedCategory.icon) : <InboxOutlined />}
+              <CategoryImage imageUrl={selectedCategory?.image_url} icon={selectedCategory?.icon || 'inbox'} size={28} />
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
               {selectedCategory?.name}
@@ -1284,7 +1290,7 @@ function SectionCard({ icon, title, children, first, last }) {
   );
 }
 
-function CategoryCard({ isActive, color, icon, name, badge, dashed, onClick }) {
+function CategoryCard({ isActive, color, icon, imageUrl, name, badge, dashed, onClick }) {
   return (
     <div
       onClick={onClick}
@@ -1301,18 +1307,18 @@ function CategoryCard({ isActive, color, icon, name, badge, dashed, onClick }) {
         boxShadow: isActive ? `0 0 0 3px ${color}0a` : 'var(--shadow-sm)',
         transition: 'all 0.2s ease',
         textAlign: 'center',
-        minHeight: 80,
+        minHeight: 90,
         justifyContent: 'center',
       }}
     >
       <div style={{
-        width: 32, height: 32, borderRadius: 10,
+        width: 44, height: 44, borderRadius: 12,
         background: isActive ? `${color}18` : 'var(--bg-tertiary)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 17, color: isActive ? color : 'var(--text-secondary)',
-        transition: 'all 0.2s ease',
+        color: isActive ? color : 'var(--text-secondary)',
+        transition: 'all 0.2s ease', overflow: 'hidden',
       }}>
-        {icon}
+        <CategoryImage imageUrl={imageUrl} icon={icon} size={32} />
       </div>
       <div>
         <div style={{

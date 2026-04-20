@@ -3,12 +3,22 @@ from django.utils.text import slugify
 
 
 class TransportCategory(models.Model):
-    name = models.CharField(max_length=200)
+    name = models.JSONField(
+        default=dict,
+        help_text='{"en": "...", "ka": "...", "ru": "..."}',
+    )
     slug = models.SlugField(max_length=200, unique=True, blank=True)
-    description = models.TextField(blank=True)
+    description = models.JSONField(
+        default=dict, blank=True,
+        help_text='{"en": "...", "ka": "...", "ru": "..."}',
+    )
     icon = models.CharField(
         max_length=50, blank=True, default='car',
         help_text='Ant Design icon name (e.g. car, tool, build, thunderbolt, fire-filled)'
+    )
+    image = models.ImageField(
+        upload_to='category_images/', blank=True, null=True,
+        help_text='Category image (replaces icon when set)'
     )
     color = models.CharField(
         max_length=7, blank=True, default='#1677ff',
@@ -31,11 +41,14 @@ class TransportCategory(models.Model):
         ordering = ['name']
 
     def __str__(self):
-        return self.name
+        if isinstance(self.name, dict):
+            return self.name.get('en', '') or next(iter(self.name.values()), '')
+        return str(self.name)
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.name)
+            en_name = self.name.get('en', '') if isinstance(self.name, dict) else str(self.name)
+            self.slug = slugify(en_name)
         super().save(*args, **kwargs)
 
     def get_keywords_list(self):

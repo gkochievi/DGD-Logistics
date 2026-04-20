@@ -227,9 +227,9 @@ export default function AppProfilePage() {
           }}>
             <div style={{
               width: 36, height: 36, borderRadius: 10,
-              background: isDark ? '#009E4A14' : '#f59e0b14',
+              background: isDark ? 'var(--accent-bg-strong)' : '#f59e0b14',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 16, color: isDark ? '#009E4A' : '#f59e0b',
+              fontSize: 16, color: isDark ? 'var(--accent)' : '#f59e0b',
               flexShrink: 0,
             }}>
               {isDark ? <MoonFilled /> : <SunFilled />}

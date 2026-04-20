@@ -21,21 +21,36 @@ class OrderStatusHistorySerializer(serializers.ModelSerializer):
 
 
 class OrderListSerializer(serializers.ModelSerializer):
-    selected_category_name = serializers.CharField(
-        source='selected_category.name', read_only=True, default=''
-    )
+    selected_category_name = serializers.SerializerMethodField()
     selected_category_icon = serializers.CharField(
         source='selected_category.icon', read_only=True, default='car'
     )
+    selected_category_image = serializers.SerializerMethodField()
     selected_category_color = serializers.CharField(
         source='selected_category.color', read_only=True, default='#1677ff'
     )
-    final_category_name = serializers.CharField(
-        source='final_category.name', read_only=True, default=''
-    )
+    final_category_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     urgency_display = serializers.CharField(source='get_urgency_display', read_only=True)
     image_count = serializers.IntegerField(source='images.count', read_only=True)
+
+    def get_selected_category_name(self, obj):
+        if obj.selected_category:
+            return obj.selected_category.name
+        return ''
+
+    def get_final_category_name(self, obj):
+        if obj.final_category:
+            return obj.final_category.name
+        return ''
+
+    def get_selected_category_image(self, obj):
+        if obj.selected_category and obj.selected_category.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.selected_category.image.url)
+            return obj.selected_category.image.url
+        return None
 
     class Meta:
         model = Order
@@ -43,7 +58,7 @@ class OrderListSerializer(serializers.ModelSerializer):
             'id', 'pickup_location', 'destination_location', 'requested_date',
             'requested_time', 'contact_name', 'status', 'status_display',
             'urgency', 'urgency_display', 'selected_category_name',
-            'selected_category_icon', 'selected_category_color',
+            'selected_category_icon', 'selected_category_image', 'selected_category_color',
             'final_category_name', 'is_cancellable', 'image_count', 'created_at',
         ]
 

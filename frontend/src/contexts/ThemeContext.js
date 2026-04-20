@@ -1,9 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { theme as antdTheme } from 'antd';
+import { useBranding } from './BrandingContext';
+import { COLOR_THEMES, DEFAULT_COLOR_THEME } from '../utils/colorThemes';
 
 const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
+  const { colorTheme } = useBranding();
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('theme');
     if (saved) return saved === 'dark';
@@ -23,10 +26,15 @@ export function ThemeProvider({ children }) {
 
   const toggleTheme = useCallback(() => setIsDark((d) => !d), []);
 
+  const palette = (COLOR_THEMES[colorTheme] || COLOR_THEMES[DEFAULT_COLOR_THEME])[isDark ? 'dark' : 'light'];
+  const primary = palette.accent;
+  const primaryHover = palette.accentLight;
+  const primaryRgb = palette.accentRgb;
+
   const antdThemeConfig = {
     algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
     token: {
-      colorPrimary: isDark ? '#33C97A' : '#00B856',
+      colorPrimary: primary,
       colorSuccess: isDark ? '#34d399' : '#10b981',
       colorWarning: isDark ? '#fbbf24' : '#f59e0b',
       colorError: isDark ? '#f87171' : '#ef4444',
@@ -52,13 +60,13 @@ export function ThemeProvider({ children }) {
         controlHeight: 40,
         controlHeightLG: 48,
         fontWeight: 600,
-        primaryShadow: '0 2px 8px rgba(0,184,86,0.25)',
+        primaryShadow: `0 2px 8px rgba(${primaryRgb},0.25)`,
       },
       Input: {
         borderRadius: 10,
         controlHeight: 44,
-        activeBorderColor: isDark ? '#33C97A' : '#00B856',
-        hoverBorderColor: isDark ? '#00B856' : '#5FDA96',
+        activeBorderColor: primary,
+        hoverBorderColor: primaryHover,
         colorBgContainer: isDark ? '#13151b' : '#f9fafb',
       },
       Select: {
@@ -76,7 +84,7 @@ export function ThemeProvider({ children }) {
       Table: {
         borderRadius: 12,
         headerBg: isDark ? '#16181f' : '#f9fafb',
-        rowHoverBg: isDark ? 'rgba(51,201,122,0.04)' : 'rgba(0,184,86,0.02)',
+        rowHoverBg: `rgba(${primaryRgb},${isDark ? 0.04 : 0.02})`,
       },
       Tag: {
         borderRadiusSM: 6,

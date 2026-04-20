@@ -86,11 +86,11 @@ export default function RegisterPage() {
           letter-spacing: -0.01em;
           background: var(--fab-gradient) !important;
           border: none !important;
-          box-shadow: 0 4px 14px rgba(0,184,86,0.25) !important;
+          box-shadow: 0 4px 14px var(--ring-color) !important;
           transition: all 0.25s cubic-bezier(0.22,1,0.36,1) !important;
         }
         .register-submit-btn:hover {
-          box-shadow: 0 6px 20px rgba(0,184,86,0.35) !important;
+          box-shadow: 0 6px 20px var(--ring-color) !important;
           transform: translateY(-1px);
         }
         .register-submit-btn:active {

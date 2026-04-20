@@ -81,7 +81,7 @@ export default function AppRegisterPage() {
           background: 'var(--header-gradient)',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           marginBottom: 16,
-          boxShadow: '0 8px 24px rgba(0,184,86,0.25)',
+          boxShadow: '0 8px 24px var(--ring-color)',
           position: 'relative',
           overflow: 'hidden',
         }}>
@@ -254,7 +254,7 @@ export default function AppRegisterPage() {
                 height: 56, borderRadius: 16, fontSize: 16, fontWeight: 700,
                 background: 'var(--header-gradient)',
                 border: 'none',
-                boxShadow: '0 6px 20px rgba(0,184,86,0.3)',
+                boxShadow: '0 6px 20px var(--ring-color)',
                 letterSpacing: 0.2,
                 transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
               }}

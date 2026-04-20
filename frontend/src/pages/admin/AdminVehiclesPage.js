@@ -3,9 +3,9 @@ import {
   Table, Button, Typography, Tag, Modal, Form, Input, Select, InputNumber, Switch, Space,
   message, Grid, Empty,
 } from 'antd';
-import { PlusOutlined, EditOutlined, CarOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined } from '@ant-design/icons';
 import api from '../../api/client';
-import { getCategoryIcon } from '../../utils/categoryIcons';
+import { CategoryImage } from '../../utils/categoryIcons';
 import { useLang } from '../../contexts/LanguageContext';
 
 const { Title, Text } = Typography;
@@ -102,12 +102,12 @@ export default function AdminVehiclesPage() {
       title: '', width: 52,
       render: (_, r) => (
         <div style={{
-          width: 38, height: 38, borderRadius: 10,
+          width: 42, height: 42, borderRadius: 12,
           background: `color-mix(in srgb, ${r.category_color || 'var(--accent)'} 12%, transparent)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 17, color: r.category_color || 'var(--accent)',
+          color: r.category_color || 'var(--accent)', overflow: 'hidden',
         }}>
-          {getCategoryIcon(r.category_icon)}
+          <CategoryImage imageUrl={r.category_image} icon={r.category_icon} size={30} />
         </div>
       ),
     },
@@ -194,12 +194,12 @@ export default function AdminVehiclesPage() {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
-                  width: 46, height: 46, borderRadius: 12,
+                  width: 48, height: 48, borderRadius: 14,
                   background: `color-mix(in srgb, ${v.category_color || 'var(--accent)'} 12%, transparent)`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 22, color: v.category_color || 'var(--accent)', flexShrink: 0,
+                  color: v.category_color || 'var(--accent)', flexShrink: 0, overflow: 'hidden',
                 }}>
-                  {getCategoryIcon(v.category_icon)}
+                  <CategoryImage imageUrl={v.category_image} icon={v.category_icon} size={34} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
