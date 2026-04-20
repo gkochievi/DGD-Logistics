@@ -42,6 +42,9 @@ class TransportCategorySerializer(serializers.ModelSerializer):
                         mutable[field] = parsed
                 except (json.JSONDecodeError, TypeError):
                     pass
+        # Allow clearing the image via empty string
+        if 'image' in mutable and mutable['image'] == '':
+            mutable['image'] = None
         return super().to_internal_value(mutable)
 
 

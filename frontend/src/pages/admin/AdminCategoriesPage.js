@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Table, Button, Typography, Tag, Modal, Form, Input, Switch, Space,
   ColorPicker, message, Grid, Empty, Upload, Tabs,
 } from 'antd';
-import { PlusOutlined, EditOutlined, StopOutlined, CheckCircleOutlined, CameraOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, StopOutlined, CheckCircleOutlined, CameraOutlined, DeleteOutlined, CheckOutlined, SearchOutlined } from '@ant-design/icons';
 import api from '../../api/client';
-import { CategoryImage } from '../../utils/categoryIcons';
+import { CategoryImage, getCategoryIcon, searchIcons, getIconMeta, AVAILABLE_ICONS } from '../../utils/categoryIcons';
 import { useLang } from '../../contexts/LanguageContext';
 
 const { Title, Text } = Typography;
@@ -28,11 +28,14 @@ export default function AdminCategoriesPage() {
   const [saving, setSaving] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
+  const [iconSearch, setIconSearch] = useState('');
 
   // i18n fields managed as state (not via Form)
   const [catName, setCatName] = useState({ en: '', ka: '', ru: '' });
   const [catDesc, setCatDesc] = useState({ en: '', ka: '', ru: '' });
   // Non-i18n fields
+  const [catIcon, setCatIcon] = useState('car');
   const [catColor, setCatColor] = useState('#00B856');
   const [catKeywords, setCatKeywords] = useState('');
   const [catRequiresDest, setCatRequiresDest] = useState(false);
@@ -56,13 +59,18 @@ export default function AdminCategoriesPage() {
 
   useEffect(() => { fetchCategories(); }, []);
 
+  const filteredIcons = useMemo(() => searchIcons(iconSearch), [iconSearch]);
+
   const openModal = (category = null) => {
     setEditingCategory(category);
     setImageFile(null);
     setImagePreview(category?.image_url || null);
+    setImageRemoved(false);
+    setIconSearch('');
     if (category) {
       setCatName(typeof category.name === 'object' ? { en: '', ka: '', ru: '', ...category.name } : { en: category.name || '', ka: '', ru: '' });
       setCatDesc(typeof category.description === 'object' ? { en: '', ka: '', ru: '', ...category.description } : { en: category.description || '', ka: '', ru: '' });
+      setCatIcon(category.icon || 'car');
       setCatColor(category.color || '#00B856');
       setCatKeywords(category.suggestion_keywords || '');
       setCatRequiresDest(category.requires_destination || false);
@@ -70,6 +78,7 @@ export default function AdminCategoriesPage() {
     } else {
       setCatName({ en: '', ka: '', ru: '' });
       setCatDesc({ en: '', ka: '', ru: '' });
+      setCatIcon('car');
       setCatColor('#00B856');
       setCatKeywords('');
       setCatRequiresDest(false);
@@ -88,12 +97,15 @@ export default function AdminCategoriesPage() {
       const formData = new FormData();
       formData.append('name', JSON.stringify(catName));
       formData.append('description', JSON.stringify(catDesc));
+      formData.append('icon', catIcon || 'car');
       formData.append('color', typeof catColor === 'string' ? catColor : catColor?.toHexString?.() || '#00B856');
       formData.append('suggestion_keywords', catKeywords);
       formData.append('requires_destination', catRequiresDest ? 'true' : 'false');
       formData.append('is_active', catIsActive ? 'true' : 'false');
       if (imageFile) {
         formData.append('image', imageFile);
+      } else if (imageRemoved) {
+        formData.append('image', '');
       }
 
       if (editingCategory) {
@@ -150,10 +162,18 @@ export default function AdminCategoriesPage() {
   const handleImageSelect = (info) => {
     const file = info.file;
     setImageFile(file);
+    setImageRemoved(false);
     const reader = new FileReader();
     reader.onload = (e) => setImagePreview(e.target.result);
     reader.readAsDataURL(file);
     return false;
+  };
+
+  const handleRemoveImage = (e) => {
+    e.stopPropagation();
+    setImageFile(null);
+    setImagePreview(null);
+    setImageRemoved(true);
   };
 
   const isMobile = !screens.md;
@@ -413,6 +433,11 @@ export default function AdminCategoriesPage() {
           {/* Image Upload */}
           <Form.Item
             label={<span style={{ fontWeight: 600 }}>{t('adminCats.image') || 'Image'}</span>}
+            extra={
+              <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
+                {t('adminCats.imageIconHint') || 'When an image is uploaded, it replaces the icon.'}
+              </span>
+            }
           >
             <Upload
               accept="image/*"
@@ -449,23 +474,135 @@ export default function AdminCategoriesPage() {
                 ) : (
                   <div style={{
                     width: 56, height: 56, borderRadius: 12,
-                    background: 'var(--bg-tertiary)',
+                    background: `color-mix(in srgb, ${catColor} 12%, transparent)`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 22, color: 'var(--text-placeholder)', flexShrink: 0,
+                    fontSize: 22, color: catColor, flexShrink: 0,
                   }}>
-                    <CameraOutlined />
+                    {React.cloneElement(getCategoryIcon(catIcon), { style: { fontSize: 28 } })}
                   </div>
                 )}
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {imagePreview ? (t('adminCats.changeImage') || 'Change image') : (t('adminCats.uploadImage') || 'Upload image')}
+                    {imagePreview
+                      ? (t('adminCats.changeImage') || 'Change image')
+                      : (t('adminCats.uploadImage') || 'Upload image')}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                    PNG, JPG, SVG
+                    {imagePreview
+                      ? 'PNG, JPG, SVG'
+                      : (t('adminCats.iconFallbackHint') || 'No image — the icon below will be used.')}
                   </div>
                 </div>
+                {imagePreview && (
+                  <Button
+                    size="small"
+                    danger
+                    type="text"
+                    icon={<DeleteOutlined />}
+                    onClick={handleRemoveImage}
+                    style={{ flexShrink: 0 }}
+                  >
+                    {t('adminCats.removeImage') || 'Remove'}
+                  </Button>
+                )}
               </div>
             </Upload>
+          </Form.Item>
+
+          {/* Icon picker */}
+          <Form.Item
+            label={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <span style={{ fontWeight: 600 }}>{t('adminCats.icon') || 'Icon'}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 500 }}>
+                  {filteredIcons.length}/{AVAILABLE_ICONS.length}
+                  {getIconMeta(catIcon)?.label && ` · ${getIconMeta(catIcon).label}`}
+                </span>
+              </div>
+            }
+            extra={
+              <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
+                {t('adminCats.iconHelp') || 'Shown when no image is uploaded.'}
+              </span>
+            }
+          >
+            <Input
+              allowClear
+              value={iconSearch}
+              onChange={(e) => setIconSearch(e.target.value)}
+              placeholder={t('adminCats.searchIcons') || 'Search icons (e.g. car, crane, box, clock)'}
+              prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
+              style={{ borderRadius: 10, marginBottom: 10 }}
+            />
+            <div style={{
+              maxHeight: 260,
+              overflowY: 'auto',
+              padding: 12,
+              background: 'var(--bg-secondary)',
+              borderRadius: 12,
+              border: '1px solid var(--border-color)',
+            }}>
+              {filteredIcons.length === 0 ? (
+                <div style={{
+                  textAlign: 'center', padding: '24px 8px',
+                  color: 'var(--text-tertiary)', fontSize: 13,
+                }}>
+                  {t('adminCats.noIconsMatch') || 'No icons match your search'}
+                </div>
+              ) : (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))',
+                  gap: 8,
+                }}>
+                  {filteredIcons.map((iconKey) => {
+                    const selected = catIcon === iconKey;
+                    const meta = getIconMeta(iconKey);
+                    return (
+                      <button
+                        key={iconKey}
+                        type="button"
+                        onClick={() => setCatIcon(iconKey)}
+                        aria-pressed={selected}
+                        aria-label={meta?.label || iconKey}
+                        title={meta?.label || iconKey}
+                        style={{
+                          width: '100%', height: 48,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          border: selected
+                            ? `2px solid ${catColor}`
+                            : '1px solid var(--border-color)',
+                          borderRadius: 10,
+                          background: selected
+                            ? `color-mix(in srgb, ${catColor} 14%, transparent)`
+                            : 'var(--card-bg)',
+                          color: selected ? catColor : 'var(--text-secondary)',
+                          fontSize: 20,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          position: 'relative',
+                        }}
+                      >
+                        {getCategoryIcon(iconKey)}
+                        {selected && (
+                          <CheckOutlined
+                            style={{
+                              position: 'absolute',
+                              top: -6, right: -6,
+                              background: catColor,
+                              color: '#fff',
+                              borderRadius: '50%',
+                              fontSize: 10,
+                              padding: 3,
+                            }}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </Form.Item>
 
           <Form.Item
