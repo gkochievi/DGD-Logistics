@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Table, Button, Typography, Tag, Modal, Form, Input, Select, DatePicker, Switch, Space,
-  message, Grid, Empty, Avatar, Tooltip,
+  message, Grid, Empty, Avatar, Tooltip, Upload,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, UserOutlined, StopOutlined, CheckCircleOutlined,
-  SearchOutlined, FilterOutlined, FileTextOutlined,
+  SearchOutlined, FilterOutlined, FileTextOutlined, CameraOutlined, DeleteOutlined,
 } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -43,6 +43,9 @@ export default function AdminDriversPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [clearPhoto, setClearPhoto] = useState(false);
   const driverLicenseCats = Form.useWatch('license_categories', form);
 
   const visibleDrivers = useMemo(() => {
@@ -84,6 +87,9 @@ export default function AdminDriversPage() {
   const openModal = (driver = null) => {
     setEditingDriver(driver);
     setEditingDriverDetail(null);
+    setPhotoFile(null);
+    setClearPhoto(false);
+    setPhotoPreview(driver?.photo || null);
     if (driver) {
       const values = { ...driver };
       DATE_FIELDS.forEach((f) => { values[f] = driver[f] ? dayjs(driver[f]) : null; });
@@ -101,6 +107,21 @@ export default function AdminDriversPage() {
       });
     }
     setModalOpen(true);
+  };
+
+  const onPickPhoto = (file) => {
+    setPhotoFile(file);
+    setClearPhoto(false);
+    const reader = new FileReader();
+    reader.onload = (e) => setPhotoPreview(e.target.result);
+    reader.readAsDataURL(file);
+    return false;
+  };
+
+  const onRemovePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setClearPhoto(true);
   };
 
   const quickUpdate = async (driver, patch) => {
@@ -124,12 +145,22 @@ export default function AdminDriversPage() {
       DATE_FIELDS.forEach((f) => {
         payload[f] = values[f] ? values[f].format('YYYY-MM-DD') : null;
       });
+      let saved;
       if (editingDriver) {
-        await api.patch(`/drivers/admin/${editingDriver.id}/`, payload);
+        ({ data: saved } = await api.patch(`/drivers/admin/${editingDriver.id}/`, payload));
         message.success(t('adminDrivers.driverUpdated'));
       } else {
-        await api.post('/drivers/admin/', payload);
+        ({ data: saved } = await api.post('/drivers/admin/', payload));
         message.success(t('adminDrivers.driverCreated'));
+      }
+      if (saved?.id && photoFile) {
+        const fd = new FormData();
+        fd.append('photo', photoFile);
+        await api.patch(`/drivers/admin/${saved.id}/`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else if (saved?.id && clearPhoto) {
+        await api.patch(`/drivers/admin/${saved.id}/`, { photo: null });
       }
       setModalOpen(false);
       fetchDrivers();
@@ -441,6 +472,39 @@ export default function AdminDriversPage() {
               </Space>
             </div>
           )}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 16,
+            padding: '8px 0 16px', marginBottom: 4,
+          }}>
+            <Avatar
+              size={72}
+              src={photoPreview || undefined}
+              icon={<UserOutlined />}
+              style={{ background: 'var(--nav-active-bg)', color: 'var(--accent)', flexShrink: 0 }}
+            />
+            <Space size={8} wrap>
+              <Upload
+                accept="image/*"
+                showUploadList={false}
+                beforeUpload={onPickPhoto}
+              >
+                <Button icon={<CameraOutlined />} style={{ borderRadius: 10 }}>
+                  {photoPreview ? t('adminDrivers.changePhoto') : t('adminDrivers.uploadPhoto')}
+                </Button>
+              </Upload>
+              {photoPreview && (
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={onRemovePhoto}
+                  style={{ borderRadius: 10 }}
+                >
+                  {t('adminDrivers.removePhoto')}
+                </Button>
+              )}
+            </Space>
+          </div>
+
           <div style={{ display: 'flex', gap: 14, flexDirection: isMobile ? 'column' : 'row' }}>
             <Form.Item
               name="first_name"

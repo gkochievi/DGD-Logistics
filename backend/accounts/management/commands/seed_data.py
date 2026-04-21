@@ -197,8 +197,9 @@ class Command(BaseCommand):
                 continue
             vehicle, created = Vehicle.objects.update_or_create(
                 plate_number=v_data['plate_number'],
-                defaults={'category': cat, **{k: v for k, v in v_data.items() if v is not None}},
+                defaults={k: v for k, v in v_data.items() if v is not None},
             )
+            vehicle.categories.set([cat])
             status_msg = 'created' if created else 'updated'
             self.stdout.write(f'  {vehicle.name} [{vehicle.plate_number}] - {status_msg}')
 

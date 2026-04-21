@@ -1,11 +1,11 @@
 from django.apps import AppConfig
 
 
-class DriversConfig(AppConfig):
+class OrdersConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'drivers'
+    name = 'orders'
 
     def ready(self):
         from config.media_utils import register_file_cleanup
-        from .models import Driver
-        register_file_cleanup(Driver, 'photo')
+        from .models import OrderImage
+        register_file_cleanup(OrderImage, 'image')

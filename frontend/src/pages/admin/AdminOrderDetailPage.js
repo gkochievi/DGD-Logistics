@@ -73,9 +73,10 @@ export default function AdminOrderDetailPage() {
     return vehicles.map((v) => {
       const isCurrent = v.id === assignedVehicleId;
       const busy = (v.active_orders_count || 0) > 0 && !isCurrent;
-      const catName = typeof v.category_name === 'string'
-        ? v.category_name
-        : (v.category_name?.[lang] || v.category_name?.en || '');
+      const catName = (v.categories_detail || [])
+        .map((c) => (typeof c.name === 'string' ? c.name : (c.name?.[lang] || c.name?.en || '')))
+        .filter(Boolean)
+        .join(', ');
       const statusBadge = v.status !== 'available' && !isCurrent
         ? ` · ${v.status_display || v.status}`
         : '';

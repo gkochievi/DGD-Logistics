@@ -1,5 +1,7 @@
 from django.db import models
 
+from config.media_utils import driver_photo_path
+
 
 class Driver(models.Model):
     STATUS_ACTIVE = 'active'
@@ -24,7 +26,7 @@ class Driver(models.Model):
     license_expiry = models.DateField(null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     hire_date = models.DateField(null=True, blank=True)
-    photo = models.ImageField(upload_to='driver_photos/', blank=True, null=True)
+    photo = models.ImageField(upload_to=driver_photo_path, blank=True, null=True)
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
     is_active = models.BooleanField(default=True)

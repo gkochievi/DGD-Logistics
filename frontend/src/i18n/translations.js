@@ -652,6 +652,9 @@ export const translations = {
       noDrivers: 'No drivers',
       busy: 'Busy',
       activeOrders: 'Active Orders',
+      uploadPhoto: 'Upload Photo',
+      changePhoto: 'Change Photo',
+      removePhoto: 'Remove Photo',
     },
 
     // ── Admin Analytics ──
@@ -1350,6 +1353,9 @@ export const translations = {
       noDrivers: 'მძღოლები არ არის',
       busy: 'დაკავებული',
       activeOrders: 'აქტიური შეკვეთები',
+      uploadPhoto: 'ფოტოს ატვირთვა',
+      changePhoto: 'ფოტოს შეცვლა',
+      removePhoto: 'ფოტოს წაშლა',
     },
 
     analytics: {
@@ -2045,6 +2051,9 @@ export const translations = {
       noDrivers: 'Водителей нет',
       busy: 'Занят',
       activeOrders: 'Активные заказы',
+      uploadPhoto: 'Загрузить фото',
+      changePhoto: 'Изменить фото',
+      removePhoto: 'Удалить фото',
     },
 
     analytics: {

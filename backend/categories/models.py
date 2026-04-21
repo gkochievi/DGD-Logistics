@@ -1,6 +1,8 @@
 from django.db import models
 from django.utils.text import slugify
 
+from config.media_utils import category_image_path
+
 
 class TransportCategory(models.Model):
     name = models.JSONField(
@@ -17,7 +19,7 @@ class TransportCategory(models.Model):
         help_text='Ant Design icon name (e.g. car, tool, build, thunderbolt, fire-filled)'
     )
     image = models.ImageField(
-        upload_to='category_images/', blank=True, null=True,
+        upload_to=category_image_path, blank=True, null=True,
         help_text='Category image (replaces icon when set)'
     )
     color = models.CharField(

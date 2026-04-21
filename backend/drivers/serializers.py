@@ -4,11 +4,14 @@ from .models import Driver
 
 
 class DriverVehicleBriefSerializer(serializers.ModelSerializer):
-    category_name = serializers.JSONField(source='category.name', read_only=True)
+    category_names = serializers.SerializerMethodField()
+
+    def get_category_names(self, obj):
+        return [c.name for c in obj.categories.all()]
 
     class Meta:
         model = Vehicle
-        fields = ['id', 'name', 'plate_number', 'category_name', 'license_categories']
+        fields = ['id', 'name', 'plate_number', 'category_names', 'license_categories']
 
 
 class DriverOrderBriefSerializer(serializers.Serializer):

@@ -1,11 +1,11 @@
 from django.apps import AppConfig
 
 
-class DriversConfig(AppConfig):
+class AccountsConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'drivers'
+    name = 'accounts'
 
     def ready(self):
         from config.media_utils import register_file_cleanup
-        from .models import Driver
-        register_file_cleanup(Driver, 'photo')
+        from .models import User
+        register_file_cleanup(User, 'avatar')

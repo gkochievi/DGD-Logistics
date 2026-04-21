@@ -18,10 +18,10 @@ class PublicVehicleListView(generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        qs = Vehicle.objects.filter(is_active=True, status='available').select_related('category').prefetch_related('images')
+        qs = Vehicle.objects.filter(is_active=True, status='available').prefetch_related('categories', 'images')
         category = self.request.query_params.get('category')
         if category:
-            qs = qs.filter(category_id=category)
+            qs = qs.filter(categories__id=category).distinct()
         return qs
 
 
@@ -29,11 +29,11 @@ class AdminVehicleListCreateView(generics.ListCreateAPIView):
     serializer_class = VehicleDetailSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    filterset_fields = ['category', 'status', 'is_active']
+    filterset_fields = ['categories', 'status', 'is_active']
     search_fields = ['name', 'plate_number', 'description']
 
     def get_queryset(self):
-        return Vehicle.objects.select_related('category').prefetch_related('images').all()
+        return Vehicle.objects.prefetch_related('categories', 'images').all()
 
     def get_serializer_class(self):
         if self.request.method == 'GET':
@@ -45,7 +45,7 @@ class AdminVehicleDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = VehicleDetailSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    queryset = Vehicle.objects.select_related('category').prefetch_related('images').all()
+    queryset = Vehicle.objects.prefetch_related('categories', 'images').all()
 
 
 class AdminVehicleImagesView(APIView):

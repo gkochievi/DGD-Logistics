@@ -1,6 +1,8 @@
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 
+from config.media_utils import user_avatar_path
+
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -41,7 +43,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     company_id = models.CharField(max_length=11, blank=True, help_text='საიდენტიფიკაციო კოდი (11 digits)')
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
-    avatar = models.ImageField(upload_to='avatars/%Y/%m/', blank=True, null=True)
+    avatar = models.ImageField(upload_to=user_avatar_path, blank=True, null=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=CUSTOMER)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)

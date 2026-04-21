@@ -1,5 +1,9 @@
 from django.db import models
 
+from config.media_utils import (
+    landing_site_icon_path, landing_favicon_path, landing_hero_path,
+)
+
 
 class LandingPageSettings(models.Model):
     """Singleton model – stores all editable landing page content."""
@@ -7,9 +11,9 @@ class LandingPageSettings(models.Model):
     # ── Branding ──
     site_name = models.CharField(max_length=200, default='Heavyy Way',
                                  help_text='Website name shown in navbar and browser tab')
-    site_icon = models.ImageField(upload_to='landing/', blank=True, null=True,
+    site_icon = models.ImageField(upload_to=landing_site_icon_path, blank=True, null=True,
                                   help_text='Website logo/icon shown in navbar')
-    favicon = models.ImageField(upload_to='landing/', blank=True, null=True,
+    favicon = models.ImageField(upload_to=landing_favicon_path, blank=True, null=True,
                                 help_text='Browser tab favicon (recommended: 32x32 or 64x64 PNG)')
 
     COLOR_THEME_CHOICES = [
@@ -33,7 +37,7 @@ class LandingPageSettings(models.Model):
         help_text='{"en": "...", "ka": "...", "ru": "..."}',
     )
     hero_description = models.JSONField(default=dict)
-    hero_image = models.ImageField(upload_to='landing/', blank=True, null=True)
+    hero_image = models.ImageField(upload_to=landing_hero_path, blank=True, null=True)
 
     # ── Stats (shown below hero) ──
     stats = models.JSONField(

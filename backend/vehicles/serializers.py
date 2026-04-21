@@ -9,22 +9,28 @@ class VehicleImageSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at']
 
 
+class VehicleCategoryBriefSerializer(serializers.Serializer):
+    """Inline category summary for vehicle payloads (multi-category support)."""
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.JSONField(read_only=True)
+    icon = serializers.CharField(read_only=True)
+    color = serializers.CharField(read_only=True)
+    image = serializers.SerializerMethodField()
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.image.url)
+        return obj.image.url
+
+
 class VehicleListSerializer(serializers.ModelSerializer):
-    category_name = serializers.JSONField(source='category.name', read_only=True)
-    category_icon = serializers.CharField(source='category.icon', read_only=True)
-    category_image = serializers.SerializerMethodField()
-    category_color = serializers.CharField(source='category.color', read_only=True)
+    categories_detail = VehicleCategoryBriefSerializer(source='categories', many=True, read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     images = VehicleImageSerializer(many=True, read_only=True)
     active_orders_count = serializers.SerializerMethodField()
-
-    def get_category_image(self, obj):
-        if obj.category and obj.category.image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.category.image.url)
-            return obj.category.image.url
-        return None
 
     def get_active_orders_count(self, obj):
         from orders.models import Order
@@ -33,8 +39,8 @@ class VehicleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vehicle
         fields = [
-            'id', 'name', 'category', 'category_name', 'category_icon', 'category_image',
-            'category_color', 'plate_number', 'year', 'capacity', 'license_categories',
+            'id', 'name', 'categories', 'categories_detail',
+            'plate_number', 'year', 'capacity', 'license_categories',
             'price_per_hour', 'price_per_km', 'image', 'status', 'status_display', 'is_active',
             'images', 'active_orders_count',
         ]
@@ -63,7 +69,7 @@ class VehicleActiveOrderBriefSerializer(serializers.Serializer):
 
 
 class VehicleDetailSerializer(serializers.ModelSerializer):
-    category_name = serializers.JSONField(source='category.name', read_only=True)
+    categories_detail = VehicleCategoryBriefSerializer(source='categories', many=True, read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     images = VehicleImageSerializer(many=True, read_only=True)
     drivers = VehicleAssignedDriverBriefSerializer(many=True, read_only=True)
@@ -81,7 +87,7 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vehicle
         fields = [
-            'id', 'name', 'category', 'category_name',
+            'id', 'name', 'categories', 'categories_detail',
             'plate_number', 'year', 'capacity', 'description', 'license_categories',
             'price_per_hour', 'price_per_km',
             'image', 'status', 'status_display', 'is_active',
@@ -92,13 +98,13 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
 
 
 class VehiclePublicSerializer(serializers.ModelSerializer):
-    category_name = serializers.JSONField(source='category.name', read_only=True)
+    categories_detail = VehicleCategoryBriefSerializer(source='categories', many=True, read_only=True)
     images = VehicleImageSerializer(many=True, read_only=True)
 
     class Meta:
         model = Vehicle
         fields = [
-            'id', 'name', 'category', 'category_name',
+            'id', 'name', 'categories', 'categories_detail',
             'capacity', 'price_per_hour', 'price_per_km', 'image',
             'images',
         ]

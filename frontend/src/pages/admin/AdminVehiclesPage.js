@@ -61,7 +61,7 @@ export default function AdminVehiclesPage() {
     const q = search.trim().toLowerCase();
     return vehicles.filter((v) => {
       if (showArchived ? v.is_active !== false : v.is_active === false) return false;
-      if (categoryFilter && v.category !== categoryFilter) return false;
+      if (categoryFilter && !(v.categories || []).includes(categoryFilter)) return false;
       if (statusFilter && v.status !== statusFilter) return false;
       if (q) {
         const hay = `${v.name || ''} ${v.plate_number || ''} ${v.capacity || ''}`.toLowerCase();
@@ -100,6 +100,7 @@ export default function AdminVehiclesPage() {
     if (vehicle) {
       form.setFieldsValue({
         ...vehicle,
+        categories: vehicle.categories || [],
         license_categories: parseLicenseCategories(vehicle.license_categories),
       });
       setVehicleImages(vehicle.images || []);
@@ -108,7 +109,7 @@ export default function AdminVehiclesPage() {
       }).catch(() => {});
     } else {
       form.resetFields();
-      form.setFieldsValue({ status: 'available', is_active: true, license_categories: [] });
+      form.setFieldsValue({ status: 'available', is_active: true, categories: [], license_categories: [] });
       setVehicleImages([]);
     }
     setModalOpen(true);
@@ -205,16 +206,20 @@ export default function AdminVehiclesPage() {
   const columns = [
     {
       title: '', width: 52,
-      render: (_, r) => (
-        <div style={{
-          width: 42, height: 42, borderRadius: 12,
-          background: `color-mix(in srgb, ${r.category_color || 'var(--accent)'} 12%, transparent)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: r.category_color || 'var(--accent)', overflow: 'hidden',
-        }}>
-          <CategoryImage imageUrl={r.category_image} icon={r.category_icon} size={30} />
-        </div>
-      ),
+      render: (_, r) => {
+        const primary = (r.categories_detail || [])[0];
+        const color = primary?.color || 'var(--accent)';
+        return (
+          <div style={{
+            width: 42, height: 42, borderRadius: 12,
+            background: `color-mix(in srgb, ${color} 12%, transparent)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color, overflow: 'hidden',
+          }}>
+            <CategoryImage imageUrl={primary?.image} icon={primary?.icon} size={30} />
+          </div>
+        );
+      },
     },
     {
       title: t('adminUsers.name'), dataIndex: 'name', ellipsis: true,
@@ -222,8 +227,18 @@ export default function AdminVehiclesPage() {
     },
     { title: t('adminVehicles.plateNumber'), dataIndex: 'plate_number', width: 110 },
     {
-      title: t('adminOrders.category'), dataIndex: 'category_name', width: 140, ellipsis: true,
-      render: (v) => localized(v),
+      title: t('adminOrders.category'), dataIndex: 'categories_detail', width: 180,
+      render: (list) => {
+        const cats = list || [];
+        if (cats.length === 0) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>;
+        return (
+          <Space size={4} wrap>
+            {cats.map((c) => (
+              <Tag key={c.id} color={c.color} style={{ margin: 0 }}>{localized(c.name)}</Tag>
+            ))}
+          </Space>
+        );
+      },
     },
     { title: t('adminVehicles.capacity'), dataIndex: 'capacity', width: 90, ellipsis: true },
     {
@@ -412,22 +427,31 @@ export default function AdminVehiclesPage() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{
-                  width: 48, height: 48, borderRadius: 14,
-                  background: `color-mix(in srgb, ${v.category_color || 'var(--accent)'} 12%, transparent)`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: v.category_color || 'var(--accent)', flexShrink: 0, overflow: 'hidden',
-                }}>
-                  <CategoryImage imageUrl={v.category_image} icon={v.category_icon} size={34} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
-                    {v.name}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                    {v.plate_number} · {localized(v.category_name)} · {v.capacity || '—'}
-                  </div>
-                </div>
+                {(() => {
+                  const primary = (v.categories_detail || [])[0];
+                  const color = primary?.color || 'var(--accent)';
+                  const catNames = (v.categories_detail || []).map((c) => localized(c.name)).filter(Boolean).join(', ');
+                  return (
+                    <>
+                      <div style={{
+                        width: 48, height: 48, borderRadius: 14,
+                        background: `color-mix(in srgb, ${color} 12%, transparent)`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color, flexShrink: 0, overflow: 'hidden',
+                      }}>
+                        <CategoryImage imageUrl={primary?.image} icon={primary?.icon} size={34} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
+                          {v.name}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                          {v.plate_number} · {catNames || '—'} · {v.capacity || '—'}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                   <Dropdown
                     trigger={['click']}
@@ -610,12 +634,13 @@ export default function AdminVehiclesPage() {
 
           <div style={{ display: 'flex', gap: 14, flexDirection: isMobile ? 'column' : 'row' }}>
             <Form.Item
-              name="category"
+              name="categories"
               label={<span style={{ fontWeight: 600 }}>{t('adminOrders.category')}</span>}
-              rules={[{ required: true, message: t('common.required') }]}
+              rules={[{ required: true, type: 'array', min: 1, message: t('common.required') }]}
               style={{ flex: 1 }}
             >
               <Select
+                mode="multiple"
                 placeholder={t('adminOrderDetail.selectFinalCategory')}
                 showSearch
                 filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}

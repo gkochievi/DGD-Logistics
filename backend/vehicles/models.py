@@ -1,5 +1,7 @@
 from django.db import models
 
+from config.media_utils import vehicle_main_image_path, vehicle_gallery_image_path
+
 
 class Vehicle(models.Model):
     STATUS_AVAILABLE = 'available'
@@ -15,8 +17,8 @@ class Vehicle(models.Model):
     ]
 
     name = models.CharField(max_length=200, help_text='e.g. Mercedes Actros Tow Truck')
-    category = models.ForeignKey(
-        'categories.TransportCategory', on_delete=models.CASCADE, related_name='vehicles'
+    categories = models.ManyToManyField(
+        'categories.TransportCategory', related_name='vehicles', blank=True,
     )
     plate_number = models.CharField(max_length=20, unique=True)
     year = models.PositiveIntegerField(null=True, blank=True)
@@ -37,14 +39,14 @@ class Vehicle(models.Model):
         max_digits=10, decimal_places=2, null=True, blank=True,
         help_text='Per-kilometer rate'
     )
-    image = models.ImageField(upload_to='vehicle_images/', blank=True, null=True)
+    image = models.ImageField(upload_to=vehicle_main_image_path, blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_AVAILABLE)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['category', 'name']
+        ordering = ['name']
 
     def __str__(self):
         return f'{self.name} ({self.plate_number})'
@@ -54,7 +56,7 @@ class VehicleImage(models.Model):
     MAX_IMAGES = 5
 
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField(upload_to='vehicle_images/%Y/%m/')
+    image = models.ImageField(upload_to=vehicle_gallery_image_path)
     order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

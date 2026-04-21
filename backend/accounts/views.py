@@ -302,9 +302,9 @@ class AdminAnalyticsView(APIView):
             .annotate(count=Count('id'))
         )
         fleet_by_category = (
-            vehicles.filter(is_active=True)
-            .values(cat_name=F('category__name'), color=F('category__color'))
-            .annotate(count=Count('id'))
+            vehicles.filter(is_active=True, categories__isnull=False)
+            .values(cat_name=F('categories__name'), color=F('categories__color'))
+            .annotate(count=Count('id', distinct=True))
             .order_by('-count')
         )
         fleet_by_category = [

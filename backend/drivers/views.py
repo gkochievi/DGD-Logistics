@@ -13,7 +13,7 @@ class AdminDriverListCreateView(generics.ListCreateAPIView):
     search_fields = ['first_name', 'last_name', 'phone', 'email', 'license_number']
 
     def get_queryset(self):
-        return Driver.objects.prefetch_related('vehicles__category').all()
+        return Driver.objects.prefetch_related('vehicles__categories').all()
 
     def get_serializer_class(self):
         if self.request.method == 'GET':
@@ -25,4 +25,4 @@ class AdminDriverDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = DriverDetailSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    queryset = Driver.objects.prefetch_related('vehicles__category').all()
+    queryset = Driver.objects.prefetch_related('vehicles__categories').all()

@@ -1,6 +1,8 @@
 from django.db import models
 from django.conf import settings
 
+from config.media_utils import order_image_path
+
 
 class Order(models.Model):
     STATUS_NEW = 'new'
@@ -103,7 +105,7 @@ class Order(models.Model):
 
 class OrderImage(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField(upload_to='order_images/%Y/%m/')
+    image = models.ImageField(upload_to=order_image_path)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
