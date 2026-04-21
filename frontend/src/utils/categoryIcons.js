@@ -166,16 +166,30 @@ export function getCategoryIcon(iconName) {
 export function CategoryImage({ imageUrl, icon, size = 32 }) {
   if (imageUrl) {
     return (
-      <img
-        src={imageUrl}
-        alt=""
+      <div
         style={{
           width: size,
           height: size,
-          objectFit: 'contain',
           borderRadius: size > 40 ? 8 : 4,
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
         }}
-      />
+      >
+        <img
+          src={imageUrl}
+          alt=""
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: 'center',
+            display: 'block',
+          }}
+        />
+      </div>
     );
   }
   return React.cloneElement(getCategoryIcon(icon), { style: { fontSize: size * 0.6 } });

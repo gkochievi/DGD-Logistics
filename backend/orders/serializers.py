@@ -15,6 +15,15 @@ class OrderAssignedDriverSerializer(serializers.Serializer):
     license_categories = serializers.CharField(read_only=True)
     status = serializers.CharField(read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    photo = serializers.SerializerMethodField()
+
+    def get_photo(self, obj):
+        if not getattr(obj, 'photo', None):
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.photo.url)
+        return obj.photo.url
 
 
 class OrderImageSerializer(serializers.ModelSerializer):
@@ -83,7 +92,8 @@ class OrderListSerializer(serializers.ModelSerializer):
             'urgency', 'urgency_display', 'selected_category_name',
             'selected_category_icon', 'selected_category_image', 'selected_category_color',
             'final_category_name', 'is_cancellable', 'image_count', 'created_at',
-            'is_unread', 'last_event_at', 'last_event_type',
+            'is_unread', 'last_event_at', 'last_event_type', 'price',
+            'customer_accepted_at',
         ]
 
 
@@ -117,11 +127,12 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'urgency', 'urgency_display',
             'status', 'status_display',
             'admin_comment', 'user_note', 'route_stops',
+            'price', 'customer_accepted_at',
             'is_cancellable',
             'images', 'status_history',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'user', 'status', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'status', 'price', 'customer_accepted_at', 'created_at', 'updated_at']
 
 
 class OrderCreateSerializer(serializers.ModelSerializer):
@@ -173,7 +184,7 @@ class AdminOrderUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'final_category', 'assigned_vehicle', 'assigned_driver',
             'scheduled_from', 'scheduled_to',
-            'admin_comment', 'status', 'urgency',
+            'admin_comment', 'status', 'urgency', 'price',
         ]
 
     def validate(self, attrs):
@@ -194,6 +205,73 @@ class AdminOrderUpdateSerializer(serializers.ModelSerializer):
         target_from = resolved('scheduled_from')
         target_to = resolved('scheduled_to')
         target_status = resolved('status')
+        target_price = resolved('price')
+
+        # Cancellation is customer-initiated only; admins end orders via "rejected".
+        status_changing_to_cancelled = (
+            target_status == Order.STATUS_CANCELLED
+            and instance.status != Order.STATUS_CANCELLED
+        )
+        if status_changing_to_cancelled:
+            raise serializers.ValidationError({
+                'status': 'Cancellation is reserved for the customer. Use "rejected" to end the order.'
+            })
+
+        # "Approved" now means the customer has accepted the offer. Admins
+        # send offers via STATUS_OFFER_SENT; only the customer accept action
+        # promotes an order into approved.
+        status_changing_to_approved = (
+            target_status == Order.STATUS_APPROVED
+            and instance.status != Order.STATUS_APPROVED
+        )
+        if status_changing_to_approved:
+            raise serializers.ValidationError({
+                'status': 'Approved is reserved for customer acceptance. Use "offer sent" to send a price offer.'
+            })
+
+        # "New" is the entry state; admins can't move an order back to it.
+        status_changing_to_new = (
+            target_status == Order.STATUS_NEW
+            and instance.status != Order.STATUS_NEW
+        )
+        if status_changing_to_new:
+            raise serializers.ValidationError({
+                'status': 'Orders cannot be moved back to "new".'
+            })
+
+        # Sending the offer requires a price — the customer needs a quote
+        # to accept or reject.
+        status_changing_to_offer_sent = (
+            target_status == Order.STATUS_OFFER_SENT
+            and instance.status != Order.STATUS_OFFER_SENT
+        )
+        if status_changing_to_offer_sent and (target_price is None or target_price <= 0):
+            raise serializers.ValidationError({
+                'price': 'Set a price before sending the offer to the customer.'
+            })
+
+        # Starting work requires the customer to have accepted — i.e. the
+        # order must already be in `approved`.
+        status_changing_to_in_progress = (
+            target_status == Order.STATUS_IN_PROGRESS
+            and instance.status != Order.STATUS_IN_PROGRESS
+        )
+        if status_changing_to_in_progress and instance.status != Order.STATUS_APPROVED:
+            raise serializers.ValidationError({
+                'status': 'Customer must accept the offer before starting the job.'
+            })
+
+        # Completing the order is only valid once work is actually in progress —
+        # jumping straight from new/offer_sent/etc. to completed would skip
+        # acceptance and billing.
+        status_changing_to_completed = (
+            target_status == Order.STATUS_COMPLETED
+            and instance.status != Order.STATUS_COMPLETED
+        )
+        if status_changing_to_completed and instance.status != Order.STATUS_IN_PROGRESS:
+            raise serializers.ValidationError({
+                'status': 'Only an in-progress order can be marked as completed.'
+            })
 
         validate_assignment(
             instance,

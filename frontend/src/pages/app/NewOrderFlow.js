@@ -1084,7 +1084,7 @@ export default function NewOrderFlow() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 20, color: 'var(--accent)',
             }}>
-              <CategoryImage imageUrl={selectedCategory?.image_url} icon={selectedCategory?.icon || 'inbox'} size={28} />
+              <CategoryImage imageUrl={selectedCategory?.image_url} icon={selectedCategory?.icon || 'inbox'} size={selectedCategory?.image_url ? 40 : 28} />
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
               {localized(selectedCategory?.name)}
@@ -1373,7 +1373,7 @@ function CategoryCard({ isActive, color, icon, imageUrl, name, badge, dashed, on
         color: isActive ? color : 'var(--text-secondary)',
         transition: 'all 0.2s ease', overflow: 'hidden',
       }}>
-        <CategoryImage imageUrl={imageUrl} icon={icon} size={32} />
+        <CategoryImage imageUrl={imageUrl} icon={icon} size={imageUrl ? 44 : 32} />
       </div>
       <div>
         <div style={{

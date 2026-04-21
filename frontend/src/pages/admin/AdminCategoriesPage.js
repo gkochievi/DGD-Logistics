@@ -4,6 +4,7 @@ import {
   ColorPicker, message, Grid, Empty, Upload, Tabs,
 } from 'antd';
 import { PlusOutlined, EditOutlined, StopOutlined, CheckCircleOutlined, CameraOutlined, DeleteOutlined, CheckOutlined, SearchOutlined, FilterOutlined } from '@ant-design/icons';
+import ImgCrop from 'antd-img-crop';
 import api from '../../api/client';
 import { CategoryImage, getCategoryIcon, searchIcons, getIconMeta, AVAILABLE_ICONS } from '../../utils/categoryIcons';
 import { useLang } from '../../contexts/LanguageContext';
@@ -188,7 +189,7 @@ export default function AdminCategoriesPage() {
           fontSize: 20, color: record.color || 'var(--accent)',
           overflow: 'hidden',
         }}>
-          <CategoryImage imageUrl={record.image_url} icon={record.icon} size={32} />
+          <CategoryImage imageUrl={record.image_url} icon={record.icon} size={record.image_url ? 44 : 32} />
         </div>
       ),
     },
@@ -355,7 +356,7 @@ export default function AdminCategoriesPage() {
                   fontSize: 22, color: cat.color || 'var(--accent)', flexShrink: 0,
                   overflow: 'hidden',
                 }}>
-                  <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={36} />
+                  <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={cat.image_url ? 48 : 36} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Text style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
@@ -483,6 +484,16 @@ export default function AdminCategoriesPage() {
               </span>
             }
           >
+            <ImgCrop
+              aspect={1}
+              rotationSlider
+              showReset
+              showGrid
+              modalTitle={t('adminCats.cropImage') || 'Adjust image'}
+              modalOk={t('common.save') || 'Save'}
+              modalCancel={t('common.cancel') || 'Cancel'}
+              resetText={t('common.reset') || 'Reset'}
+            >
             <Upload
               accept="image/*"
               showUploadList={false}
@@ -551,6 +562,7 @@ export default function AdminCategoriesPage() {
                 )}
               </div>
             </Upload>
+            </ImgCrop>
           </Form.Item>
 
           {/* Icon picker */}

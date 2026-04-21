@@ -46,7 +46,7 @@ class CustomerActiveOrdersView(generics.ListAPIView):
     def get_queryset(self):
         return Order.objects.filter(
             user=self.request.user,
-            status__in=['new', 'under_review', 'approved', 'in_progress'],
+            status__in=['new', 'under_review', 'offer_sent', 'approved', 'in_progress'],
         )
 
 
@@ -83,16 +83,60 @@ class CustomerCancelOrderView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        reason = (request.data.get('reason') or '').strip()[:500]
+        was_offer = order.status == Order.STATUS_OFFER_SENT
+        default_label = 'Offer rejected by customer' if was_offer else 'Cancelled by customer'
+        comment = f'{default_label}: {reason}' if reason else default_label
+
         old_status = order.status
         order.status = Order.STATUS_CANCELLED
         order.save()
 
         OrderStatusHistory.objects.create(
             order=order, old_status=old_status, new_status=Order.STATUS_CANCELLED,
-            changed_by=request.user, comment='Cancelled by customer',
+            changed_by=request.user, comment=comment,
         )
         _stamp_event(order, 'cancelled', admin_unread=True)
+        # Release the vehicle if it was assigned (approved orders hold one).
+        sync_vehicle_status(order.assigned_vehicle)
         return Response({'detail': 'Order cancelled successfully.'})
+
+
+class CustomerAcceptOfferView(APIView):
+    """Customer accepts the admin's price offer — transitions offer_sent to approved.
+
+    `approved` means the customer has committed. Records acceptance timestamp,
+    notifies admin, and unlocks the `in_progress` transition on the admin side.
+    """
+
+    def post(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk, user=request.user)
+        except Order.DoesNotExist:
+            return Response({'detail': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if order.status != Order.STATUS_OFFER_SENT:
+            return Response(
+                {'detail': 'Offer can only be accepted while waiting for your approval.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if order.price is None or order.price <= 0:
+            return Response(
+                {'detail': 'No price has been set for this order yet.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_status = order.status
+        order.status = Order.STATUS_APPROVED
+        order.customer_accepted_at = timezone.now()
+        order.save(update_fields=['status', 'customer_accepted_at'])
+
+        OrderStatusHistory.objects.create(
+            order=order, old_status=old_status, new_status=order.status,
+            changed_by=request.user, comment='Customer accepted the price offer',
+        )
+        _stamp_event(order, f'status:{Order.STATUS_APPROVED}', admin_unread=True)
+        return Response(OrderDetailSerializer(order, context={'request': request}).data)
 
 
 class CustomerUploadImagesView(APIView):
@@ -154,6 +198,19 @@ class AdminOrderDetailView(generics.RetrieveUpdateAPIView):
         if not order.is_read_by_admin:
             Order.objects.filter(pk=order.pk).update(is_read_by_admin=True)
             order.is_read_by_admin = True
+        # First admin view of a fresh order moves it into review so the
+        # customer immediately sees it's being worked on.
+        if order.status == Order.STATUS_NEW:
+            old_status = order.status
+            order.status = Order.STATUS_UNDER_REVIEW
+            order.save(update_fields=['status'])
+            OrderStatusHistory.objects.create(
+                order=order, old_status=old_status,
+                new_status=Order.STATUS_UNDER_REVIEW,
+                changed_by=request.user,
+                comment='Opened by admin',
+            )
+            _stamp_event(order, f'status:{Order.STATUS_UNDER_REVIEW}', customer_unread=True)
         serializer = self.get_serializer(order)
         return Response(serializer.data)
 
@@ -178,6 +235,62 @@ class AdminOrderStatusChangeView(APIView):
 
         if new_status not in dict(Order.STATUS_CHOICES):
             return Response({'detail': 'Invalid status.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Cancellation is customer-initiated only; admins end orders via "rejected".
+        if new_status == Order.STATUS_CANCELLED:
+            return Response(
+                {'detail': 'Cancellation is reserved for the customer. Use "rejected" to end the order.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # "New" is the entry state; admins can't move an order back to it.
+        if new_status == Order.STATUS_NEW and order.status != Order.STATUS_NEW:
+            return Response(
+                {'detail': 'Orders cannot be moved back to "new".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # "Approved" now means the customer has accepted — admins cannot set
+        # it directly. Use "offer_sent" to send the price for approval.
+        if new_status == Order.STATUS_APPROVED and order.status != Order.STATUS_APPROVED:
+            return Response(
+                {'detail': 'Approved is reserved for customer acceptance. Use "offer sent" to send a price offer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Sending the offer requires a price.
+        if (
+            new_status == Order.STATUS_OFFER_SENT
+            and order.status != Order.STATUS_OFFER_SENT
+            and (order.price is None or order.price <= 0)
+        ):
+            return Response(
+                {'detail': 'Set a price before sending the offer to the customer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Starting work requires the order to be approved (customer accepted).
+        if (
+            new_status == Order.STATUS_IN_PROGRESS
+            and order.status != Order.STATUS_IN_PROGRESS
+            and order.status != Order.STATUS_APPROVED
+        ):
+            return Response(
+                {'detail': 'Customer must accept the offer before starting the job.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Completion is only reachable from in_progress — skipping acceptance
+        # would complete an order the customer never agreed to.
+        if (
+            new_status == Order.STATUS_COMPLETED
+            and order.status != Order.STATUS_COMPLETED
+            and order.status != Order.STATUS_IN_PROGRESS
+        ):
+            return Response(
+                {'detail': 'Only an in-progress order can be marked as completed.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Transitioning into an active state re-checks assignments for conflicts.
         if new_status in Order.ACTIVE_STATUSES and new_status != order.status:
@@ -213,8 +326,8 @@ class AdminOrderStatusChangeView(APIView):
 
 # --- Notifications (polling) ---
 
-ADMIN_ACTIVE_STATUSES = ['new', 'under_review', 'approved', 'in_progress']
-CUSTOMER_ACTIVE_STATUSES = ['new', 'under_review', 'approved', 'in_progress']
+ADMIN_ACTIVE_STATUSES = ['new', 'under_review', 'offer_sent', 'approved', 'in_progress']
+CUSTOMER_ACTIVE_STATUSES = ['new', 'under_review', 'offer_sent', 'approved', 'in_progress']
 
 
 class AdminNotificationsView(APIView):

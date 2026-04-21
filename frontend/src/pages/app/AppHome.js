@@ -9,7 +9,7 @@ import api from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLang } from '../../contexts/LanguageContext';
 import { useRealtimeRefresh } from '../../contexts/NotificationContext';
-import { STATUS_CONFIG } from '../../utils/status';
+import { STATUS_CONFIG, getStatusLabel } from '../../utils/status';
 import { CategoryImage } from '../../utils/categoryIcons';
 
 const { Text } = Typography;
@@ -231,7 +231,7 @@ export default function AppHome() {
                   color: order.selected_category_color || 'var(--accent)',
                   flexShrink: 0, overflow: 'hidden',
                 }}>
-                  <CategoryImage imageUrl={order.selected_category_image} icon={order.selected_category_icon} size={36} />
+                  <CategoryImage imageUrl={order.selected_category_image} icon={order.selected_category_icon} size={order.selected_category_image ? 52 : 36} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
@@ -260,8 +260,9 @@ export default function AppHome() {
                   borderRadius: 10,
                   whiteSpace: 'nowrap',
                   letterSpacing: 0.1,
+                  flexShrink: 0,
                 }}>
-                  {t('status.' + order.status) || order.status}
+                  {getStatusLabel(t, order.status, { isCustomer: true }) || order.status}
                 </div>
               </div>
             );
@@ -360,7 +361,7 @@ export default function AppHome() {
                       color: color, overflow: 'hidden',
                       transition: 'transform 0.25s cubic-bezier(0.22,1,0.36,1)',
                     }}>
-                      <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={44} />
+                      <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={cat.image_url ? 64 : 44} />
                     </div>
                     <div style={{
                       fontSize: 12, fontWeight: 650, color: 'var(--text-primary)',

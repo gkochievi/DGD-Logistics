@@ -7,6 +7,7 @@ from config.media_utils import order_image_path
 class Order(models.Model):
     STATUS_NEW = 'new'
     STATUS_UNDER_REVIEW = 'under_review'
+    STATUS_OFFER_SENT = 'offer_sent'
     STATUS_APPROVED = 'approved'
     STATUS_REJECTED = 'rejected'
     STATUS_IN_PROGRESS = 'in_progress'
@@ -16,6 +17,7 @@ class Order(models.Model):
     STATUS_CHOICES = [
         (STATUS_NEW, 'New'),
         (STATUS_UNDER_REVIEW, 'Under Review'),
+        (STATUS_OFFER_SENT, 'Offer Sent'),
         (STATUS_APPROVED, 'Approved'),
         (STATUS_REJECTED, 'Rejected'),
         (STATUS_IN_PROGRESS, 'In Progress'),
@@ -35,9 +37,12 @@ class Order(models.Model):
         (URGENCY_URGENT, 'Urgent'),
     ]
 
-    CANCELLABLE_STATUSES = [STATUS_NEW, STATUS_UNDER_REVIEW]
-    # Statuses that occupy a vehicle/driver's schedule.
-    ACTIVE_STATUSES = [STATUS_APPROVED, STATUS_IN_PROGRESS]
+    # Customer can cancel up through the offer stage; `approved` means the
+    # customer has accepted and the job is locked in.
+    CANCELLABLE_STATUSES = [STATUS_NEW, STATUS_UNDER_REVIEW, STATUS_OFFER_SENT]
+    # Statuses that occupy a vehicle/driver's schedule — an outstanding offer
+    # holds the resource so admins can't double-book while the customer decides.
+    ACTIVE_STATUSES = [STATUS_OFFER_SENT, STATUS_APPROVED, STATUS_IN_PROGRESS]
     # Statuses that free the vehicle/driver (resource released).
     RELEASED_STATUSES = [STATUS_COMPLETED, STATUS_REJECTED, STATUS_CANCELLED]
 
@@ -81,6 +86,8 @@ class Order(models.Model):
     urgency = models.CharField(max_length=20, choices=URGENCY_CHOICES, default=URGENCY_NORMAL)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW)
     admin_comment = models.TextField(blank=True)
+    price = models.PositiveIntegerField(null=True, blank=True)
+    customer_accepted_at = models.DateTimeField(null=True, blank=True)
     user_note = models.TextField(blank=True)
     route_stops = models.TextField(blank=True, default='')
 
@@ -101,6 +108,15 @@ class Order(models.Model):
     @property
     def is_cancellable(self):
         return self.status in self.CANCELLABLE_STATUSES
+
+    @property
+    def can_customer_accept(self):
+        return (
+            self.status == self.STATUS_OFFER_SENT
+            and self.price is not None
+            and self.price > 0
+            and self.customer_accepted_at is None
+        )
 
 
 class OrderImage(models.Model):

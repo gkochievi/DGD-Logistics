@@ -216,7 +216,7 @@ export default function AdminVehiclesPage() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color, overflow: 'hidden',
           }}>
-            <CategoryImage imageUrl={primary?.image} icon={primary?.icon} size={30} />
+            <CategoryImage imageUrl={primary?.image} icon={primary?.icon} size={primary?.image ? 42 : 30} />
           </div>
         );
       },
@@ -439,7 +439,7 @@ export default function AdminVehiclesPage() {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color, flexShrink: 0, overflow: 'hidden',
                       }}>
-                        <CategoryImage imageUrl={primary?.image} icon={primary?.icon} size={34} />
+                        <CategoryImage imageUrl={primary?.image} icon={primary?.icon} size={primary?.image ? 48 : 34} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>

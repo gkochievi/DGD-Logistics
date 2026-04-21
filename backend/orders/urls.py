@@ -10,6 +10,7 @@ urlpatterns = [
     path('create/', views.CustomerOrderCreateView.as_view(), name='customer_order_create'),
     path('<int:pk>/', views.CustomerOrderDetailView.as_view(), name='customer_order_detail'),
     path('<int:pk>/cancel/', views.CustomerCancelOrderView.as_view(), name='customer_order_cancel'),
+    path('<int:pk>/accept/', views.CustomerAcceptOfferView.as_view(), name='customer_order_accept'),
     path('<int:pk>/upload/', views.CustomerUploadImagesView.as_view(), name='customer_order_upload'),
 
     # Admin

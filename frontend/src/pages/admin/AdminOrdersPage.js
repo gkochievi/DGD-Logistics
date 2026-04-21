@@ -265,6 +265,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
                   <div style={{
                     fontSize: 14, fontWeight: 500,
                     color: 'var(--text-primary)', marginBottom: 6,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
                     {order.pickup_location}
                   </div>

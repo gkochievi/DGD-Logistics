@@ -1,23 +1,28 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Spin, Image, Button, Modal, message, Grid } from 'antd';
+import { Spin, Image, Button, Modal, message, Grid, Input } from 'antd';
 import {
   ArrowLeftOutlined, EnvironmentOutlined, CalendarOutlined,
   ClockCircleOutlined, UserOutlined, PhoneOutlined,
   CloseCircleOutlined, CarOutlined, CheckCircleOutlined,
   FileTextOutlined, CameraOutlined, InboxOutlined, HistoryOutlined,
+  DollarOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
+import { useBranding } from '../../contexts/BrandingContext';
+import { DEFAULT_CURRENCY } from '../../utils/currency';
 import { useRealtimeRefresh, useNotifications } from '../../contexts/NotificationContext';
 import { MapView } from '../../components/map/MapPicker';
 import { CategoryImage } from '../../utils/categoryIcons';
+import { getStatusLabel } from '../../utils/status';
 
 const { useBreakpoint } = Grid;
 
 const STATUS_BADGE_COLORS = {
   new: '#00B856',
   under_review: '#f59e0b',
+  offer_sent: '#d97706',
   approved: '#06b6d4',
   in_progress: '#3b82f6',
   completed: '#10b981',
@@ -25,12 +30,16 @@ const STATUS_BADGE_COLORS = {
   cancelled: '#8e93ab',
 };
 
-const STATUS_STEPS = ['new', 'under_review', 'approved', 'in_progress', 'completed'];
+const STATUS_STEPS = ['new', 'under_review', 'offer_sent', 'approved', 'in_progress', 'completed'];
+
+// Statuses where a price has been offered and should be visible to the customer.
+const PRICE_VISIBLE_STATUSES = ['offer_sent', 'approved', 'in_progress', 'completed'];
 
 export default function AppOrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { t, lang } = useLang();
+  const { currency = DEFAULT_CURRENCY } = useBranding();
   const localized = (v) => {
     if (!v) return '';
     if (typeof v === 'string') return v;
@@ -40,6 +49,9 @@ export default function AppOrderDetailPage() {
   const isDesktop = screens.md;
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
   const { refresh: refreshNotifications } = useNotifications();
 
   const fetchOrder = useCallback(({ silent = false } = {}) => {
@@ -59,18 +71,37 @@ export default function AppOrderDetailPage() {
   }, [fetchOrder]));
 
   const handleCancel = () => {
+    setCancelReason('');
+    setCancelOpen(true);
+  };
+
+  const submitCancel = async () => {
+    setCancelling(true);
+    try {
+      await api.post(`/orders/${id}/cancel/`, { reason: cancelReason.trim() });
+      message.success(t('orders.orderCancelledMsg'));
+      setCancelOpen(false);
+      fetchOrder();
+    } catch (err) {
+      message.error(err.response?.data?.detail || t('orders.failedCancel'));
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleAcceptOffer = () => {
     Modal.confirm({
-      title: t('orders.cancelConfirm'),
-      content: t('orders.cancelWarning'),
-      okText: t('orders.yesCancel'),
-      okType: 'danger',
+      title: t('orders.acceptOfferConfirm'),
+      content: t('orders.acceptOfferWarning'),
+      okText: t('orders.yesAccept'),
+      okType: 'primary',
       onOk: async () => {
         try {
-          await api.post(`/orders/${id}/cancel/`);
-          message.success(t('orders.orderCancelledMsg'));
+          await api.post(`/orders/${id}/accept/`);
+          message.success(t('orders.offerAcceptedMsg'));
           fetchOrder();
         } catch (err) {
-          message.error(err.response?.data?.detail || t('orders.failedCancel'));
+          message.error(err.response?.data?.detail || t('orders.failedAccept'));
         }
       },
     });
@@ -91,6 +122,15 @@ export default function AppOrderDetailPage() {
   const isRejected = order.status === 'rejected';
   const isTerminal = isCancelled || isRejected;
   const statusColor = STATUS_BADGE_COLORS[order.status] || '#8e93ab';
+  const priceValue = order.price !== null && order.price !== undefined && Number(order.price) > 0
+    ? Number(order.price)
+    : null;
+  const showPrice = priceValue !== null && PRICE_VISIBLE_STATUSES.includes(order.status);
+  const awaitingPrice = !showPrice && ['new', 'under_review'].includes(order.status);
+  // `approved` now means the customer has already accepted the offer.
+  const accepted = order.status === 'approved' || order.status === 'in_progress'
+    || order.status === 'completed' || Boolean(order.customer_accepted_at);
+  const canAcceptOffer = order.status === 'offer_sent' && priceValue !== null;
 
   const pickupStops = order.route_stops?.pickups?.length
     ? order.route_stops.pickups
@@ -180,7 +220,7 @@ export default function AppOrderDetailPage() {
                 {t('orders.status') || 'Status'}
               </div>
               <div style={{ fontSize: 15, color: '#fff', fontWeight: 700, marginTop: 2, letterSpacing: -0.1 }}>
-                {t('status.' + order.status) || order.status}
+                {getStatusLabel(t, order.status, { isCustomer: true }) || order.status}
               </div>
             </div>
             {localized(order.selected_category_detail?.name) && (
@@ -231,7 +271,7 @@ export default function AppOrderDetailPage() {
                         whiteSpace: 'nowrap',
                         letterSpacing: -0.1,
                       }}>
-                        {t('status.' + s)}
+                        {getStatusLabel(t, s, { isCustomer: true })}
                       </div>
                     </div>
                     {i < STATUS_STEPS.length - 1 && (
@@ -250,6 +290,83 @@ export default function AppOrderDetailPage() {
               })}
             </div>
           </ConfirmSection>
+        )}
+
+        {/* ── Price offer ── */}
+        {showPrice && (
+          <div style={{
+            background: 'linear-gradient(135deg, var(--accent-bg) 0%, var(--accent-bg-strong) 100%)',
+            borderRadius: 18, padding: isDesktop ? '24px 28px' : '20px',
+            marginBottom: isDesktop ? 24 : 16,
+            border: '1px solid var(--accent-bg-strong)',
+            display: 'flex', alignItems: 'center', gap: 16,
+            animation: 'fadeInUp 0.4s ease-out 0.08s both',
+          }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: 14,
+              background: 'var(--accent)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 22, flexShrink: 0,
+              boxShadow: '0 6px 18px rgba(0, 184, 86, 0.25)',
+            }}>
+              <DollarOutlined />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: 0.4,
+              }}>
+                {t('orders.priceOffered')}
+              </div>
+              <div style={{
+                fontSize: isDesktop ? 28 : 24, fontWeight: 800,
+                color: 'var(--text-primary)', marginTop: 4, letterSpacing: -0.5,
+              }}>
+                {currency.symbol}{Math.round(priceValue).toLocaleString()}
+              </div>
+              {order.status === 'offer_sent' && (
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  {t('orders.priceAcceptHint')}
+                </div>
+              )}
+              {accepted && (
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  marginTop: 6, padding: '4px 10px', borderRadius: 999,
+                  background: 'var(--accent-bg-strong)', color: 'var(--accent)',
+                  fontSize: 12, fontWeight: 700,
+                }}>
+                  <CheckCircleOutlined style={{ fontSize: 12 }} />
+                  {t('orders.offerAccepted')}
+                  {order.customer_accepted_at && (
+                    <span style={{ fontWeight: 500, opacity: 0.8 }}>
+                      · {new Date(order.customer_accepted_at).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {awaitingPrice && (
+          <div style={{
+            background: 'var(--bg-tertiary)',
+            borderRadius: 18, padding: '16px 20px',
+            marginBottom: isDesktop ? 24 : 16,
+            border: '1px dashed var(--border-color)',
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <DollarOutlined style={{ fontSize: 18, color: 'var(--text-tertiary)' }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {t('orders.awaitingPrice')}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                {t('orders.awaitingPriceHint')}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* ── Terminal state banner ── */}
@@ -306,7 +423,7 @@ export default function AppOrderDetailPage() {
               <CategoryImage
                 imageUrl={order.selected_category_detail?.image_url}
                 icon={order.selected_category_detail?.icon || 'inbox'}
-                size={28}
+                size={order.selected_category_detail?.image_url ? 44 : 28}
               />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -478,33 +595,140 @@ export default function AppOrderDetailPage() {
           </div>
         </ConfirmSection>
 
-        {/* ── Assigned vehicle ── */}
-        {order.assigned_vehicle_detail && (
-          <ConfirmSection delay={0.35} icon={<CarOutlined />} title={t('orders.assignedVehicle')}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '10px 14px', borderRadius: 12,
-              background: 'var(--accent-bg)',
-            }}>
+        {/* ── Your transport team (approved onward, once admin has assigned) ── */}
+        {PRICE_VISIBLE_STATUSES.includes(order.status)
+          && (order.assigned_vehicle_detail || order.assigned_driver_detail) && (
+          <ConfirmSection delay={0.35} icon={<CarOutlined />} title={t('orders.yourTeam')}>
+            {order.assigned_driver_detail && (
               <div style={{
-                width: 40, height: 40, borderRadius: 12,
-                background: 'var(--accent-bg-strong)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'var(--accent)', fontSize: 18,
+                display: 'flex', alignItems: 'center', gap: 14,
+                padding: '12px 14px', borderRadius: 14,
+                background: 'var(--accent-bg)',
+                marginBottom: order.assigned_vehicle_detail ? 12 : 0,
               }}>
-                <CarOutlined />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {order.assigned_vehicle_detail.name}
-                </div>
-                {order.assigned_vehicle_detail.plate_number && (
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                    {t('orders.plate')}: {order.assigned_vehicle_detail.plate_number}
+                {order.assigned_driver_detail.photo ? (
+                  <img
+                    src={order.assigned_driver_detail.photo}
+                    alt={order.assigned_driver_detail.full_name}
+                    style={{
+                      width: 56, height: 56, borderRadius: '50%', objectFit: 'cover',
+                      flexShrink: 0, border: '2px solid var(--card-bg)',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 56, height: 56, borderRadius: '50%',
+                    background: 'var(--accent-bg-strong)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--accent)', fontSize: 22, flexShrink: 0,
+                  }}>
+                    <UserOutlined />
                   </div>
                 )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600,
+                    textTransform: 'uppercase', letterSpacing: 0.3,
+                  }}>
+                    {t('orders.driver')}
+                  </div>
+                  <div style={{
+                    fontSize: 15, fontWeight: 700, color: 'var(--text-primary)',
+                    marginTop: 2, letterSpacing: -0.1,
+                  }}>
+                    {order.assigned_driver_detail.full_name}
+                  </div>
+                  {order.assigned_driver_detail.phone && (
+                    <a
+                      href={`tel:${order.assigned_driver_detail.phone}`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        marginTop: 6, padding: '5px 12px', borderRadius: 999,
+                        background: 'var(--accent)', color: '#fff',
+                        fontSize: 12, fontWeight: 600, textDecoration: 'none',
+                      }}
+                    >
+                      <PhoneOutlined style={{ fontSize: 11 }} />
+                      {order.assigned_driver_detail.phone}
+                    </a>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+
+            {order.assigned_vehicle_detail && (
+              <div>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 14px', borderRadius: 12,
+                  background: 'var(--bg-tertiary)',
+                }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12,
+                    background: 'var(--accent-bg-strong)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--accent)', fontSize: 18, flexShrink: 0,
+                  }}>
+                    <CarOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {order.assigned_vehicle_detail.name}
+                    </div>
+                    {order.assigned_vehicle_detail.plate_number && (
+                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                        {t('orders.plate')}:{' '}
+                        <span style={{
+                          fontFamily: 'monospace', fontWeight: 700,
+                          color: 'var(--text-secondary)', letterSpacing: 0.5,
+                        }}>
+                          {order.assigned_vehicle_detail.plate_number}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {(() => {
+                  const seen = new Set();
+                  const vehicleImages = [];
+                  if (order.assigned_vehicle_detail.image) {
+                    vehicleImages.push(order.assigned_vehicle_detail.image);
+                    seen.add(order.assigned_vehicle_detail.image);
+                  }
+                  if (Array.isArray(order.assigned_vehicle_detail.images)) {
+                    order.assigned_vehicle_detail.images.forEach((img) => {
+                      if (img?.image && !seen.has(img.image)) {
+                        vehicleImages.push(img.image);
+                        seen.add(img.image);
+                      }
+                    });
+                  }
+                  if (!vehicleImages.length) return null;
+                  return (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{
+                        fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600,
+                        textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8,
+                      }}>
+                        {t('orders.vehiclePhotos')}
+                      </div>
+                      <Image.PreviewGroup>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                          {vehicleImages.map((src, i) => (
+                            <Image
+                              key={i} width={84} height={84} src={src}
+                              style={{ objectFit: 'cover', borderRadius: 12 }}
+                            />
+                          ))}
+                        </div>
+                      </Image.PreviewGroup>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </ConfirmSection>
         )}
 
@@ -571,7 +795,7 @@ export default function AppOrderDetailPage() {
                         fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
                         lineHeight: 1, letterSpacing: -0.1,
                       }}>
-                        {t('status.' + h.new_status) || h.new_status}
+                        {getStatusLabel(t, h.new_status, { isCustomer: true }) || h.new_status}
                       </div>
                       {h.comment && (
                         <div style={{
@@ -595,6 +819,43 @@ export default function AppOrderDetailPage() {
         )}
       </div>
 
+      {/* ── Cancel/Reject Modal with optional reason ── */}
+      <Modal
+        title={order.status === 'offer_sent' ? t('orders.rejectOfferConfirm') : t('orders.cancelConfirm')}
+        open={cancelOpen}
+        onOk={submitCancel}
+        onCancel={() => setCancelOpen(false)}
+        okText={order.status === 'offer_sent' ? t('orders.yesReject') : t('orders.yesCancel')}
+        cancelText={t('common.back')}
+        okButtonProps={{ danger: true, loading: cancelling }}
+        confirmLoading={cancelling}
+        destroyOnClose
+      >
+        <p style={{ marginTop: 0 }}>
+          {order.status === 'offer_sent' ? t('orders.rejectOfferWarning') : t('orders.cancelWarning')}
+        </p>
+        <div style={{ marginTop: 12, marginBottom: 28 }}>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            marginBottom: 6,
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              {t('orders.cancelReasonLabel')}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+              {cancelReason.length} / 500
+            </span>
+          </div>
+          <Input.TextArea
+            rows={3}
+            maxLength={500}
+            placeholder={t('orders.cancelReasonPlaceholder')}
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+          />
+        </div>
+      </Modal>
+
       {/* ── Sticky Cancel CTA ── */}
       {order.is_cancellable && (
         <div style={{
@@ -611,16 +872,42 @@ export default function AppOrderDetailPage() {
               ? 'calc(20px + env(safe-area-inset-bottom, 0px))'
               : 'calc(16px + env(safe-area-inset-bottom, 0px))',
           }}>
-            <Button
-              danger block onClick={handleCancel}
-              icon={<CloseCircleOutlined />}
-              style={{
-                height: 52, borderRadius: 14, fontSize: 15, fontWeight: 700,
-                boxShadow: 'none',
-              }}
-            >
-              {t('orders.cancelOrder')}
-            </Button>
+            {canAcceptOffer ? (
+              <div style={{ display: 'flex', gap: 10 }}>
+                <Button
+                  danger onClick={handleCancel}
+                  icon={<CloseCircleOutlined />}
+                  style={{
+                    flex: 1, height: 52, borderRadius: 14, fontSize: 15, fontWeight: 700,
+                    boxShadow: 'none',
+                  }}
+                >
+                  {t('orders.rejectOffer')}
+                </Button>
+                <Button
+                  type="primary" onClick={handleAcceptOffer}
+                  icon={<CheckCircleOutlined />}
+                  style={{
+                    flex: 1, height: 52, borderRadius: 14, fontSize: 15, fontWeight: 700,
+                    background: 'var(--accent)', borderColor: 'var(--accent)',
+                    boxShadow: '0 4px 14px rgba(0, 184, 86, 0.28)',
+                  }}
+                >
+                  {t('orders.acceptOffer')}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                danger block onClick={handleCancel}
+                icon={<CloseCircleOutlined />}
+                style={{
+                  height: 52, borderRadius: 14, fontSize: 15, fontWeight: 700,
+                  boxShadow: 'none',
+                }}
+              >
+                {t('orders.cancelOrder')}
+              </Button>
+            )}
           </div>
         </div>
       )}

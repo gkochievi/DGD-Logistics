@@ -1,6 +1,7 @@
 export const STATUS_CONFIG = {
   new: { color: 'blue', label: 'New' },
   under_review: { color: 'orange', label: 'Under Review' },
+  offer_sent: { color: 'gold', label: 'Offer Sent' },
   approved: { color: 'cyan', label: 'Approved' },
   rejected: { color: 'red', label: 'Rejected' },
   in_progress: { color: 'geekblue', label: 'In Progress' },
@@ -19,6 +20,16 @@ export const STATUS_OPTIONS = Object.entries(STATUS_CONFIG).map(([value, cfg]) =
   value,
   label: cfg.label,
 }));
+
+export function getStatusLabel(t, status, { isCustomer = false } = {}) {
+  if (isCustomer) {
+    // Customer-facing copy reframes internal states into action-oriented language.
+    const customerKey = `status.${status}_customer`;
+    const translated = t(customerKey);
+    if (translated && translated !== customerKey) return translated;
+  }
+  return t('status.' + status);
+}
 
 export const URGENCY_OPTIONS = Object.entries(URGENCY_CONFIG).map(([value, cfg]) => ({
   value,

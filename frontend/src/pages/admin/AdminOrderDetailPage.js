@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Descriptions, Typography, Spin, Button, Timeline, Image, Space,
-  Select, Input, message, Empty, Grid, Divider, DatePicker, Tag, Alert, Modal,
+  Select, Input, InputNumber, message, Empty, Grid, Divider, DatePicker, Tag, Alert, Modal,
 } from 'antd';
 import dayjs from 'dayjs';
 import { useRealtimeRefresh, useNotifications } from '../../contexts/NotificationContext';
 import {
   ArrowLeftOutlined, TagOutlined, CarOutlined, SyncOutlined,
   CommentOutlined, EnvironmentOutlined, PictureOutlined, HistoryOutlined,
-  ThunderboltOutlined, UserOutlined, ClockCircleOutlined,
+  ThunderboltOutlined, UserOutlined, ClockCircleOutlined, DollarOutlined,
+  PhoneOutlined, SendOutlined, CheckCircleOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
@@ -42,6 +43,7 @@ export default function AdminOrderDetailPage() {
   const [newStatus, setNewStatus] = useState('');
   const [comment, setComment] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [priceDraft, setPriceDraft] = useState(null);
   const { refresh: refreshNotifications } = useNotifications();
 
   useEffect(() => {
@@ -94,6 +96,7 @@ export default function AdminOrderDetailPage() {
       setOrder(data);
       setNewStatus((prev) => prev || data.status);
       setComment((prev) => (prev ? prev : data.admin_comment || ''));
+      setPriceDraft((prev) => (prev !== null ? prev : (data.price !== null && data.price !== undefined ? Math.round(Number(data.price)) : null)));
       // backend auto-marks this order as read; refresh the bell badge quickly
       refreshNotifications();
     }).catch(() => { if (!silent) message.error(t('adminOrderDetail.orderNotFound')); })
@@ -202,6 +205,18 @@ export default function AdminOrderDetailPage() {
     );
   };
 
+  const handlePriceSave = async () => {
+    if (priceDraft === null || priceDraft === undefined || priceDraft === '' || Number(priceDraft) <= 0) {
+      message.error(t('adminOrderDetail.priceInvalid'));
+      return;
+    }
+    await patchOrder(
+      { price: Number(priceDraft) },
+      t('adminOrderDetail.priceSaved'),
+      t('adminOrderDetail.priceSaveFailed'),
+    );
+  };
+
   const handleUrgencyChange = async (urgency) => {
     try {
       await api.patch(`/orders/admin/${id}/`, { urgency });
@@ -210,6 +225,45 @@ export default function AdminOrderDetailPage() {
     } catch {
       message.error(t('adminOrderDetail.urgencyUpdateFailed'));
     }
+  };
+
+  const handleSendOffer = () => {
+    const priceNum = priceDraft === null || priceDraft === undefined || priceDraft === ''
+      ? null : Number(priceDraft);
+    if (priceNum === null || !Number.isFinite(priceNum) || priceNum <= 0) {
+      message.error(t('adminOrderDetail.priceInvalid'));
+      return;
+    }
+    if (!order.assigned_vehicle || !order.assigned_driver) {
+      message.error(t('adminOrderDetail.missingForOffer'));
+      return;
+    }
+    Modal.confirm({
+      title: t('adminOrderDetail.sendForApprovalConfirm'),
+      content: t('adminOrderDetail.sendForApprovalContent'),
+      okText: t('adminOrderDetail.sendForApprovalOk'),
+      okType: 'primary',
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        setUpdating(true);
+        try {
+          // Persist the latest typed price so admin doesn't need a separate Save step.
+          if (priceNum !== Number(order.price)) {
+            await api.patch(`/orders/admin/${id}/`, { price: priceNum });
+          }
+          await api.post(`/orders/admin/${id}/status/`, {
+            status: 'offer_sent',
+            comment: (comment || order.admin_comment || '').trim(),
+          });
+          message.success(t('adminOrderDetail.offerSentSuccess'));
+          fetchOrder();
+        } catch (err) {
+          message.error(err.response?.data?.detail || t('adminOrderDetail.statusUpdateFailed'));
+        } finally {
+          setUpdating(false);
+        }
+      },
+    });
   };
 
   const handleCommentSave = async () => {
@@ -232,6 +286,42 @@ export default function AdminOrderDetailPage() {
   const isMobile = !screens.md;
   const TERMINAL_STATUSES = ['completed', 'rejected', 'cancelled'];
   const isTerminal = TERMINAL_STATUSES.includes(order.status);
+  // With the new flow, `approved` means the customer has already accepted.
+  const customerAccepted = ['approved', 'in_progress', 'completed'].includes(order.status);
+  const awaitingAcceptance = order.status === 'offer_sent';
+  const priceIsSet = order.price !== null && order.price !== undefined && Number(order.price) > 0;
+  const priceDraftValid = priceDraft !== null && priceDraft !== undefined && priceDraft !== ''
+    && Number.isFinite(Number(priceDraft)) && Number(priceDraft) > 0;
+  // Admin hasn't sent the offer yet — "Send for Customer Approval" persists the
+  // typed price itself, so a separate Save Price button would be redundant.
+  const preOfferStatuses = ['new', 'under_review'];
+  const showSavePriceButton = !preOfferStatuses.includes(order.status);
+  const readyToSendOffer = (
+    order.status === 'under_review'
+    && (priceIsSet || priceDraftValid)
+    && Boolean(order.assigned_vehicle)
+    && Boolean(order.assigned_driver)
+  );
+  const statusOptionsForOrder = STATUS_OPTIONS
+    // Cancellation is customer-only.
+    .filter((opt) => opt.value !== 'cancelled' || order.status === 'cancelled')
+    // "New" is the entry state.
+    .filter((opt) => opt.value !== 'new' || order.status === 'new')
+    // "Approved" is customer-only — admin uses "Send for Approval" to send the offer.
+    .filter((opt) => opt.value !== 'approved' || order.status === 'approved')
+    .map((opt) => {
+      if (opt.value === 'in_progress' && !customerAccepted && order.status !== 'in_progress') {
+        return { ...opt, disabled: true };
+      }
+      if (opt.value === 'offer_sent' && !priceIsSet && order.status !== 'offer_sent') {
+        return { ...opt, disabled: true };
+      }
+      // Completion requires the job to be in progress first.
+      if (opt.value === 'completed' && order.status !== 'in_progress' && order.status !== 'completed') {
+        return { ...opt, disabled: true };
+      }
+      return opt;
+    });
 
   const sectionStyle = {
     background: 'var(--card-bg)',
@@ -293,6 +383,9 @@ export default function AdminOrderDetailPage() {
             <Descriptions.Item label={t('adminOrderDetail.selectedCategory')}>
               {localized(order.selected_category_detail?.name) || '—'}
             </Descriptions.Item>
+            <Descriptions.Item label={t('adminOrderDetail.finalCategory')}>
+              {localized(order.final_category_detail?.name) || '—'}
+            </Descriptions.Item>
             <Descriptions.Item label={t('adminOrderDetail.suggestedCategory')}>
               {localized(order.suggested_category_detail?.name) || '—'}
             </Descriptions.Item>
@@ -346,6 +439,87 @@ export default function AdminOrderDetailPage() {
               style={{ borderRadius: 10, marginBottom: 20 }}
             />
           )}
+          {awaitingAcceptance && (
+            <Alert
+              type="warning"
+              showIcon
+              message={t('adminOrderDetail.offerSentTitle')}
+              description={t('adminOrderDetail.offerSentDescription')}
+              style={{ borderRadius: 10, marginBottom: 20 }}
+            />
+          )}
+
+          {/* Primary action: Send for Customer Approval — only when the offer
+              hasn't been sent yet. Once sent, the banner above covers it. */}
+          {!isTerminal && (order.status === 'new' || order.status === 'under_review') && (
+            <div style={{
+              background: readyToSendOffer
+                ? 'linear-gradient(135deg, var(--accent-bg) 0%, var(--accent-bg-strong) 100%)'
+                : 'var(--bg-tertiary)',
+              borderRadius: 14,
+              padding: isMobile ? '14px 16px' : '16px 20px',
+              border: `1px solid ${readyToSendOffer ? 'var(--accent-bg-strong)' : 'var(--border-color)'}`,
+              marginBottom: 20,
+              display: 'flex', alignItems: 'center',
+              gap: 12, flexWrap: 'wrap',
+            }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{
+                  fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
+                  letterSpacing: -0.1,
+                }}>
+                  {t('adminOrderDetail.sendForApproval')}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                  {readyToSendOffer
+                    ? t('adminOrderDetail.sendForApprovalContent')
+                    : t('adminOrderDetail.missingForOffer')}
+                </div>
+              </div>
+              <Button
+                type="primary"
+                size={isMobile ? 'large' : 'middle'}
+                icon={<SendOutlined />}
+                loading={updating}
+                disabled={!readyToSendOffer}
+                onClick={handleSendOffer}
+                style={{
+                  background: 'var(--accent)', borderColor: 'var(--accent)',
+                  borderRadius: 10, fontWeight: 700,
+                  ...(isMobile ? { width: '100%', height: 44 } : {}),
+                }}
+              >
+                {t('adminOrderDetail.sendForApproval')}
+              </Button>
+            </div>
+          )}
+
+          {/* When customer has accepted, highlight the next logical step */}
+          {order.status === 'approved' && (
+            <div style={{
+              background: 'linear-gradient(135deg, #10b98114 0%, #10b98120 100%)',
+              borderRadius: 14, padding: isMobile ? '14px 16px' : '16px 20px',
+              border: '1px solid #10b98140',
+              marginBottom: 20,
+              display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+            }}>
+              <CheckCircleOutlined style={{ color: '#10b981', fontSize: 22, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{
+                  fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
+                  letterSpacing: -0.1,
+                }}>
+                  {t('adminOrderDetail.customerAccepted')}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                  {order.customer_accepted_at && t('adminOrderDetail.customerAcceptedAt', {
+                    date: new Date(order.customer_accepted_at).toLocaleString(),
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Assign Category */}
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -389,13 +563,79 @@ export default function AdminOrderDetailPage() {
             />
             {order.assigned_vehicle_detail && (
               <div style={{
-                marginTop: 10, padding: '10px 14px',
-                background: 'var(--accent-bg)', borderRadius: 10,
-                fontSize: 13, color: 'var(--text-secondary)',
+                marginTop: 10, padding: '12px 14px',
+                background: 'var(--accent-bg)', borderRadius: 12,
                 border: '1px solid var(--accent-bg-strong)',
               }}>
-                {order.assigned_vehicle_detail.name} · {order.assigned_vehicle_detail.plate_number}
-                {order.assigned_vehicle_detail.price_per_hour && ` · ${currency.symbol}${order.assigned_vehicle_detail.price_per_hour}/hr`}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12,
+                    background: 'var(--accent-bg-strong)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--accent)', fontSize: 18, flexShrink: 0,
+                  }}>
+                    <CarOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {order.assigned_vehicle_detail.name}
+                    </div>
+                    <div style={{
+                      fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2,
+                      display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                    }}>
+                      {order.assigned_vehicle_detail.plate_number && (
+                        <span>
+                          {t('orders.plate')}:{' '}
+                          <span style={{
+                            fontFamily: 'monospace', fontWeight: 700,
+                            color: 'var(--text-secondary)', letterSpacing: 0.5,
+                          }}>
+                            {order.assigned_vehicle_detail.plate_number}
+                          </span>
+                        </span>
+                      )}
+                      {order.assigned_vehicle_detail.price_per_hour && (
+                        <span>{currency.symbol}{order.assigned_vehicle_detail.price_per_hour}/hr</span>
+                      )}
+                      {order.assigned_vehicle_detail.status_display && (
+                        <Tag style={{ margin: 0 }}>{order.assigned_vehicle_detail.status_display}</Tag>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {(() => {
+                  const seen = new Set();
+                  const imgs = [];
+                  if (order.assigned_vehicle_detail.image) {
+                    imgs.push(order.assigned_vehicle_detail.image);
+                    seen.add(order.assigned_vehicle_detail.image);
+                  }
+                  if (Array.isArray(order.assigned_vehicle_detail.images)) {
+                    order.assigned_vehicle_detail.images.forEach((img) => {
+                      if (img?.image && !seen.has(img.image)) {
+                        imgs.push(img.image);
+                        seen.add(img.image);
+                      }
+                    });
+                  }
+                  if (!imgs.length) return null;
+                  return (
+                    <div style={{ marginTop: 10 }}>
+                      <Image.PreviewGroup>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {imgs.map((src, i) => (
+                            <Image
+                              key={i} width={72} height={72} src={src}
+                              style={{ objectFit: 'cover', borderRadius: 10 }}
+                            />
+                          ))}
+                        </div>
+                      </Image.PreviewGroup>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -437,15 +677,63 @@ export default function AdminOrderDetailPage() {
                 />
                 {order.assigned_driver_detail && (
                   <div style={{
-                    marginTop: 10, padding: '10px 14px',
-                    background: 'var(--accent-bg)', borderRadius: 10,
-                    fontSize: 13, color: 'var(--text-secondary)',
+                    marginTop: 10, padding: '12px 14px',
+                    background: 'var(--accent-bg)', borderRadius: 12,
                     border: '1px solid var(--accent-bg-strong)',
+                    display: 'flex', alignItems: 'center', gap: 14,
                   }}>
-                    {order.assigned_driver_detail.full_name} · {order.assigned_driver_detail.phone}
-                    {order.assigned_driver_detail.license_categories && (
-                      <> · <Tag style={{ margin: 0 }}>{order.assigned_driver_detail.license_categories}</Tag></>
+                    {order.assigned_driver_detail.photo ? (
+                      <img
+                        src={order.assigned_driver_detail.photo}
+                        alt={order.assigned_driver_detail.full_name}
+                        style={{
+                          width: 52, height: 52, borderRadius: '50%',
+                          objectFit: 'cover', flexShrink: 0,
+                          border: '2px solid var(--card-bg)',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: 52, height: 52, borderRadius: '50%',
+                        background: 'var(--accent-bg-strong)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'var(--accent)', fontSize: 20, flexShrink: 0,
+                      }}>
+                        <UserOutlined />
+                      </div>
                     )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {order.assigned_driver_detail.full_name}
+                      </div>
+                      <div style={{
+                        fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4,
+                        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                      }}>
+                        {order.assigned_driver_detail.phone && (
+                          <a
+                            href={`tel:${order.assigned_driver_detail.phone}`}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 4,
+                              color: 'var(--accent)', fontWeight: 600, textDecoration: 'none',
+                            }}
+                          >
+                            <PhoneOutlined style={{ fontSize: 11 }} />
+                            {order.assigned_driver_detail.phone}
+                          </a>
+                        )}
+                        {order.assigned_driver_detail.license_number && (
+                          <span>· {order.assigned_driver_detail.license_number}</span>
+                        )}
+                        {order.assigned_driver_detail.license_categories && (
+                          <Tag style={{ margin: 0 }}>{order.assigned_driver_detail.license_categories}</Tag>
+                        )}
+                        {order.assigned_driver_detail.status_display && (
+                          <Tag style={{ margin: 0 }}>{order.assigned_driver_detail.status_display}</Tag>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </>
@@ -476,6 +764,54 @@ export default function AdminOrderDetailPage() {
             />
             <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
               {t('adminOrderDetail.scheduleHint')}
+            </div>
+          </div>
+
+          <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+          {/* Set Price */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <DollarOutlined style={{ color: '#10b981', fontSize: 14 }} />
+              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                {t('adminOrderDetail.setPrice')}
+              </Text>
+              {order.status === 'new' || order.status === 'under_review' ? (
+                <Tag color="orange" style={{ margin: 0, borderRadius: 6 }}>
+                  {t('adminOrderDetail.priceRequiredTag')}
+                </Tag>
+              ) : null}
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <InputNumber
+                style={{ width: isMobile ? '100%' : 200 }}
+                size={isMobile ? 'large' : 'middle'}
+                value={priceDraft ?? undefined}
+                onChange={(val) => setPriceDraft(val === null || val === undefined ? null : Math.round(Number(val)))}
+                min={0}
+                step={10}
+                precision={0}
+                disabled={isTerminal}
+                placeholder={t('adminOrderDetail.priceInputPlaceholder')}
+                prefix={<span style={{ color: 'var(--text-tertiary)' }}>{currency.symbol}</span>}
+              />
+              {showSavePriceButton && (
+                <Button
+                  onClick={handlePriceSave}
+                  disabled={isTerminal}
+                  size={isMobile ? 'large' : 'middle'}
+                  style={{
+                    borderRadius: 10, fontWeight: 600,
+                    border: '1px solid var(--border-color)',
+                    ...(isMobile ? { width: '100%', height: 44 } : {}),
+                  }}
+                >
+                  {t('adminOrderDetail.savePrice')}
+                </Button>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
+              {showSavePriceButton ? t('adminOrderDetail.priceHint') : t('adminOrderDetail.priceHintPreOffer')}
             </div>
           </div>
 
@@ -521,7 +857,7 @@ export default function AdminOrderDetailPage() {
                 value={newStatus}
                 onChange={setNewStatus}
                 disabled={isTerminal}
-                options={STATUS_OPTIONS}
+                options={statusOptionsForOrder}
               />
               <Button
                 type="primary"
@@ -540,6 +876,11 @@ export default function AdminOrderDetailPage() {
                 {t('adminOrderDetail.updateStatus')}
               </Button>
             </div>
+            {awaitingAcceptance && (
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 8 }}>
+                {t('adminOrderDetail.inProgressLockedHint')}
+              </div>
+            )}
           </div>
 
           <Divider style={{ borderColor: 'var(--border-color)' }} />

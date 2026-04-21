@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
 import { useRealtimeRefresh } from '../../contexts/NotificationContext';
-import { STATUS_CONFIG, URGENCY_CONFIG } from '../../utils/status';
+import { STATUS_CONFIG, URGENCY_CONFIG, getStatusLabel } from '../../utils/status';
 import { CategoryImage } from '../../utils/categoryIcons';
 
 const { useBreakpoint } = Grid;
@@ -239,7 +239,7 @@ function OrderCard({ order, onClick, t, lang, delay = 0 }) {
       }} />
 
       <div style={{
-        flex: 1, display: 'flex', alignItems: 'center', gap: 14,
+        flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 14,
         padding: '14px 14px 14px 12px',
       }}>
         <div style={{
@@ -249,7 +249,7 @@ function OrderCard({ order, onClick, t, lang, delay = 0 }) {
           alignItems: 'center', justifyContent: 'center',
           color: catColor, flexShrink: 0, overflow: 'hidden',
         }}>
-          <CategoryImage imageUrl={order.selected_category_image} icon={order.selected_category_icon} size={36} />
+          <CategoryImage imageUrl={order.selected_category_image} icon={order.selected_category_icon} size={order.selected_category_image ? 52 : 36} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
@@ -299,7 +299,7 @@ function OrderCard({ order, onClick, t, lang, delay = 0 }) {
             borderRadius: 8,
             whiteSpace: 'nowrap',
           }}>
-            {t('status.' + order.status) || order.status}
+            {getStatusLabel(t, order.status, { isCustomer: true }) || order.status}
           </div>
           <RightOutlined style={{ color: 'var(--text-placeholder)', fontSize: 11 }} />
         </div>

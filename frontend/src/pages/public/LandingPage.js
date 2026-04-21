@@ -367,7 +367,7 @@ export default function LandingPage() {
                     <div
                       className="lt-cat-icon"
                       style={{
-                        width: 64, height: 64, borderRadius: 16,
+                        width: 88, height: 88, borderRadius: 20,
                         background: 'var(--accent-bg)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         margin: '0 auto 14px',
@@ -375,7 +375,7 @@ export default function LandingPage() {
                         transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1)',
                       }}
                     >
-                      <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={44} />
+                      <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={cat.image_url ? 88 : 56} />
                     </div>
                     <h4 style={{
                       fontSize: 15, fontWeight: 700, color: 'var(--text-primary)',
