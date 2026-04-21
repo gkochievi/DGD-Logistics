@@ -1,9 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Row, Col, Typography, List, Spin, Button, Grid, Progress } from 'antd';
 import {
-  TeamOutlined, CheckCircleOutlined,
-  ClockCircleOutlined, PlusCircleOutlined, ExclamationCircleOutlined,
-  RightOutlined, CarOutlined, UserOutlined,
+  TeamOutlined, RightOutlined, CarOutlined, UserOutlined,
   RiseOutlined, FallOutlined, MinusOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -36,7 +34,7 @@ export default function AdminDashboard() {
     ]).then(([statsRes, ordersRes]) => {
       setStats(statsRes.data);
       const results = ordersRes.data.results || ordersRes.data;
-      setRecentOrders(Array.isArray(results) ? results.slice(0, 8) : []);
+      setRecentOrders(Array.isArray(results) ? results.slice(0, 5) : []);
     }).catch(() => {})
       .finally(() => { if (!silent) setLoading(false); });
   }, []);
@@ -63,10 +61,6 @@ export default function AdminDashboard() {
 
   const statCards = [
     { title: t('adminDash.totalUsers'), value: stats?.total_users, icon: <TeamOutlined />, color: 'var(--accent)', path: '/admin/users' },
-    { title: t('adminDash.newOrders'), value: stats?.new_orders, icon: <PlusCircleOutlined />, color: '#f59e0b', path: '/admin/orders?status=new' },
-    { title: t('adminDash.needsReview'), value: stats?.under_review_orders, icon: <ExclamationCircleOutlined />, color: '#a855f7', path: '/admin/orders?status=under_review' },
-    { title: t('adminDash.inProgress'), value: stats?.in_progress_orders, icon: <ClockCircleOutlined />, color: '#06b6d4', path: '/admin/orders?status=in_progress' },
-    { title: t('adminDash.completed'), value: stats?.completed_orders, icon: <CheckCircleOutlined />, color: '#10b981', path: '/admin/orders?status=completed' },
     { title: t('adminDash.vehicles'), value: stats?.total_vehicles, icon: <CarOutlined />, color: 'var(--accent)', path: '/admin/vehicles' },
     { title: t('adminDash.drivers'), value: stats?.total_drivers, icon: <UserOutlined />, color: '#ec4899', path: '/admin/drivers' },
   ];
@@ -110,7 +104,7 @@ export default function AdminDashboard() {
       {/* Stat cards */}
       <Row gutter={[16, 16]} style={{ marginBottom: 28 }}>
         {statCards.map((s, i) => (
-          <Col xs={12} sm={8} md={6} lg={6} xl={4} key={i}>
+          <Col xs={24} sm={8} key={i}>
             <div
               className="card-interactive"
               onClick={() => s.path && navigate(s.path)}

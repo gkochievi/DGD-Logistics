@@ -5,8 +5,10 @@ import {
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, UserOutlined, StopOutlined, CheckCircleOutlined,
-  SearchOutlined, FilterOutlined,
+  SearchOutlined, FilterOutlined, FileTextOutlined,
 } from '@ant-design/icons';
+import { Link } from 'react-router-dom';
+import { StatusBadge } from '../../components/common/StatusBadge';
 import dayjs from 'dayjs';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
@@ -35,6 +37,7 @@ export default function AdminDriversPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState(null);
+  const [editingDriverDetail, setEditingDriverDetail] = useState(null);
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -80,12 +83,17 @@ export default function AdminDriversPage() {
 
   const openModal = (driver = null) => {
     setEditingDriver(driver);
+    setEditingDriverDetail(null);
     if (driver) {
       const values = { ...driver };
       DATE_FIELDS.forEach((f) => { values[f] = driver[f] ? dayjs(driver[f]) : null; });
       values.vehicles = (driver.vehicles || []).map((v) => v.id);
       values.license_categories = parseLicenseCategories(driver.license_categories);
       form.setFieldsValue(values);
+      // Fetch detail for active orders (list endpoint omits them).
+      api.get(`/drivers/admin/${driver.id}/`).then(({ data }) => {
+        setEditingDriverDetail(data);
+      }).catch(() => {});
     } else {
       form.resetFields();
       form.setFieldsValue({
@@ -187,8 +195,19 @@ export default function AdminDriversPage() {
       render: renderVehicleTags,
     },
     {
-      title: t('adminVehicles.status'), dataIndex: 'status', width: 120,
-      render: (s) => <Tag color={DRIVER_STATUS_COLORS[s]}>{getDriverStatusLabel(s)}</Tag>,
+      title: t('adminVehicles.status'), dataIndex: 'status', width: 140,
+      render: (s, r) => (
+        <Space size={4} direction="vertical" style={{ lineHeight: 1 }}>
+          <Tag color={DRIVER_STATUS_COLORS[s]} style={{ margin: 0 }}>
+            {getDriverStatusLabel(s)}
+          </Tag>
+          {r.is_busy && (
+            <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>
+              {t('adminDrivers.busy')} · {r.active_orders_count}
+            </Tag>
+          )}
+        </Space>
+      ),
     },
     {
       title: '', width: 90,
@@ -379,6 +398,49 @@ export default function AdminDriversPage() {
         }}
       >
         <Form form={form} layout="vertical" onFinish={handleSave} requiredMark={false}>
+          {editingDriver && editingDriverDetail?.active_orders?.length > 0 && (
+            <div style={{
+              marginBottom: 18, padding: 14,
+              background: 'var(--bg-secondary)', borderRadius: 12,
+              border: '1px solid var(--border-color)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <FileTextOutlined style={{ color: 'var(--accent)' }} />
+                <Text style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>
+                  {t('adminDrivers.activeOrders')} · {editingDriverDetail.active_orders.length}
+                </Text>
+              </div>
+              <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                {editingDriverDetail.active_orders.map((o) => (
+                  <Link
+                    key={o.id}
+                    to={`/admin/orders/${o.id}`}
+                    onClick={() => setModalOpen(false)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 10px', borderRadius: 8,
+                      background: 'var(--card-bg)', border: '1px solid var(--border-color)',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Text style={{ fontWeight: 600, color: 'var(--text-primary)' }}>#{o.id}</Text>
+                    <StatusBadge status={o.status} />
+                    <Text style={{
+                      color: 'var(--text-secondary)', fontSize: 12, flex: 1,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {o.pickup_location}
+                    </Text>
+                    {o.scheduled_from && (
+                      <Text style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                        {dayjs(o.scheduled_from).format('MMM D HH:mm')}
+                      </Text>
+                    )}
+                  </Link>
+                ))}
+              </Space>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 14, flexDirection: isMobile ? 'column' : 'row' }}>
             <Form.Item
               name="first_name"

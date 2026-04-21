@@ -34,6 +34,10 @@ class Order(models.Model):
     ]
 
     CANCELLABLE_STATUSES = [STATUS_NEW, STATUS_UNDER_REVIEW]
+    # Statuses that occupy a vehicle/driver's schedule.
+    ACTIVE_STATUSES = [STATUS_APPROVED, STATUS_IN_PROGRESS]
+    # Statuses that free the vehicle/driver (resource released).
+    RELEASED_STATUSES = [STATUS_COMPLETED, STATUS_REJECTED, STATUS_CANCELLED]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='orders')
     suggested_category = models.ForeignKey(
@@ -53,6 +57,12 @@ class Order(models.Model):
         'vehicles.Vehicle', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='orders',
     )
+    assigned_driver = models.ForeignKey(
+        'drivers.Driver', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='orders',
+    )
+    scheduled_from = models.DateTimeField(null=True, blank=True)
+    scheduled_to = models.DateTimeField(null=True, blank=True)
 
     pickup_location = models.CharField(max_length=500)
     pickup_lat = models.FloatField(null=True, blank=True)

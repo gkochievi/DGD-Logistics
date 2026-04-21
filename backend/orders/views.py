@@ -6,7 +6,9 @@ from django.utils import timezone
 from django.db.models import Q
 
 from accounts.permissions import IsAdmin
+from rest_framework.exceptions import ValidationError
 from .models import Order, OrderStatusHistory, OrderImage
+from .assignment import sync_vehicle_status, validate_assignment
 from .serializers import (
     OrderListSerializer, OrderDetailSerializer, OrderCreateSerializer,
     AdminOrderUpdateSerializer, OrderImageSerializer,
@@ -165,11 +167,31 @@ class AdminOrderStatusChangeView(APIView):
         except Order.DoesNotExist:
             return Response({'detail': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+        if order.status in Order.RELEASED_STATUSES:
+            return Response(
+                {'detail': f'Order is {order.get_status_display().lower()} and cannot be modified.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         new_status = request.data.get('status')
         comment = request.data.get('comment', '')
 
         if new_status not in dict(Order.STATUS_CHOICES):
             return Response({'detail': 'Invalid status.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Transitioning into an active state re-checks assignments for conflicts.
+        if new_status in Order.ACTIVE_STATUSES and new_status != order.status:
+            try:
+                validate_assignment(
+                    order,
+                    vehicle=order.assigned_vehicle,
+                    driver=order.assigned_driver,
+                    scheduled_from=order.scheduled_from,
+                    scheduled_to=order.scheduled_to,
+                    target_status=new_status,
+                )
+            except ValidationError as e:
+                return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
 
         old_status = order.status
         order.status = new_status
@@ -182,6 +204,9 @@ class AdminOrderStatusChangeView(APIView):
             changed_by=request.user, comment=comment,
         )
         _stamp_event(order, f'status:{new_status}', customer_unread=True)
+
+        # Re-sync vehicle availability after status change.
+        sync_vehicle_status(order.assigned_vehicle)
 
         return Response(OrderDetailSerializer(order).data)
 

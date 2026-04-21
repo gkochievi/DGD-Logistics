@@ -43,3 +43,9 @@ class Driver(models.Model):
     @property
     def full_name(self):
         return f'{self.first_name} {self.last_name}'.strip()
+
+    @property
+    def is_busy(self):
+        """True if the driver has any active-status orders assigned right now."""
+        from orders.models import Order
+        return self.orders.filter(status__in=Order.ACTIVE_STATUSES).exists()

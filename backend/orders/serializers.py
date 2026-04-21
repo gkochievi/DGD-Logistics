@@ -1,8 +1,20 @@
 from rest_framework import serializers
 from .models import Order, OrderImage, OrderStatusHistory
+from .assignment import validate_assignment, sync_vehicle_status
 from categories.serializers import TransportCategoryPublicSerializer
 from accounts.serializers import UserSerializer
 from vehicles.serializers import VehicleListSerializer
+
+
+class OrderAssignedDriverSerializer(serializers.Serializer):
+    """Minimal driver payload nested into OrderDetail."""
+    id = serializers.IntegerField(read_only=True)
+    full_name = serializers.CharField(read_only=True)
+    phone = serializers.CharField(read_only=True)
+    license_number = serializers.CharField(read_only=True)
+    license_categories = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
 
 
 class OrderImageSerializer(serializers.ModelSerializer):
@@ -82,6 +94,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     suggested_category_detail = TransportCategoryPublicSerializer(source='suggested_category', read_only=True)
     final_category_detail = TransportCategoryPublicSerializer(source='final_category', read_only=True)
     assigned_vehicle_detail = VehicleListSerializer(source='assigned_vehicle', read_only=True)
+    assigned_driver_detail = OrderAssignedDriverSerializer(source='assigned_driver', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     urgency_display = serializers.CharField(source='get_urgency_display', read_only=True)
     user_detail = UserSerializer(source='user', read_only=True)
@@ -94,6 +107,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'selected_category', 'selected_category_detail',
             'final_category', 'final_category_detail',
             'assigned_vehicle', 'assigned_vehicle_detail',
+            'assigned_driver', 'assigned_driver_detail',
+            'scheduled_from', 'scheduled_to',
             'pickup_location', 'pickup_lat', 'pickup_lng',
             'destination_location', 'destination_lat', 'destination_lng',
             'requested_date', 'requested_time',
@@ -155,12 +170,50 @@ class OrderCreateSerializer(serializers.ModelSerializer):
 class AdminOrderUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
-        fields = ['final_category', 'assigned_vehicle', 'admin_comment', 'status', 'urgency']
+        fields = [
+            'final_category', 'assigned_vehicle', 'assigned_driver',
+            'scheduled_from', 'scheduled_to',
+            'admin_comment', 'status', 'urgency',
+        ]
+
+    def validate(self, attrs):
+        """Run cross-field assignment validation against merged state."""
+        instance = self.instance
+
+        # Terminal orders are frozen — no field edits allowed.
+        if instance.status in Order.RELEASED_STATUSES:
+            raise serializers.ValidationError({
+                'status': f'Order is {instance.get_status_display().lower()} and cannot be modified.'
+            })
+
+        def resolved(field):
+            return attrs[field] if field in attrs else getattr(instance, field, None)
+
+        target_vehicle = resolved('assigned_vehicle')
+        target_driver = resolved('assigned_driver')
+        target_from = resolved('scheduled_from')
+        target_to = resolved('scheduled_to')
+        target_status = resolved('status')
+
+        validate_assignment(
+            instance,
+            vehicle=target_vehicle,
+            driver=target_driver,
+            scheduled_from=target_from,
+            scheduled_to=target_to,
+            target_status=target_status,
+        )
+        return attrs
 
     def update(self, instance, validated_data):
         from django.utils import timezone
         new_status = validated_data.get('status')
         status_changed = bool(new_status) and new_status != instance.status
+        # Track vehicles whose status may need to be re-synced:
+        # the old vehicle (if reassigned) and the new vehicle.
+        old_vehicle = instance.assigned_vehicle
+        new_vehicle = validated_data.get('assigned_vehicle', old_vehicle)
+
         if status_changed:
             OrderStatusHistory.objects.create(
                 order=instance,
@@ -176,7 +229,15 @@ class AdminOrderUpdateSerializer(serializers.ModelSerializer):
             instance.is_read_by_customer = False
             instance.last_event_type = 'updated'
             instance.last_event_at = timezone.now()
-        return super().update(instance, validated_data)
+
+        result = super().update(instance, validated_data)
+
+        # Keep vehicle.status aligned with active assignments.
+        sync_vehicle_status(old_vehicle)
+        if new_vehicle and new_vehicle != old_vehicle:
+            sync_vehicle_status(new_vehicle)
+
+        return result
 
 
 class AdminCommentSerializer(serializers.Serializer):

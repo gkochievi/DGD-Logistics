@@ -180,7 +180,7 @@ export default function NewOrderFlow() {
       fd.append('description', values.description);
       const cargoParts = [];
       if (values.cargo_length || values.cargo_width || values.cargo_height) {
-        cargoParts.push(`${values.cargo_length || '-'} × ${values.cargo_width || '-'} × ${values.cargo_height || '-'} cm`);
+        cargoParts.push(`${values.cargo_length || '-'} × ${values.cargo_width || '-'} × ${values.cargo_height || '-'} m`);
       }
       if (values.cargo_weight) cargoParts.push(`${values.cargo_weight} kg`);
       fd.append('cargo_details', cargoParts.join(', '));

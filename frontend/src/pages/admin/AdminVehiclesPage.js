@@ -6,7 +6,11 @@ import {
 import {
   PlusOutlined, EditOutlined, PictureOutlined, DeleteOutlined,
   StopOutlined, CheckCircleOutlined, DownOutlined, SearchOutlined, FilterOutlined,
+  FileTextOutlined, UserOutlined,
 } from '@ant-design/icons';
+import { Link } from 'react-router-dom';
+import dayjs from 'dayjs';
+import { StatusBadge } from '../../components/common/StatusBadge';
 import api from '../../api/client';
 import { CategoryImage } from '../../utils/categoryIcons';
 import { useLang } from '../../contexts/LanguageContext';
@@ -46,6 +50,7 @@ export default function AdminVehiclesPage() {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [vehicleImages, setVehicleImages] = useState([]);
+  const [vehicleDetail, setVehicleDetail] = useState(null);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState('');
@@ -91,12 +96,16 @@ export default function AdminVehiclesPage() {
 
   const openModal = (vehicle = null) => {
     setEditingVehicle(vehicle);
+    setVehicleDetail(null);
     if (vehicle) {
       form.setFieldsValue({
         ...vehicle,
         license_categories: parseLicenseCategories(vehicle.license_categories),
       });
       setVehicleImages(vehicle.images || []);
+      api.get(`/vehicles/admin/${vehicle.id}/`).then(({ data }) => {
+        setVehicleDetail(data);
+      }).catch(() => {});
     } else {
       form.resetFields();
       form.setFieldsValue({ status: 'available', is_active: true, license_categories: [] });
@@ -262,7 +271,9 @@ export default function AdminVehiclesPage() {
             style={{ cursor: 'pointer', margin: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}
             onClick={(e) => e.stopPropagation()}
           >
-            {getVehicleStatusLabel(s)} <DownOutlined style={{ fontSize: 9 }} />
+            {getVehicleStatusLabel(s)}
+            {record.active_orders_count > 0 && ` · ${record.active_orders_count}`}
+            <DownOutlined style={{ fontSize: 9 }} />
           </Tag>
         </Dropdown>
       ),
@@ -513,6 +524,82 @@ export default function AdminVehiclesPage() {
         }}
       >
         <Form form={form} layout="vertical" onFinish={handleSave} requiredMark={false}>
+          {editingVehicle && vehicleDetail && (
+            (vehicleDetail.drivers?.length > 0 || vehicleDetail.active_orders?.length > 0) && (
+              <div style={{
+                marginBottom: 18, padding: 14,
+                background: 'var(--bg-secondary)', borderRadius: 12,
+                border: '1px solid var(--border-color)',
+                display: 'flex', flexDirection: 'column', gap: 14,
+              }}>
+                {vehicleDetail.drivers?.length > 0 && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <UserOutlined style={{ color: 'var(--accent)' }} />
+                      <Text style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>
+                        {t('adminVehicles.linkedDrivers')} · {vehicleDetail.drivers.length}
+                      </Text>
+                    </div>
+                    <Space size={6} wrap>
+                      {vehicleDetail.drivers.map((d) => (
+                        <Tag
+                          key={d.id}
+                          color={d.status === 'active' ? 'green' : 'default'}
+                          style={{ margin: 0 }}
+                        >
+                          {d.full_name} · {d.phone}
+                        </Tag>
+                      ))}
+                    </Space>
+                  </div>
+                )}
+                {vehicleDetail.active_orders?.length > 0 && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <FileTextOutlined style={{ color: 'var(--accent)' }} />
+                      <Text style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>
+                        {t('adminVehicles.activeOrders')} · {vehicleDetail.active_orders.length}
+                      </Text>
+                    </div>
+                    <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                      {vehicleDetail.active_orders.map((o) => (
+                        <Link
+                          key={o.id}
+                          to={`/admin/orders/${o.id}`}
+                          onClick={() => setModalOpen(false)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '8px 10px', borderRadius: 8,
+                            background: 'var(--card-bg)', border: '1px solid var(--border-color)',
+                            textDecoration: 'none',
+                          }}
+                        >
+                          <Text style={{ fontWeight: 600, color: 'var(--text-primary)' }}>#{o.id}</Text>
+                          <StatusBadge status={o.status} />
+                          {o.assigned_driver_name && (
+                            <Text style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                              {o.assigned_driver_name}
+                            </Text>
+                          )}
+                          <Text style={{
+                            color: 'var(--text-tertiary)', fontSize: 12, flex: 1,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {o.pickup_location}
+                          </Text>
+                          {o.scheduled_from && (
+                            <Text style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                              {dayjs(o.scheduled_from).format('MMM D HH:mm')}
+                            </Text>
+                          )}
+                        </Link>
+                      ))}
+                    </Space>
+                  </div>
+                )}
+              </div>
+            )
+          )}
           <Form.Item
             name="name"
             label={<span style={{ fontWeight: 600 }}>{t('adminVehicles.vehicleName')}</span>}

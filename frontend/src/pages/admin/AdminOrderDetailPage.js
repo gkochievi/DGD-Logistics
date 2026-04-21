@@ -1,13 +1,14 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Descriptions, Typography, Spin, Button, Timeline, Image, Space,
-  Select, Input, message, Empty, Grid, Divider,
+  Select, Input, message, Empty, Grid, Divider, DatePicker, Tag, Alert, Modal,
 } from 'antd';
+import dayjs from 'dayjs';
 import { useRealtimeRefresh, useNotifications } from '../../contexts/NotificationContext';
 import {
   ArrowLeftOutlined, TagOutlined, CarOutlined, SyncOutlined,
   CommentOutlined, EnvironmentOutlined, PictureOutlined, HistoryOutlined,
-  ThunderboltOutlined,
+  ThunderboltOutlined, UserOutlined, ClockCircleOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
@@ -37,6 +38,7 @@ export default function AdminOrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState([]);
   const [vehicles, setVehicles] = useState([]);
+  const [drivers, setDrivers] = useState([]);
   const [newStatus, setNewStatus] = useState('');
   const [comment, setComment] = useState('');
   const [updating, setUpdating] = useState(false);
@@ -50,13 +52,47 @@ export default function AdminOrderDetailPage() {
       const results = data.results || data;
       setVehicles(Array.isArray(results) ? results : []);
     });
+    api.get('/drivers/admin/').then(({ data }) => {
+      const results = data.results || data;
+      setDrivers(Array.isArray(results) ? results : []);
+    });
   }, []);
+
+  // Drivers licensed to operate the currently-assigned vehicle AND linked to it.
+  const eligibleDrivers = useMemo(() => {
+    if (!order?.assigned_vehicle) return [];
+    return drivers.filter((d) => {
+      const linked = (d.vehicles || []).some((v) => v.id === order.assigned_vehicle);
+      return linked && d.is_active && d.status === 'active';
+    });
+  }, [drivers, order?.assigned_vehicle]);
+
+  // Vehicles — show all but flag busy ones with active-order counts.
+  const assignedVehicleId = order?.assigned_vehicle;
+  const vehicleOptions = useMemo(() => {
+    return vehicles.map((v) => {
+      const isCurrent = v.id === assignedVehicleId;
+      const busy = (v.active_orders_count || 0) > 0 && !isCurrent;
+      const catName = typeof v.category_name === 'string'
+        ? v.category_name
+        : (v.category_name?.[lang] || v.category_name?.en || '');
+      const statusBadge = v.status !== 'available' && !isCurrent
+        ? ` · ${v.status_display || v.status}`
+        : '';
+      return {
+        value: v.id,
+        label: `${v.name} (${v.plate_number}) — ${catName}${statusBadge}${busy ? ' · busy' : ''}`,
+        disabled: !isCurrent && (v.status === 'maintenance' || v.status === 'retired' || !v.is_active),
+      };
+    });
+  }, [vehicles, assignedVehicleId, lang]);
 
   const fetchOrder = useCallback(({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     return api.get(`/orders/admin/${id}/`).then(({ data }) => {
       setOrder(data);
       setNewStatus((prev) => prev || data.status);
+      setComment((prev) => (prev ? prev : data.admin_comment || ''));
       // backend auto-marks this order as read; refresh the bell badge quickly
       refreshNotifications();
     }).catch(() => { if (!silent) message.error(t('adminOrderDetail.orderNotFound')); })
@@ -69,14 +105,13 @@ export default function AdminOrderDetailPage() {
 
   useEffect(() => { fetchOrder(); }, [id]); // eslint-disable-line
 
-  const handleStatusChange = async () => {
-    if (!newStatus || newStatus === order.status) {
-      message.warning(t('adminOrderDetail.selectDifferent'));
-      return;
-    }
+  const applyStatusChange = async (effectiveComment) => {
     setUpdating(true);
     try {
-      await api.post(`/orders/admin/${id}/status/`, { status: newStatus, comment });
+      await api.post(`/orders/admin/${id}/status/`, {
+        status: newStatus,
+        comment: effectiveComment,
+      });
       message.success(t('adminOrderDetail.statusUpdated'));
       setComment('');
       fetchOrder();
@@ -85,6 +120,30 @@ export default function AdminOrderDetailPage() {
     } finally {
       setUpdating(false);
     }
+  };
+
+  const handleStatusChange = () => {
+    if (!newStatus || newStatus === order.status) {
+      message.warning(t('adminOrderDetail.selectDifferent'));
+      return;
+    }
+    const effectiveComment = (comment || order.admin_comment || '').trim();
+    if (newStatus === 'rejected' && !effectiveComment) {
+      message.error(t('adminOrderDetail.rejectCommentRequired'));
+      return;
+    }
+    if (newStatus === 'rejected') {
+      Modal.confirm({
+        title: t('adminOrderDetail.rejectConfirmTitle'),
+        content: t('adminOrderDetail.rejectConfirmContent'),
+        okText: t('adminOrderDetail.rejectConfirmOk'),
+        okType: 'danger',
+        cancelText: t('common.cancel'),
+        onOk: () => applyStatusChange(effectiveComment),
+      });
+      return;
+    }
+    applyStatusChange(effectiveComment);
   };
 
   const handleCategoryChange = async (categoryId) => {
@@ -97,14 +156,49 @@ export default function AdminOrderDetailPage() {
     }
   };
 
-  const handleVehicleAssign = async (vehicleId) => {
+  const patchOrder = async (payload, successMsg, failMsg) => {
     try {
-      await api.patch(`/orders/admin/${id}/`, { assigned_vehicle: vehicleId || null });
-      message.success(t('adminOrderDetail.vehicleAssigned'));
+      await api.patch(`/orders/admin/${id}/`, payload);
+      message.success(successMsg);
       fetchOrder();
-    } catch {
-      message.error(t('adminOrderDetail.vehicleAssignFailed'));
+      return true;
+    } catch (err) {
+      const detail = err.response?.data;
+      const firstErr = detail && typeof detail === 'object'
+        ? Object.values(detail).flat()[0]
+        : null;
+      message.error(typeof firstErr === 'string' ? firstErr : failMsg);
+      return false;
     }
+  };
+
+  const handleVehicleAssign = async (vehicleId) => {
+    // Changing vehicle invalidates the driver link; clear driver in the same patch.
+    const payload = { assigned_vehicle: vehicleId || null };
+    if (order.assigned_driver && vehicleId !== order.assigned_vehicle) {
+      payload.assigned_driver = null;
+    }
+    await patchOrder(payload, t('adminOrderDetail.vehicleAssigned'), t('adminOrderDetail.vehicleAssignFailed'));
+  };
+
+  const handleDriverAssign = async (driverId) => {
+    await patchOrder(
+      { assigned_driver: driverId || null },
+      t('adminOrderDetail.driverAssigned'),
+      t('adminOrderDetail.driverAssignFailed'),
+    );
+  };
+
+  const handleScheduleChange = async (range) => {
+    const [from, to] = range || [null, null];
+    await patchOrder(
+      {
+        scheduled_from: from ? from.toISOString() : null,
+        scheduled_to: to ? to.toISOString() : null,
+      },
+      t('adminOrderDetail.scheduleUpdated'),
+      t('adminOrderDetail.scheduleUpdateFailed'),
+    );
   };
 
   const handleUrgencyChange = async (urgency) => {
@@ -135,6 +229,8 @@ export default function AdminOrderDetailPage() {
   if (!order) return <Empty description={t('adminOrderDetail.orderNotFound')} />;
 
   const isMobile = !screens.md;
+  const TERMINAL_STATUSES = ['completed', 'rejected', 'cancelled'];
+  const isTerminal = TERMINAL_STATUSES.includes(order.status);
 
   const sectionStyle = {
     background: 'var(--card-bg)',
@@ -238,6 +334,17 @@ export default function AdminOrderDetailPage() {
           <Text style={sectionTitleStyle}>{t('adminOrderDetail.adminActions')}</Text>
         </div>
         <div style={{ padding: isMobile ? 16 : 24 }}>
+          {isTerminal && (
+            <Alert
+              type="info"
+              showIcon
+              message={t('adminOrderDetail.lockedTitle')}
+              description={t('adminOrderDetail.lockedDescription', {
+                status: t(`status.${order.status}`),
+              })}
+              style={{ borderRadius: 10, marginBottom: 20 }}
+            />
+          )}
           {/* Assign Category */}
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -252,6 +359,7 @@ export default function AdminOrderDetailPage() {
               value={order.final_category || undefined}
               placeholder={t('adminOrderDetail.selectFinalCategory')}
               onChange={handleCategoryChange}
+              disabled={isTerminal}
               options={categories.map((c) => ({ value: c.id, label: localized(c.name) }))}
             />
           </div>
@@ -275,10 +383,8 @@ export default function AdminOrderDetailPage() {
               showSearch
               filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
               onChange={handleVehicleAssign}
-              options={vehicles.map((v) => ({
-                value: v.id,
-                label: `${v.name} (${v.plate_number}) — ${v.category_name}`,
-              }))}
+              disabled={isTerminal}
+              options={vehicleOptions}
             />
             {order.assigned_vehicle_detail && (
               <div style={{
@@ -291,6 +397,85 @@ export default function AdminOrderDetailPage() {
                 {order.assigned_vehicle_detail.price_per_hour && ` · ${currency.symbol}${order.assigned_vehicle_detail.price_per_hour}/hr`}
               </div>
             )}
+          </div>
+
+          <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+          {/* Assign Driver */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <UserOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
+              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                {t('adminOrderDetail.assignDriver')}
+              </Text>
+            </div>
+            {!order.assigned_vehicle ? (
+              <Alert
+                type="info"
+                showIcon
+                message={t('adminOrderDetail.assignVehicleFirst')}
+                style={{ borderRadius: 10 }}
+              />
+            ) : (
+              <>
+                <Select
+                  style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
+                  size={isMobile ? 'large' : 'middle'}
+                  value={order.assigned_driver || undefined}
+                  placeholder={t('adminOrderDetail.selectDriver')}
+                  allowClear
+                  showSearch
+                  filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                  onChange={handleDriverAssign}
+                  disabled={isTerminal}
+                  options={eligibleDrivers.map((d) => ({
+                    value: d.id,
+                    label: `${d.full_name} — ${d.license_number}${d.is_busy ? ' · busy' : ''}`,
+                  }))}
+                  notFoundContent={t('adminOrderDetail.noEligibleDrivers')}
+                />
+                {order.assigned_driver_detail && (
+                  <div style={{
+                    marginTop: 10, padding: '10px 14px',
+                    background: 'var(--accent-bg)', borderRadius: 10,
+                    fontSize: 13, color: 'var(--text-secondary)',
+                    border: '1px solid var(--accent-bg-strong)',
+                  }}>
+                    {order.assigned_driver_detail.full_name} · {order.assigned_driver_detail.phone}
+                    {order.assigned_driver_detail.license_categories && (
+                      <> · <Tag style={{ margin: 0 }}>{order.assigned_driver_detail.license_categories}</Tag></>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+          {/* Scheduled Window */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <ClockCircleOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
+              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                {t('adminOrderDetail.scheduledWindow')}
+              </Text>
+            </div>
+            <DatePicker.RangePicker
+              style={{ width: '100%', maxWidth: isMobile ? '100%' : 420, borderRadius: 10 }}
+              size={isMobile ? 'large' : 'middle'}
+              showTime={{ format: 'HH:mm' }}
+              format="YYYY-MM-DD HH:mm"
+              value={[
+                order.scheduled_from ? dayjs(order.scheduled_from) : null,
+                order.scheduled_to ? dayjs(order.scheduled_to) : null,
+              ]}
+              onChange={handleScheduleChange}
+              disabled={isTerminal}
+            />
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
+              {t('adminOrderDetail.scheduleHint')}
+            </div>
           </div>
 
           <Divider style={{ borderColor: 'var(--border-color)' }} />
@@ -308,6 +493,7 @@ export default function AdminOrderDetailPage() {
               size={isMobile ? 'large' : 'middle'}
               value={order.urgency}
               onChange={handleUrgencyChange}
+              disabled={isTerminal}
               options={[
                 { value: 'low', label: t('urgency.low') },
                 { value: 'normal', label: t('urgency.normal') },
@@ -333,12 +519,14 @@ export default function AdminOrderDetailPage() {
                 size={isMobile ? 'large' : 'middle'}
                 value={newStatus}
                 onChange={setNewStatus}
+                disabled={isTerminal}
                 options={STATUS_OPTIONS}
               />
               <Button
                 type="primary"
                 loading={updating}
                 onClick={handleStatusChange}
+                disabled={isTerminal}
                 size={isMobile ? 'large' : 'middle'}
                 style={{
                   background: 'var(--accent)',
@@ -362,16 +550,32 @@ export default function AdminOrderDetailPage() {
               <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
                 {t('adminOrderDetail.adminCommentLabel')}
               </Text>
+              {newStatus === 'rejected' && (
+                <Tag color="red" style={{ margin: 0, borderRadius: 6 }}>
+                  {t('adminOrderDetail.required')}
+                </Tag>
+              )}
             </div>
+            {newStatus === 'rejected' && (
+              <Alert
+                type="warning"
+                showIcon
+                message={t('adminOrderDetail.rejectCommentRequired')}
+                style={{ borderRadius: 10, marginBottom: 10 }}
+              />
+            )}
             <TextArea
               rows={3}
               value={comment || order.admin_comment || ''}
               onChange={(e) => setComment(e.target.value)}
               placeholder={t('adminOrderDetail.addComment')}
+              status={newStatus === 'rejected' && !(comment || order.admin_comment || '').trim() ? 'error' : undefined}
+              disabled={isTerminal}
               style={{ borderRadius: 10 }}
             />
             <Button
               onClick={handleCommentSave}
+              disabled={isTerminal}
               style={{
                 marginTop: 10, borderRadius: 10,
                 fontWeight: 600, border: '1px solid var(--border-color)',

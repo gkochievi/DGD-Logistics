@@ -71,7 +71,7 @@ export default function NewOrderPage() {
       formData.append('description', values.description);
       const cargoParts = [];
       if (values.cargo_length || values.cargo_width || values.cargo_height) {
-        cargoParts.push(`${values.cargo_length || '-'} × ${values.cargo_width || '-'} × ${values.cargo_height || '-'} cm`);
+        cargoParts.push(`${values.cargo_length || '-'} × ${values.cargo_width || '-'} × ${values.cargo_height || '-'} m`);
       }
       if (values.cargo_weight) cargoParts.push(`${values.cargo_weight} kg`);
       formData.append('cargo_details', cargoParts.join(', '));
@@ -201,13 +201,13 @@ export default function NewOrderPage() {
           <Form.Item label={<span style={{ fontWeight: 600 }}>Cargo Dimensions</span>}>
             <div style={{ display: 'flex', gap: 10 }}>
               <Form.Item name="cargo_length" noStyle>
-                <Input placeholder="Length" suffix="cm" inputMode="decimal" style={{ borderRadius: 10 }} />
+                <Input placeholder="Length" suffix="m" inputMode="decimal" style={{ borderRadius: 10 }} />
               </Form.Item>
               <Form.Item name="cargo_width" noStyle>
-                <Input placeholder="Width" suffix="cm" inputMode="decimal" style={{ borderRadius: 10 }} />
+                <Input placeholder="Width" suffix="m" inputMode="decimal" style={{ borderRadius: 10 }} />
               </Form.Item>
               <Form.Item name="cargo_height" noStyle>
-                <Input placeholder="Height" suffix="cm" inputMode="decimal" style={{ borderRadius: 10 }} />
+                <Input placeholder="Height" suffix="m" inputMode="decimal" style={{ borderRadius: 10 }} />
               </Form.Item>
             </div>
           </Form.Item>
