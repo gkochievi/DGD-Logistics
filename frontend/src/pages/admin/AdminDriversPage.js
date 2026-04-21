@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Table, Button, Typography, Tag, Modal, Form, Input, Select, DatePicker, Switch, Space,
-  message, Grid, Empty, Avatar,
+  message, Grid, Empty, Avatar, Tooltip,
 } from 'antd';
-import { PlusOutlined, EditOutlined, UserOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined, EditOutlined, UserOutlined, StopOutlined, CheckCircleOutlined,
+  SearchOutlined, FilterOutlined,
+} from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
@@ -34,7 +37,23 @@ export default function AdminDriversPage() {
   const [editingDriver, setEditingDriver] = useState(null);
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const driverLicenseCats = Form.useWatch('license_categories', form);
+
+  const visibleDrivers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return drivers.filter((d) => {
+      if (showArchived ? d.is_active !== false : d.is_active === false) return false;
+      if (statusFilter && d.status !== statusFilter) return false;
+      if (q) {
+        const hay = `${d.full_name || ''} ${d.phone || ''} ${d.email || ''} ${d.license_number || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [drivers, showArchived, search, statusFilter]);
 
   const DRIVER_STATUS_OPTIONS = [
     { value: 'active', label: t('adminDrivers.active') },
@@ -74,6 +93,17 @@ export default function AdminDriversPage() {
       });
     }
     setModalOpen(true);
+  };
+
+  const quickUpdate = async (driver, patch) => {
+    try {
+      await api.patch(`/drivers/admin/${driver.id}/`, patch);
+      setDrivers((prev) => prev.map((d) => (d.id === driver.id ? { ...d, ...patch } : d)));
+      message.success(t('adminDrivers.driverUpdated'));
+    } catch {
+      message.error(t('adminDrivers.driverUpdated'));
+      fetchDrivers();
+    }
   };
 
   const handleSave = async (values) => {
@@ -161,14 +191,24 @@ export default function AdminDriversPage() {
       render: (s) => <Tag color={DRIVER_STATUS_COLORS[s]}>{getDriverStatusLabel(s)}</Tag>,
     },
     {
-      title: '', width: 50,
+      title: '', width: 90,
       render: (_, record) => (
-        <Button
-          size="small" type="text"
-          icon={<EditOutlined />}
-          onClick={(e) => { e.stopPropagation(); openModal(record); }}
-          style={{ color: 'var(--accent)' }}
-        />
+        <Space size={2} onClick={(e) => e.stopPropagation()}>
+          <Tooltip title={record.is_active ? t('adminVehicles.disable') : t('adminVehicles.enable')}>
+            <Button
+              size="small" type="text"
+              icon={record.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
+              onClick={() => quickUpdate(record, { is_active: !record.is_active })}
+              style={{ color: record.is_active ? 'var(--accent)' : 'var(--text-tertiary)' }}
+            />
+          </Tooltip>
+          <Button
+            size="small" type="text"
+            icon={<EditOutlined />}
+            onClick={() => openModal(record)}
+            style={{ color: 'var(--accent)' }}
+          />
+        </Space>
       ),
     },
   ];
@@ -198,15 +238,66 @@ export default function AdminDriversPage() {
         </Button>
       </div>
 
+      {/* Filter bar */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--border-color)',
+        borderRadius: 14,
+        padding: isMobile ? '14px 16px' : '16px 20px',
+        marginBottom: 20,
+        boxShadow: 'var(--shadow-xs)',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          marginBottom: 12, color: 'var(--text-tertiary)',
+        }}>
+          <FilterOutlined style={{ fontSize: 13 }} />
+          <Text style={{
+            fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)',
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}>
+            {t('common.filters')}
+          </Text>
+        </div>
+        <Space wrap>
+          <Input
+            placeholder={t('common.search')}
+            prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
+            allowClear
+            style={{ width: 220, borderRadius: 10 }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Select
+            placeholder={t('adminVehicles.status')}
+            allowClear
+            style={{ width: 150 }}
+            value={statusFilter || undefined}
+            onChange={(v) => setStatusFilter(v || '')}
+            options={DRIVER_STATUS_OPTIONS}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 4 }}>
+            <Switch
+              size="small"
+              checked={showArchived}
+              onChange={setShowArchived}
+            />
+            <Text style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              {t('common.showArchived')}
+            </Text>
+          </div>
+        </Space>
+      </div>
+
       {isMobile ? (
-        loading && drivers.length === 0 ? (
+        loading && visibleDrivers.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-tertiary)' }}>
             {t('common.loading')}
           </div>
-        ) : drivers.length === 0 ? (
+        ) : visibleDrivers.length === 0 ? (
           <Empty description={t('adminDrivers.noDrivers')} />
         ) : (
-          drivers.map((d) => (
+          visibleDrivers.map((d) => (
             <div
               key={d.id}
               onClick={() => openModal(d)}
@@ -236,9 +327,17 @@ export default function AdminDriversPage() {
                   </div>
                   <div style={{ marginTop: 6 }}>{renderVehicleTags(d.vehicles)}</div>
                 </div>
-                <Tag color={DRIVER_STATUS_COLORS[d.status]} style={{ margin: 0 }}>
-                  {getDriverStatusLabel(d.status)}
-                </Tag>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                  <Tag color={DRIVER_STATUS_COLORS[d.status]} style={{ margin: 0 }}>
+                    {getDriverStatusLabel(d.status)}
+                  </Tag>
+                  <Button
+                    size="small" type="text"
+                    icon={d.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
+                    onClick={(e) => { e.stopPropagation(); quickUpdate(d, { is_active: !d.is_active }); }}
+                    style={{ color: d.is_active ? 'var(--accent)' : 'var(--text-tertiary)' }}
+                  />
+                </div>
               </div>
             </div>
           ))
@@ -253,7 +352,7 @@ export default function AdminDriversPage() {
         }}>
           <Table
             columns={columns}
-            dataSource={drivers}
+            dataSource={visibleDrivers}
             rowKey="id"
             loading={loading}
             size="middle"

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Table, Button, Input, Select, Typography, Space, Grid, Tag, message, Empty,
+  Table, Button, Input, Select, Typography, Space, Grid, Tag, message, Empty, Switch,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, SearchOutlined, StopOutlined,
@@ -22,14 +22,14 @@ export default function AdminUsersPage() {
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  const [activeFilter, setActiveFilter] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
 
   const fetchUsers = (page = 1) => {
     setLoading(true);
     const params = { page };
     if (search) params.search = search;
     if (roleFilter) params.role = roleFilter;
-    if (activeFilter) params.is_active = activeFilter;
+    params.is_active = showArchived ? 'false' : 'true';
 
     api.get('/auth/admin/users/', { params }).then(({ data }) => {
       const results = data.results || data;
@@ -39,7 +39,7 @@ export default function AdminUsersPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchUsers(); }, [roleFilter, activeFilter]); // eslint-disable-line
+  useEffect(() => { fetchUsers(); }, [roleFilter, showArchived]); // eslint-disable-line
 
   const toggleActive = async (user) => {
     try {
@@ -176,7 +176,7 @@ export default function AdminUsersPage() {
             fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)',
             textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
-            Filters
+            {t('common.filters')}
           </Text>
         </div>
         <Space wrap>
@@ -200,17 +200,16 @@ export default function AdminUsersPage() {
               { value: 'admin', label: t('common.admin') },
             ]}
           />
-          <Select
-            placeholder={t('adminOrders.status')}
-            allowClear
-            style={{ width: 130 }}
-            value={activeFilter || undefined}
-            onChange={(v) => setActiveFilter(v || '')}
-            options={[
-              { value: 'true', label: t('common.active') },
-              { value: 'false', label: t('common.inactive') },
-            ]}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 4 }}>
+            <Switch
+              size="small"
+              checked={showArchived}
+              onChange={setShowArchived}
+            />
+            <Text style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              {t('common.showArchived')}
+            </Text>
+          </div>
         </Space>
       </div>
 

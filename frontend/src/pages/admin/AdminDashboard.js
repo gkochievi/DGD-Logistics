@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Card, Row, Col, Typography, List, Spin, Button, Grid, Progress } from 'antd';
+import { Row, Col, Typography, List, Spin, Button, Grid, Progress } from 'antd';
 import {
-  TeamOutlined, FileTextOutlined, CheckCircleOutlined,
-  ClockCircleOutlined, CloseCircleOutlined, PlusCircleOutlined,
-  RightOutlined, AppstoreOutlined, PlusOutlined, CarOutlined, BarChartOutlined,
+  TeamOutlined, CheckCircleOutlined,
+  ClockCircleOutlined, PlusCircleOutlined, ExclamationCircleOutlined,
+  RightOutlined, CarOutlined, UserOutlined,
+  RiseOutlined, FallOutlined, MinusOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../../api/client';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { useLang } from '../../contexts/LanguageContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useRealtimeRefresh } from '../../contexts/NotificationContext';
 
 const { Title, Text } = Typography;
@@ -18,9 +21,9 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const screens = useBreakpoint();
   const { t, lang } = useLang();
+  const { isDark } = useTheme();
   const [stats, setStats] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
-  const [vehicleCount, setVehicleCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const isMobile = !screens.md;
@@ -30,13 +33,10 @@ export default function AdminDashboard() {
     return Promise.all([
       api.get('/auth/admin/dashboard/'),
       api.get('/orders/admin/?page=1'),
-      api.get('/vehicles/admin/'),
-    ]).then(([statsRes, ordersRes, vehiclesRes]) => {
+    ]).then(([statsRes, ordersRes]) => {
       setStats(statsRes.data);
       const results = ordersRes.data.results || ordersRes.data;
       setRecentOrders(Array.isArray(results) ? results.slice(0, 8) : []);
-      const vResults = vehiclesRes.data.results || vehiclesRes.data;
-      setVehicleCount(Array.isArray(vResults) ? vResults.length : 0);
     }).catch(() => {})
       .finally(() => { if (!silent) setLoading(false); });
   }, []);
@@ -53,73 +53,76 @@ export default function AdminDashboard() {
     </div>
   );
 
-  const totalOrders = (stats?.new_orders || 0) + (stats?.active_orders || 0) + (stats?.completed_orders || 0) + (stats?.rejected_orders || 0);
+  const totalOrders = (stats?.new_orders || 0)
+    + (stats?.under_review_orders || 0)
+    + (stats?.approved_orders || 0)
+    + (stats?.in_progress_orders || 0)
+    + (stats?.completed_orders || 0)
+    + (stats?.rejected_orders || 0)
+    + (stats?.cancelled_orders || 0);
 
   const statCards = [
-    { title: t('adminDash.totalUsers'), value: stats?.total_users, icon: <TeamOutlined />, color: 'var(--accent)' },
-    { title: t('adminDash.newOrders'), value: stats?.new_orders, icon: <PlusCircleOutlined />, color: '#f59e0b' },
-    { title: t('adminDash.inProgress'), value: stats?.active_orders, icon: <ClockCircleOutlined />, color: '#06b6d4' },
-    { title: t('adminDash.completed'), value: stats?.completed_orders, icon: <CheckCircleOutlined />, color: '#10b981' },
-    { title: t('adminDash.vehicles'), value: vehicleCount, icon: <CarOutlined />, color: 'var(--accent)' },
+    { title: t('adminDash.totalUsers'), value: stats?.total_users, icon: <TeamOutlined />, color: 'var(--accent)', path: '/admin/users' },
+    { title: t('adminDash.newOrders'), value: stats?.new_orders, icon: <PlusCircleOutlined />, color: '#f59e0b', path: '/admin/orders?status=new' },
+    { title: t('adminDash.needsReview'), value: stats?.under_review_orders, icon: <ExclamationCircleOutlined />, color: '#a855f7', path: '/admin/orders?status=under_review' },
+    { title: t('adminDash.inProgress'), value: stats?.in_progress_orders, icon: <ClockCircleOutlined />, color: '#06b6d4', path: '/admin/orders?status=in_progress' },
+    { title: t('adminDash.completed'), value: stats?.completed_orders, icon: <CheckCircleOutlined />, color: '#10b981', path: '/admin/orders?status=completed' },
+    { title: t('adminDash.vehicles'), value: stats?.total_vehicles, icon: <CarOutlined />, color: 'var(--accent)', path: '/admin/vehicles' },
+    { title: t('adminDash.drivers'), value: stats?.total_drivers, icon: <UserOutlined />, color: '#ec4899', path: '/admin/drivers' },
   ];
 
   const distributionItems = [
     { label: t('status.new'), value: stats?.new_orders || 0, color: '#f59e0b' },
-    { label: t('status.in_progress'), value: stats?.active_orders || 0, color: '#06b6d4' },
+    { label: t('status.under_review'), value: stats?.under_review_orders || 0, color: '#a855f7' },
+    { label: t('status.in_progress'), value: stats?.in_progress_orders || 0, color: '#06b6d4' },
     { label: t('status.completed'), value: stats?.completed_orders || 0, color: '#10b981' },
     { label: t('status.rejected'), value: stats?.rejected_orders || 0, color: '#ef4444' },
+    { label: t('status.cancelled'), value: stats?.cancelled_orders || 0, color: '#94a3b8' },
   ];
 
-  const quickActions = [
-    { label: t('adminDash.newOrders'), icon: <PlusCircleOutlined />, color: '#f59e0b', path: '/admin/orders?status=new' },
-    { label: t('adminDash.inProgress'), icon: <ClockCircleOutlined />, color: '#06b6d4', path: '/admin/orders?status=in_progress' },
-    { label: t('adminDash.vehicles'), icon: <CarOutlined />, color: 'var(--accent)', path: '/admin/vehicles' },
-    { label: t('nav.analytics'), icon: <BarChartOutlined />, color: '#ec4899', path: '/admin/analytics' },
-    { label: t('nav.categories'), icon: <AppstoreOutlined />, color: '#64748b', path: '/admin/categories' },
-  ];
+  const trendData = (stats?.daily_trend || []).map((d) => ({
+    date: d.date,
+    label: new Date(d.date).toLocaleDateString(lang === 'en' ? 'en-US' : lang, { weekday: 'short' }),
+    total: d.total,
+    completed: d.completed,
+  }));
+  const weekTotal = stats?.current_week_total || 0;
+  const prevWeekTotal = stats?.prev_week_total || 0;
+  const weekDelta = weekTotal - prevWeekTotal;
+  const weekDeltaPct = prevWeekTotal > 0
+    ? Math.round((weekDelta / prevWeekTotal) * 100)
+    : (weekTotal > 0 ? 100 : 0);
+  const trendColor = weekDelta > 0 ? '#10b981' : (weekDelta < 0 ? '#ef4444' : 'var(--text-tertiary)');
+  const TrendIcon = weekDelta > 0 ? RiseOutlined : (weekDelta < 0 ? FallOutlined : MinusOutlined);
 
   return (
     <div className="page-enter">
       {/* Header */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: 24, flexWrap: 'wrap', gap: 12,
-      }}>
+      <div style={{ marginBottom: 24 }}>
         <Title level={3} style={{
           margin: 0, fontWeight: 800, letterSpacing: '-0.02em',
           color: 'var(--text-primary)',
         }}>
           {t('adminDash.dashboard')}
         </Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => navigate('/admin/orders')}
-          style={{
-            background: 'var(--accent)',
-            borderColor: 'var(--accent)',
-            borderRadius: 10,
-            height: 40,
-            fontWeight: 600,
-            boxShadow: 'var(--shadow-sm)',
-          }}
-        >
-          {t('adminDash.viewOrders')}
-        </Button>
       </div>
 
       {/* Stat cards */}
       <Row gutter={[16, 16]} style={{ marginBottom: 28 }}>
         {statCards.map((s, i) => (
-          <Col xs={12} sm={8} md={6} lg={4} key={i}>
-            <div style={{
-              background: 'var(--card-bg)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 16,
-              padding: isMobile ? 14 : 20,
-              transition: 'all 0.2s ease',
-              cursor: 'default',
-            }}>
+          <Col xs={12} sm={8} md={6} lg={6} xl={4} key={i}>
+            <div
+              className="card-interactive"
+              onClick={() => s.path && navigate(s.path)}
+              style={{
+                background: 'var(--card-bg)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 16,
+                padding: isMobile ? 14 : 20,
+                transition: 'all 0.2s ease',
+                cursor: s.path ? 'pointer' : 'default',
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
                   width: 44, height: 44, borderRadius: 12,
@@ -208,46 +211,80 @@ export default function AdminDashboard() {
             padding: 24,
             height: '100%',
           }}>
-            <Text style={{
-              fontSize: 16, fontWeight: 700, color: 'var(--text-primary)',
-              letterSpacing: '-0.02em', display: 'block', marginBottom: 20,
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              marginBottom: 16,
             }}>
-              {t('adminDash.quickActions')}
+              <Text style={{
+                fontSize: 16, fontWeight: 700, color: 'var(--text-primary)',
+                letterSpacing: '-0.02em',
+              }}>
+                {t('adminDash.last7Days')}
+              </Text>
+              <Button
+                type="link"
+                onClick={() => navigate('/admin/analytics')}
+                style={{ color: 'var(--accent)', fontWeight: 600, padding: 0, height: 'auto' }}
+              >
+                {t('adminDash.fullAnalytics')}
+              </Button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 4 }}>
+              <div style={{
+                fontSize: 32, fontWeight: 800, color: 'var(--text-primary)',
+                letterSpacing: '-0.02em', lineHeight: 1,
+              }}>
+                {weekTotal}
+              </div>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                fontSize: 13, fontWeight: 600, color: trendColor,
+              }}>
+                <TrendIcon style={{ fontSize: 12 }} />
+                {weekDelta > 0 ? '+' : ''}{weekDeltaPct}%
+              </div>
+            </div>
+            <Text style={{
+              fontSize: 12, color: 'var(--text-tertiary)',
+              display: 'block', marginBottom: 16,
+            }}>
+              {t('adminDash.thisWeek')} · {t('adminDash.vsLastWeek')} ({prevWeekTotal})
             </Text>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {quickActions.map((action) => (
-                <div
-                  key={action.label}
-                  onClick={() => navigate(action.path)}
-                  className="card-interactive"
-                  style={{
-                    padding: '16px 14px',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 12,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    background: 'var(--bg-primary)',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 10,
-                    background: `color-mix(in srgb, ${action.color} 10%, transparent)`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 16, color: action.color, flexShrink: 0,
-                  }}>
-                    {action.icon}
-                  </div>
-                  <span style={{
-                    fontSize: 13, fontWeight: 600,
-                    color: 'var(--text-primary)',
-                  }}>
-                    {action.label}
-                  </span>
-                </div>
-              ))}
+
+            <div style={{ width: '100%', height: 140 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trendData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="label"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: isDark ? '#6b7280' : '#9ca3af' }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: isDark ? '#1a1c24' : '#fff',
+                      border: `1px solid ${isDark ? '#1f2128' : '#e5e7eb'}`,
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                    labelStyle={{ color: isDark ? '#e8e8e8' : '#333', fontWeight: 600 }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="total"
+                    stroke="var(--accent)"
+                    strokeWidth={2}
+                    fill="url(#trendGrad)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </Col>

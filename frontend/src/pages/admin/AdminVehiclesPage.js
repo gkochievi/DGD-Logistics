@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Table, Button, Typography, Tag, Modal, Form, Input, Select, InputNumber, Switch, Space,
   message, Grid, Empty, Upload, Dropdown, Tooltip,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, PictureOutlined, DeleteOutlined,
-  PoweroffOutlined, DownOutlined,
+  StopOutlined, CheckCircleOutlined, DownOutlined, SearchOutlined, FilterOutlined,
 } from '@ant-design/icons';
 import api from '../../api/client';
 import { CategoryImage } from '../../utils/categoryIcons';
@@ -47,6 +47,24 @@ export default function AdminVehiclesPage() {
   const [saving, setSaving] = useState(false);
   const [vehicleImages, setVehicleImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  const visibleVehicles = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return vehicles.filter((v) => {
+      if (showArchived ? v.is_active !== false : v.is_active === false) return false;
+      if (categoryFilter && v.category !== categoryFilter) return false;
+      if (statusFilter && v.status !== statusFilter) return false;
+      if (q) {
+        const hay = `${v.name || ''} ${v.plate_number || ''} ${v.capacity || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [vehicles, showArchived, search, categoryFilter, statusFilter]);
 
   const VEHICLE_STATUS_OPTIONS = [
     { value: 'available', label: t('adminVehicles.available') },
@@ -256,7 +274,7 @@ export default function AdminVehiclesPage() {
           <Tooltip title={record.is_active ? t('adminVehicles.disable') : t('adminVehicles.enable')}>
             <Button
               size="small" type="text"
-              icon={<PoweroffOutlined />}
+              icon={record.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
               onClick={() => quickUpdate(record, { is_active: !record.is_active })}
               style={{ color: record.is_active ? 'var(--accent)' : 'var(--text-tertiary)' }}
             />
@@ -298,16 +316,77 @@ export default function AdminVehiclesPage() {
         </Button>
       </div>
 
+      {/* Filter bar */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--border-color)',
+        borderRadius: 14,
+        padding: isMobile ? '14px 16px' : '16px 20px',
+        marginBottom: 20,
+        boxShadow: 'var(--shadow-xs)',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          marginBottom: 12, color: 'var(--text-tertiary)',
+        }}>
+          <FilterOutlined style={{ fontSize: 13 }} />
+          <Text style={{
+            fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)',
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}>
+            {t('common.filters')}
+          </Text>
+        </div>
+        <Space wrap>
+          <Input
+            placeholder={t('common.search')}
+            prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
+            allowClear
+            style={{ width: 220, borderRadius: 10 }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Select
+            placeholder={t('adminOrders.category')}
+            allowClear
+            showSearch
+            filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+            style={{ width: 180 }}
+            value={categoryFilter || undefined}
+            onChange={(v) => setCategoryFilter(v || '')}
+            options={categories.map((c) => ({ value: c.id, label: localized(c.name) }))}
+          />
+          <Select
+            placeholder={t('adminVehicles.status')}
+            allowClear
+            style={{ width: 150 }}
+            value={statusFilter || undefined}
+            onChange={(v) => setStatusFilter(v || '')}
+            options={VEHICLE_STATUS_OPTIONS}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 4 }}>
+            <Switch
+              size="small"
+              checked={showArchived}
+              onChange={setShowArchived}
+            />
+            <Text style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              {t('common.showArchived')}
+            </Text>
+          </div>
+        </Space>
+      </div>
+
       {/* Content */}
       {isMobile ? (
-        loading && vehicles.length === 0 ? (
+        loading && visibleVehicles.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-tertiary)' }}>
             {t('common.loading')}
           </div>
-        ) : vehicles.length === 0 ? (
+        ) : visibleVehicles.length === 0 ? (
           <Empty description={t('adminVehicles.noVehicles')} />
         ) : (
-          vehicles.map((v) => (
+          visibleVehicles.map((v) => (
             <div
               key={v.id}
               onClick={() => openModal(v)}
@@ -388,7 +467,7 @@ export default function AdminVehiclesPage() {
                 </Space>
                 <Button
                   size="small" type="text"
-                  icon={<PoweroffOutlined />}
+                  icon={v.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
                   onClick={(e) => { e.stopPropagation(); quickUpdate(v, { is_active: !v.is_active }); }}
                   style={{ color: v.is_active ? 'var(--accent)' : 'var(--text-tertiary)' }}
                 />
@@ -406,7 +485,7 @@ export default function AdminVehiclesPage() {
         }}>
           <Table
             columns={columns}
-            dataSource={vehicles}
+            dataSource={visibleVehicles}
             rowKey="id"
             loading={loading}
             size="middle"

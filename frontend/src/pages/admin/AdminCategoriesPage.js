@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Table, Button, Typography, Tag, Modal, Form, Input, Switch, Space,
+  Table, Button, Typography, Tag, Modal, Form, Input, Select, Switch, Space,
   ColorPicker, message, Grid, Empty, Upload, Tabs,
 } from 'antd';
-import { PlusOutlined, EditOutlined, StopOutlined, CheckCircleOutlined, CameraOutlined, DeleteOutlined, CheckOutlined, SearchOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, StopOutlined, CheckCircleOutlined, CameraOutlined, DeleteOutlined, CheckOutlined, SearchOutlined, FilterOutlined } from '@ant-design/icons';
 import api from '../../api/client';
 import { CategoryImage, getCategoryIcon, searchIcons, getIconMeta, AVAILABLE_ICONS } from '../../utils/categoryIcons';
 import { useLang } from '../../contexts/LanguageContext';
@@ -30,6 +30,9 @@ export default function AdminCategoriesPage() {
   const [imagePreview, setImagePreview] = useState(null);
   const [imageRemoved, setImageRemoved] = useState(false);
   const [iconSearch, setIconSearch] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
 
   // i18n fields managed as state (not via Form)
   const [catName, setCatName] = useState({ en: '', ka: '', ru: '' });
@@ -60,6 +63,21 @@ export default function AdminCategoriesPage() {
   useEffect(() => { fetchCategories(); }, []);
 
   const filteredIcons = useMemo(() => searchIcons(iconSearch), [iconSearch]);
+  const visibleCategories = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return categories.filter((c) => {
+      if (showArchived ? c.is_active !== false : c.is_active === false) return false;
+      if (typeFilter === 'transport' && !c.requires_destination) return false;
+      if (typeFilter === 'on_site' && c.requires_destination) return false;
+      if (q) {
+        const name = typeof c.name === 'object' ? Object.values(c.name).join(' ') : (c.name || '');
+        const desc = typeof c.description === 'object' ? Object.values(c.description).join(' ') : (c.description || '');
+        const hay = `${name} ${desc} ${c.suggestion_keywords || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [categories, showArchived, search, typeFilter]);
 
   const openModal = (category = null) => {
     setEditingCategory(category);
@@ -138,25 +156,6 @@ export default function AdminCategoriesPage() {
     } catch {
       message.error(t('adminCats.failedUpdateCat'));
     }
-  };
-
-  const deleteCategory = (cat) => {
-    Modal.confirm({
-      title: t('adminCats.deleteConfirmTitle'),
-      content: t('adminCats.deleteConfirmContent', { name: localized(cat.name) }),
-      okText: t('adminCats.delete'),
-      okType: 'danger',
-      cancelText: t('common.cancel'),
-      onOk: async () => {
-        try {
-          await api.delete(`/categories/admin/${cat.id}/`);
-          message.success(t('adminCats.categoryDeleted'));
-          fetchCategories();
-        } catch {
-          message.error(t('adminCats.failedDeleteCat'));
-        }
-      },
-    });
   };
 
   const handleImageSelect = (info) => {
@@ -242,11 +241,6 @@ export default function AdminCategoriesPage() {
             icon={record.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
             onClick={(e) => { e.stopPropagation(); toggleActive(record); }}
           />
-          <Button
-            size="small" type="text" danger
-            icon={<DeleteOutlined />}
-            onClick={(e) => { e.stopPropagation(); deleteCategory(record); }}
-          />
         </Space>
       ),
     },
@@ -278,16 +272,70 @@ export default function AdminCategoriesPage() {
         </Button>
       </div>
 
+      {/* Filter bar */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--border-color)',
+        borderRadius: 14,
+        padding: isMobile ? '14px 16px' : '16px 20px',
+        marginBottom: 20,
+        boxShadow: 'var(--shadow-xs)',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          marginBottom: 12, color: 'var(--text-tertiary)',
+        }}>
+          <FilterOutlined style={{ fontSize: 13 }} />
+          <Text style={{
+            fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)',
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}>
+            {t('common.filters')}
+          </Text>
+        </div>
+        <Space wrap>
+          <Input
+            placeholder={t('common.search')}
+            prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
+            allowClear
+            style={{ width: 220, borderRadius: 10 }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Select
+            placeholder={t('adminCats.typeTransport') + ' / ' + t('adminCats.typeOnSite')}
+            allowClear
+            style={{ width: 150 }}
+            value={typeFilter || undefined}
+            onChange={(v) => setTypeFilter(v || '')}
+            options={[
+              { value: 'transport', label: t('adminCats.typeTransport') },
+              { value: 'on_site', label: t('adminCats.typeOnSite') },
+            ]}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 4 }}>
+            <Switch
+              size="small"
+              checked={showArchived}
+              onChange={setShowArchived}
+            />
+            <Text style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              {t('common.showArchived')}
+            </Text>
+          </div>
+        </Space>
+      </div>
+
       {/* Content */}
       {isMobile ? (
-        loading && categories.length === 0 ? (
+        loading && visibleCategories.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-tertiary)' }}>
             {t('common.loading')}
           </div>
-        ) : categories.length === 0 ? (
+        ) : visibleCategories.length === 0 ? (
           <Empty description={t('adminCats.noCategories')} />
         ) : (
-          categories.map((cat) => (
+          visibleCategories.map((cat) => (
             <div
               key={cat.id}
               style={{
@@ -338,11 +386,6 @@ export default function AdminCategoriesPage() {
                   icon={cat.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
                   onClick={() => toggleActive(cat)}
                 />
-                <Button
-                  size="small" type="text" danger
-                  icon={<DeleteOutlined />}
-                  onClick={() => deleteCategory(cat)}
-                />
               </div>
             </div>
           ))
@@ -357,7 +400,7 @@ export default function AdminCategoriesPage() {
         }}>
           <Table
             columns={columns}
-            dataSource={categories}
+            dataSource={visibleCategories}
             rowKey="id"
             loading={loading}
             size="middle"

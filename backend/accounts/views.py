@@ -141,18 +141,61 @@ class AdminDashboardStatsView(APIView):
 
     def get(self, request):
         from orders.models import Order
+        from vehicles.models import Vehicle
+        from drivers.models import Driver
         users = User.objects.all()
         orders = Order.objects.all()
+        open_orders = orders.filter(status__in=['new', 'under_review', 'approved', 'in_progress'])
+
+        today = timezone.now().date()
+        week_start = today - timedelta(days=6)
+        prev_week_start = week_start - timedelta(days=7)
+        daily = (
+            orders.filter(created_at__date__gte=week_start)
+            .annotate(date=TruncDate('created_at'))
+            .values('date')
+            .annotate(total=Count('id'), completed=Count('id', filter=Q(status='completed')))
+            .order_by('date')
+        )
+        daily_map = {d['date'].isoformat(): {'total': d['total'], 'completed': d['completed']} for d in daily}
+        daily_trend = []
+        for i in range(7):
+            day = week_start + timedelta(days=i)
+            key = day.isoformat()
+            entry = daily_map.get(key, {'total': 0, 'completed': 0})
+            daily_trend.append({'date': key, 'total': entry['total'], 'completed': entry['completed']})
+
+        current_week_total = orders.filter(created_at__date__gte=week_start).count()
+        prev_week_total = orders.filter(
+            created_at__date__gte=prev_week_start,
+            created_at__date__lt=week_start,
+        ).count()
+
         return Response({
             'total_users': users.count(),
             'active_users': users.filter(is_active=True).count(),
             'new_orders': orders.filter(status='new').count(),
+            'under_review_orders': orders.filter(status='under_review').count(),
+            'approved_orders': orders.filter(status='approved').count(),
+            'in_progress_orders': orders.filter(status='in_progress').count(),
             'active_orders': orders.filter(
                 status__in=['under_review', 'approved', 'in_progress']
             ).count(),
             'completed_orders': orders.filter(status='completed').count(),
             'rejected_orders': orders.filter(status='rejected').count(),
+            'cancelled_orders': orders.filter(status='cancelled').count(),
             'total_orders': orders.count(),
+            'total_vehicles': Vehicle.objects.count(),
+            'total_drivers': Driver.objects.count(),
+            'open_urgency': {
+                'low': open_orders.filter(urgency='low').count(),
+                'normal': open_orders.filter(urgency='normal').count(),
+                'high': open_orders.filter(urgency='high').count(),
+                'urgent': open_orders.filter(urgency='urgent').count(),
+            },
+            'daily_trend': daily_trend,
+            'current_week_total': current_week_total,
+            'prev_week_total': prev_week_total,
         })
 
 
