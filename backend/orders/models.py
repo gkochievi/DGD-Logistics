@@ -45,6 +45,18 @@ class Order(models.Model):
     ACTIVE_STATUSES = [STATUS_OFFER_SENT, STATUS_APPROVED, STATUS_IN_PROGRESS]
     # Statuses that free the vehicle/driver (resource released).
     RELEASED_STATUSES = [STATUS_COMPLETED, STATUS_REJECTED, STATUS_CANCELLED]
+    # Forward-only lifecycle order. Admins cannot move an order backwards
+    # along this list — e.g. once the customer has accepted (approved), the
+    # order cannot be rewound to under_review or offer_sent. Rejected and
+    # cancelled are terminal exits and intentionally omitted.
+    STATUS_PROGRESSION = [
+        STATUS_NEW,
+        STATUS_UNDER_REVIEW,
+        STATUS_OFFER_SENT,
+        STATUS_APPROVED,
+        STATUS_IN_PROGRESS,
+        STATUS_COMPLETED,
+    ]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='orders')
     suggested_category = models.ForeignKey(
@@ -96,6 +108,15 @@ class Order(models.Model):
     last_event_at = models.DateTimeField(auto_now_add=True)
     last_event_type = models.CharField(max_length=32, blank=True, default='created')
 
+    # Set when an admin edits any customer-provided field (locations, dates,
+    # contacts, description, etc.). Drives the "Edited by admin" badge shown
+    # to the customer; detailed deltas live in OrderEditHistory.
+    admin_edited_at = models.DateTimeField(null=True, blank=True)
+    admin_edited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -144,3 +165,22 @@ class OrderStatusHistory(models.Model):
 
     def __str__(self):
         return f'Order #{self.order_id}: {self.old_status} → {self.new_status}'
+
+
+class OrderEditHistory(models.Model):
+    """Per-field audit log for admin edits to customer-provided fields."""
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='edit_history')
+    field_name = models.CharField(max_length=64)
+    old_value = models.TextField(blank=True)
+    new_value = models.TextField(blank=True)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='+',
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-changed_at']
+        verbose_name_plural = 'Order edit histories'
+
+    def __str__(self):
+        return f'Order #{self.order_id}: {self.field_name} edited'

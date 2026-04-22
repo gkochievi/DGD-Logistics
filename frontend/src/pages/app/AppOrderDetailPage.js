@@ -5,7 +5,7 @@ import {
   ClockCircleOutlined, UserOutlined, PhoneOutlined,
   CloseCircleOutlined, CarOutlined, CheckCircleOutlined,
   FileTextOutlined, CameraOutlined, InboxOutlined, HistoryOutlined,
-  DollarOutlined,
+  DollarOutlined, EditOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
@@ -238,6 +238,24 @@ export default function AppOrderDetailPage() {
       </div>
 
       <div style={{ padding: isDesktop ? '32px 40px 48px' : '24px 20px 48px' }}>
+        {/* ── Admin edited banner ── */}
+        {order.admin_edited_at && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 14px', borderRadius: 12, marginBottom: 16,
+            background: 'rgba(217, 119, 6, 0.1)',
+            border: '1px solid rgba(217, 119, 6, 0.35)',
+            color: '#b45309', fontSize: 13, fontWeight: 500,
+          }}>
+            <EditOutlined style={{ fontSize: 14 }} />
+            <span>
+              {t('orders.editedByAdmin', {
+                date: new Date(order.admin_edited_at).toLocaleString(),
+              })}
+            </span>
+          </div>
+        )}
+
         {/* ── Status Progress Tracker ── */}
         {!isTerminal && (
           <ConfirmSection delay={0.05} icon={<HistoryOutlined />} title={t('orders.orderProgress')}>
@@ -756,6 +774,77 @@ export default function AppOrderDetailPage() {
                 ))}
               </div>
             </Image.PreviewGroup>
+          </ConfirmSection>
+        )}
+
+        {/* ── Edit history (admin changes) ── */}
+        {order.edit_history?.length > 0 && (
+          <ConfirmSection delay={0.45} icon={<EditOutlined />} title={t('orders.editHistory')}>
+            <div style={{ position: 'relative' }}>
+              {order.edit_history.map((h, i) => {
+                const isLast = i === order.edit_history.length - 1;
+                const fieldKey = `orders.editField.${h.field_name}`;
+                const fieldLabel = t(fieldKey) !== fieldKey ? t(fieldKey) : h.field_name;
+                return (
+                  <div key={h.id || i} style={{
+                    display: 'flex', gap: 14, marginBottom: isLast ? 0 : 20,
+                    alignItems: 'flex-start',
+                  }}>
+                    <div style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      flexShrink: 0, width: 20,
+                    }}>
+                      <div style={{
+                        width: 12, height: 12, borderRadius: '50%',
+                        background: '#d97706',
+                        border: '2px solid var(--card-bg)',
+                        boxShadow: '0 0 0 2px rgba(217, 119, 6, 0.3)',
+                        flexShrink: 0, zIndex: 1,
+                      }} />
+                      {!isLast && (
+                        <div style={{
+                          width: 2, flex: 1, minHeight: 24,
+                          background: 'var(--border-color)',
+                          marginTop: 4,
+                        }} />
+                      )}
+                    </div>
+                    <div style={{ flex: 1, paddingBottom: isLast ? 0 : 4 }}>
+                      <div style={{
+                        fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
+                        letterSpacing: -0.1,
+                      }}>
+                        {fieldLabel}
+                      </div>
+                      <div style={{
+                        marginTop: 6, padding: '8px 10px',
+                        background: 'var(--bg-secondary)', borderRadius: 8,
+                        fontSize: 12, color: 'var(--text-secondary)',
+                        wordBreak: 'break-word',
+                      }}>
+                        <div>
+                          <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                            {t('orders.oldValue')}:
+                          </span>{' '}
+                          <span style={{ textDecoration: 'line-through' }}>{h.old_value || '—'}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                            {t('orders.newValue')}:
+                          </span>{' '}
+                          <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{h.new_value || '—'}</span>
+                        </div>
+                      </div>
+                      <div style={{
+                        fontSize: 11, color: 'var(--text-placeholder)', marginTop: 6,
+                      }}>
+                        {new Date(h.changed_at).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </ConfirmSection>
         )}
 

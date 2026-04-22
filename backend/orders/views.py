@@ -292,6 +292,21 @@ class AdminOrderStatusChangeView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Block backward moves along the lifecycle. Rejected stays reachable
+        # from any non-released status because it's a terminal exit, not a
+        # rewind — once the customer has accepted (approved), the order can
+        # no longer be rewound to under_review or offer_sent.
+        if (
+            order.status in Order.STATUS_PROGRESSION
+            and new_status in Order.STATUS_PROGRESSION
+            and Order.STATUS_PROGRESSION.index(new_status)
+            < Order.STATUS_PROGRESSION.index(order.status)
+        ):
+            return Response(
+                {'detail': 'Orders cannot be moved backward to an earlier status.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Transitioning into an active state re-checks assignments for conflicts.
         if new_status in Order.ACTIVE_STATUSES and new_status != order.status:
             try:

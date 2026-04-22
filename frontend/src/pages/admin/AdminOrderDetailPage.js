@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Descriptions, Typography, Spin, Button, Timeline, Image, Space,
-  Select, Input, InputNumber, message, Empty, Grid, Divider, DatePicker, Tag, Alert, Modal,
+  Select, Input, InputNumber, message, Empty, Grid, Divider, DatePicker, TimePicker, Tag, Alert, Modal,
 } from 'antd';
 import dayjs from 'dayjs';
 import { useRealtimeRefresh, useNotifications } from '../../contexts/NotificationContext';
@@ -10,12 +10,14 @@ import {
   CommentOutlined, EnvironmentOutlined, PictureOutlined, HistoryOutlined,
   ThunderboltOutlined, UserOutlined, ClockCircleOutlined, DollarOutlined,
   PhoneOutlined, SendOutlined, CheckCircleOutlined,
+  EditOutlined, PlusOutlined, DeleteOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { StatusBadge, UrgencyBadge } from '../../components/common/StatusBadge';
 import { STATUS_OPTIONS, STATUS_CONFIG } from '../../utils/status';
 import { MapView } from '../../components/map/MapPicker';
+import LocationAutocomplete from '../../components/common/LocationAutocomplete';
 import { useLang } from '../../contexts/LanguageContext';
 import { useBranding } from '../../contexts/BrandingContext';
 import { DEFAULT_CURRENCY } from '../../utils/currency';
@@ -44,6 +46,17 @@ export default function AdminOrderDetailPage() {
   const [comment, setComment] = useState('');
   const [updating, setUpdating] = useState(false);
   const [priceDraft, setPriceDraft] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editPickupStops, setEditPickupStops] = useState([]);
+  const [editDestStops, setEditDestStops] = useState([]);
+  const [editDate, setEditDate] = useState(null);
+  const [editTime, setEditTime] = useState(null);
+  const [editContactName, setEditContactName] = useState('');
+  const [editContactPhone, setEditContactPhone] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editCargoDetails, setEditCargoDetails] = useState('');
+  const [editUrgency, setEditUrgency] = useState('normal');
+  const [editSaving, setEditSaving] = useState(false);
   const { refresh: refreshNotifications } = useNotifications();
 
   useEffect(() => {
@@ -276,6 +289,89 @@ export default function AdminOrderDetailPage() {
     }
   };
 
+  const openEditModal = () => {
+    const rsPickups = order.route_stops?.pickups?.length ? order.route_stops.pickups : null;
+    const rsDests = order.route_stops?.destinations?.length ? order.route_stops.destinations : null;
+    const initialPickups = rsPickups
+      ? rsPickups.map(p => ({ text: p.address || '', coords: p.lat && p.lng ? { lat: p.lat, lng: p.lng } : null }))
+      : [{ text: order.pickup_location || '', coords: order.pickup_lat && order.pickup_lng ? { lat: order.pickup_lat, lng: order.pickup_lng } : null }];
+    const initialDests = rsDests
+      ? rsDests.map(d => ({ text: d.address || '', coords: d.lat && d.lng ? { lat: d.lat, lng: d.lng } : null }))
+      : (order.destination_location
+        ? [{ text: order.destination_location, coords: order.destination_lat && order.destination_lng ? { lat: order.destination_lat, lng: order.destination_lng } : null }]
+        : []);
+    setEditPickupStops(initialPickups);
+    setEditDestStops(initialDests);
+    setEditDate(order.requested_date ? dayjs(order.requested_date) : null);
+    setEditTime(order.requested_time ? dayjs(order.requested_time, 'HH:mm:ss') : null);
+    setEditContactName(order.contact_name || '');
+    setEditContactPhone(order.contact_phone || '');
+    setEditDescription(order.description || '');
+    setEditCargoDetails(order.cargo_details || '');
+    setEditUrgency(order.urgency || 'normal');
+    setEditModalOpen(true);
+  };
+
+  const updateEditStop = (kind, idx, patch) => {
+    const setter = kind === 'pickup' ? setEditPickupStops : setEditDestStops;
+    setter((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
+  };
+  const addEditStop = (kind) => {
+    const setter = kind === 'pickup' ? setEditPickupStops : setEditDestStops;
+    setter((prev) => [...prev, { text: '', coords: null }]);
+  };
+  const removeEditStop = (kind, idx) => {
+    const setter = kind === 'pickup' ? setEditPickupStops : setEditDestStops;
+    setter((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleEditSave = async () => {
+    const pickupsCleaned = editPickupStops.filter(s => (s.text || '').trim());
+    const destsCleaned = editDestStops.filter(s => (s.text || '').trim());
+    if (!pickupsCleaned.length) {
+      message.error(t('adminOrderDetail.editPickupRequired'));
+      return;
+    }
+    const routeStops = {
+      pickups: pickupsCleaned.map(s => ({ address: s.text, lat: s.coords?.lat ?? null, lng: s.coords?.lng ?? null })),
+      destinations: destsCleaned.map(s => ({ address: s.text, lat: s.coords?.lat ?? null, lng: s.coords?.lng ?? null })),
+      distance: order.route_stops?.distance ?? null,
+      duration: order.route_stops?.duration ?? null,
+    };
+    const firstPickup = pickupsCleaned[0];
+    const firstDest = destsCleaned[0];
+    const payload = {
+      pickup_location: firstPickup.text,
+      pickup_lat: firstPickup.coords?.lat ?? null,
+      pickup_lng: firstPickup.coords?.lng ?? null,
+      destination_location: firstDest?.text || '',
+      destination_lat: firstDest?.coords?.lat ?? null,
+      destination_lng: firstDest?.coords?.lng ?? null,
+      requested_date: editDate ? editDate.format('YYYY-MM-DD') : null,
+      requested_time: editTime ? editTime.format('HH:mm:ss') : null,
+      contact_name: editContactName,
+      contact_phone: editContactPhone,
+      description: editDescription,
+      cargo_details: editCargoDetails,
+      urgency: editUrgency,
+      route_stops: JSON.stringify(routeStops),
+    };
+    try {
+      setEditSaving(true);
+      await api.patch(`/orders/admin/${id}/`, payload);
+      message.success(t('adminOrderDetail.editSaved'));
+      setEditModalOpen(false);
+      await fetchOrder();
+    } catch (err) {
+      const detail = err.response?.data?.detail
+        || (err.response?.data ? Object.values(err.response.data).flat().join(' ') : null)
+        || t('adminOrderDetail.editFailed');
+      message.error(detail);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 80 }}>
       <Spin size="large" />
@@ -302,6 +398,31 @@ export default function AdminOrderDetailPage() {
     && Boolean(order.assigned_vehicle)
     && Boolean(order.assigned_driver)
   );
+  // Forward-only lifecycle — mirrors Order.STATUS_PROGRESSION on the backend.
+  const STATUS_PROGRESSION = ['new', 'under_review', 'offer_sent', 'approved', 'in_progress', 'completed'];
+  const currentProgressionIdx = STATUS_PROGRESSION.indexOf(order.status);
+
+  // Multi-stop orders keep their full route in `route_stops`; the flat
+  // pickup_/destination_ fields only hold the first stop for legacy/list use.
+  const pickupStops = order.route_stops?.pickups?.length
+    ? order.route_stops.pickups
+    : (order.pickup_location ? [{ address: order.pickup_location, lat: order.pickup_lat, lng: order.pickup_lng }] : []);
+  const destStops = order.route_stops?.destinations?.length
+    ? order.route_stops.destinations
+    : (order.destination_location ? [{ address: order.destination_location, lat: order.destination_lat, lng: order.destination_lng }] : []);
+  const mapMarkers = [
+    ...pickupStops.filter(s => s.lat && s.lng).map(s => ({ position: [s.lat, s.lng], color: 'green' })),
+    ...destStops.filter(s => s.lat && s.lng).map(s => ({ position: [s.lat, s.lng], color: 'red' })),
+  ];
+  const renderStopList = (stops) => (
+    stops.length > 1 ? (
+      <ol style={{ margin: 0, paddingLeft: 20 }}>
+        {stops.map((s, i) => (
+          <li key={i}>{s.address || '—'}</li>
+        ))}
+      </ol>
+    ) : (stops[0]?.address || '—')
+  );
   const statusOptionsForOrder = STATUS_OPTIONS
     // Cancellation is customer-only.
     .filter((opt) => opt.value !== 'cancelled' || order.status === 'cancelled')
@@ -310,6 +431,15 @@ export default function AdminOrderDetailPage() {
     // "Approved" is customer-only — admin uses "Send for Approval" to send the offer.
     .filter((opt) => opt.value !== 'approved' || order.status === 'approved')
     .map((opt) => {
+      // Backward moves along the progression are blocked server-side.
+      const targetIdx = STATUS_PROGRESSION.indexOf(opt.value);
+      if (
+        currentProgressionIdx >= 0
+        && targetIdx >= 0
+        && targetIdx < currentProgressionIdx
+      ) {
+        return { ...opt, disabled: true };
+      }
       if (opt.value === 'in_progress' && !customerAccepted && order.status !== 'in_progress') {
         return { ...opt, disabled: true };
       }
@@ -370,8 +500,25 @@ export default function AdminOrderDetailPage() {
 
       {/* Order Info */}
       <div style={sectionStyle}>
-        <div style={sectionHeaderStyle}>
-          <Text style={sectionTitleStyle}>{t('adminOrderDetail.orderInfo')}</Text>
+        <div style={{ ...sectionHeaderStyle, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Text style={sectionTitleStyle}>{t('adminOrderDetail.orderInfo')}</Text>
+            {order.admin_edited_at && (
+              <Tag color="gold" style={{ margin: 0, fontSize: 11 }}>
+                {t('adminOrderDetail.editedByAdminTag')}
+              </Tag>
+            )}
+          </div>
+          {!isTerminal && (
+            <Button
+              size="small"
+              icon={<EditOutlined />}
+              onClick={openEditModal}
+              style={{ borderRadius: 8 }}
+            >
+              {t('adminOrderDetail.editDetails')}
+            </Button>
+          )}
         </div>
         <div style={{ padding: isMobile ? 16 : 24 }}>
           <Descriptions column={isMobile ? 1 : 2} size="small" labelStyle={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>
@@ -390,10 +537,10 @@ export default function AdminOrderDetailPage() {
               {localized(order.suggested_category_detail?.name) || '—'}
             </Descriptions.Item>
             <Descriptions.Item label={t('orders.pickup')} span={isMobile ? 1 : 2}>
-              {order.pickup_location}
+              {renderStopList(pickupStops)}
             </Descriptions.Item>
             <Descriptions.Item label={t('orders.destination')} span={isMobile ? 1 : 2}>
-              {order.destination_location || '—'}
+              {destStops.length ? renderStopList(destStops) : '—'}
             </Descriptions.Item>
             <Descriptions.Item label={t('adminOrderDetail.requestedDate')}>{order.requested_date}</Descriptions.Item>
             <Descriptions.Item label={t('orders.time')}>{order.requested_time || '—'}</Descriptions.Item>
@@ -930,7 +1077,7 @@ export default function AdminOrderDetailPage() {
       </div>
 
       {/* Map */}
-      {(order.pickup_lat && order.pickup_lng) && (
+      {mapMarkers.length > 0 && (
         <div style={sectionStyle}>
           <div style={sectionHeaderStyle}>
             <EnvironmentOutlined style={{ color: '#10b981', fontSize: 15 }} />
@@ -939,12 +1086,7 @@ export default function AdminOrderDetailPage() {
           <div style={{ padding: 0 }}>
             <MapView
               height={260}
-              markers={[
-                { position: [order.pickup_lat, order.pickup_lng], color: 'green' },
-                ...(order.destination_lat && order.destination_lng
-                  ? [{ position: [order.destination_lat, order.destination_lng], color: 'red' }]
-                  : []),
-              ]}
+              markers={mapMarkers}
             />
           </div>
         </div>
@@ -971,6 +1113,58 @@ export default function AdminOrderDetailPage() {
                 ))}
               </Space>
             </Image.PreviewGroup>
+          </div>
+        </div>
+      )}
+
+      {/* Edit History */}
+      {order.edit_history?.length > 0 && (
+        <div style={sectionStyle}>
+          <div style={sectionHeaderStyle}>
+            <EditOutlined style={{ color: '#d97706', fontSize: 15 }} />
+            <Text style={sectionTitleStyle}>{t('adminOrderDetail.editHistory')}</Text>
+          </div>
+          <div style={{ padding: isMobile ? 16 : 24 }}>
+            <Timeline
+              items={order.edit_history.map((h) => ({
+                color: '#d97706',
+                children: (
+                  <div>
+                    <div style={{ marginBottom: 4, fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
+                      {t(`adminOrderDetail.editField.${h.field_name}`) !== `adminOrderDetail.editField.${h.field_name}`
+                        ? t(`adminOrderDetail.editField.${h.field_name}`)
+                        : h.field_name}
+                    </div>
+                    <div style={{
+                      padding: '6px 10px', background: 'var(--bg-secondary)',
+                      borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)',
+                      wordBreak: 'break-word',
+                    }}>
+                      <div>
+                        <Text style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                          {t('adminOrderDetail.oldValue')}:
+                        </Text>{' '}
+                        <span style={{ textDecoration: 'line-through' }}>{h.old_value || '—'}</span>
+                      </div>
+                      <div>
+                        <Text style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
+                          {t('adminOrderDetail.newValue')}:
+                        </Text>{' '}
+                        <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{h.new_value || '—'}</span>
+                      </div>
+                    </div>
+                    {h.changed_by_name && (
+                      <Text style={{ color: 'var(--text-secondary)', fontSize: 12, display: 'block', marginTop: 4 }}>
+                        {h.changed_by_name}
+                      </Text>
+                    )}
+                    <Text style={{ color: 'var(--text-tertiary)', fontSize: 11, marginTop: 2, display: 'block' }}>
+                      {new Date(h.changed_at).toLocaleString()}
+                    </Text>
+                  </div>
+                ),
+              }))}
+            />
           </div>
         </div>
       )}
@@ -1022,6 +1216,165 @@ export default function AdminOrderDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Edit Details Modal */}
+      <Modal
+        open={editModalOpen}
+        onCancel={() => setEditModalOpen(false)}
+        onOk={handleEditSave}
+        title={t('adminOrderDetail.editDetails')}
+        okText={t('adminOrderDetail.saveEdits')}
+        cancelText={t('common.cancel')}
+        confirmLoading={editSaving}
+        width={isMobile ? '100%' : 680}
+        destroyOnClose
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Pickups */}
+          <div>
+            <Text strong style={{ display: 'block', marginBottom: 6 }}>
+              {t('newOrder.pickupFrom')}
+            </Text>
+            {editPickupStops.map((stop, idx) => (
+              <div key={`edit-pickup-${idx}`} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <LocationAutocomplete
+                  value={stop.text}
+                  onChange={(val) => updateEditStop('pickup', idx, { text: val })}
+                  onSelect={({ address, lat, lng }) => updateEditStop('pickup', idx, { text: address, coords: { lat, lng } })}
+                  placeholder={editPickupStops.length > 1 ? `${t('newOrder.pickupFrom')} #${idx + 1}` : t('newOrder.pickupFrom')}
+                  countryCode="ge"
+                  style={{ flex: 1 }}
+                />
+                {editPickupStops.length > 1 && (
+                  <Button
+                    icon={<DeleteOutlined />}
+                    onClick={() => removeEditStop('pickup', idx)}
+                    danger
+                  />
+                )}
+              </div>
+            ))}
+            <Button
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={() => addEditStop('pickup')}
+              type="dashed"
+              block
+            >
+              {t('newOrder.addPickupStop')}
+            </Button>
+          </div>
+
+          {/* Destinations */}
+          <div>
+            <Text strong style={{ display: 'block', marginBottom: 6 }}>
+              {t('orders.destination')}
+            </Text>
+            {editDestStops.map((stop, idx) => (
+              <div key={`edit-dest-${idx}`} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <LocationAutocomplete
+                  value={stop.text}
+                  onChange={(val) => updateEditStop('dest', idx, { text: val })}
+                  onSelect={({ address, lat, lng }) => updateEditStop('dest', idx, { text: address, coords: { lat, lng } })}
+                  placeholder={editDestStops.length > 1 ? `${t('orders.destination')} #${idx + 1}` : t('orders.destination')}
+                  countryCode="ge"
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  icon={<DeleteOutlined />}
+                  onClick={() => removeEditStop('dest', idx)}
+                  danger
+                />
+              </div>
+            ))}
+            <Button
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={() => addEditStop('dest')}
+              type="dashed"
+              block
+            >
+              {t('newOrder.addDestStop')}
+            </Button>
+          </div>
+
+          {/* Date + Time */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <Text style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'var(--text-tertiary)' }}>
+                {t('adminOrderDetail.requestedDate')}
+              </Text>
+              <DatePicker
+                value={editDate}
+                onChange={setEditDate}
+                style={{ width: '100%' }}
+                format="YYYY-MM-DD"
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <Text style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'var(--text-tertiary)' }}>
+                {t('orders.time')}
+              </Text>
+              <TimePicker
+                value={editTime}
+                onChange={setEditTime}
+                style={{ width: '100%' }}
+                format="HH:mm"
+              />
+            </div>
+          </div>
+
+          {/* Contact */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <Text style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'var(--text-tertiary)' }}>
+                {t('orders.contact')}
+              </Text>
+              <Input value={editContactName} onChange={(e) => setEditContactName(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <Text style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'var(--text-tertiary)' }}>
+                {t('auth.phone')}
+              </Text>
+              <Input value={editContactPhone} onChange={(e) => setEditContactPhone(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Urgency */}
+          <div>
+            <Text style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'var(--text-tertiary)' }}>
+              {t('orders.assigned')}
+            </Text>
+            <Select
+              value={editUrgency}
+              onChange={setEditUrgency}
+              style={{ width: '100%' }}
+              options={[
+                { value: 'low', label: t('status.low') },
+                { value: 'normal', label: t('status.normal') },
+                { value: 'high', label: t('status.high') },
+                { value: 'urgent', label: t('status.urgent') },
+              ]}
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <Text style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'var(--text-tertiary)' }}>
+              {t('orders.description')}
+            </Text>
+            <TextArea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} />
+          </div>
+
+          {/* Cargo details */}
+          <div>
+            <Text style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'var(--text-tertiary)' }}>
+              {t('newOrder.cargoDetails')}
+            </Text>
+            <TextArea value={editCargoDetails} onChange={(e) => setEditCargoDetails(e.target.value)} rows={2} />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
