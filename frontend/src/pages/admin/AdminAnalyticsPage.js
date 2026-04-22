@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Typography, Spin, Select, Row, Col, Grid, Button, Table, Tag } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Typography, Spin, Select, Row, Col, Grid, Button, Table, Tag, DatePicker } from 'antd';
+import dayjs from 'dayjs';
 import {
   RiseOutlined, FallOutlined, ShoppingCartOutlined,
   CalendarOutlined, DollarOutlined,
@@ -63,7 +64,17 @@ export default function AdminAnalyticsPage() {
   const ACCENT_DARK = palette.accentDark;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState(30);
+  // Preset periods write to `dateRange`; picking a custom range just overrides
+  // `dateRange` directly. `period` is derived from the range length so stat
+  // cards and chart labels still get a "last N days" number.
+  const [dateRange, setDateRange] = useState(() => [
+    dayjs().subtract(29, 'day').startOf('day'),
+    dayjs().startOf('day'),
+  ]);
+  const period = useMemo(
+    () => (dateRange?.[0] && dateRange?.[1] ? dateRange[1].diff(dateRange[0], 'day') + 1 : 30),
+    [dateRange],
+  );
 
   const isMobile = !screens.md;
   const textColor = isDark ? '#e8e8e8' : '#333';
@@ -73,12 +84,18 @@ export default function AdminAnalyticsPage() {
   const tooltipBorder = isDark ? '#1f2128' : '#e5e7eb';
 
   useEffect(() => {
+    if (!dateRange?.[0] || !dateRange?.[1]) return;
     setLoading(true);
-    api.get('/auth/admin/analytics/', { params: { days: period } })
+    api.get('/auth/admin/analytics/', {
+      params: {
+        date_from: dateRange[0].format('YYYY-MM-DD'),
+        date_to: dateRange[1].format('YYYY-MM-DD'),
+      },
+    })
       .then(({ data }) => setData(data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [period]);
+  }, [dateRange]);
 
   if (loading) {
     return (
@@ -198,11 +215,15 @@ export default function AdminAnalyticsPage() {
 
   const handleExportCsv = () => {
     const fmt = (n) => (n == null ? '' : Number(n));
+    const rangeLabel = (data.date_from && data.date_to)
+      ? `${data.date_from} → ${data.date_to}`
+      : t('analytics.last30').replace('30', String(period));
     const sections = [
       {
-        title: `${t('analytics.summary')} (${t('analytics.last30').replace('30', period)})`,
+        title: `${t('analytics.summary')} (${rangeLabel})`,
         headers: [t('analytics.metric'), t('analytics.value')],
         rows: [
+          [t('analytics.dateRange'), rangeLabel],
           [t('analytics.today'), data.today_orders],
           [t('analytics.thisWeek'), data.this_week_orders],
           [t('analytics.thisMonth'), data.this_month_orders],
@@ -236,8 +257,9 @@ export default function AdminAnalyticsPage() {
         rows: topCustomers.map((c) => [c.name, c.email, c.orders, c.completed, fmt(c.revenue)]),
       },
     ];
-    const today = new Date().toISOString().slice(0, 10);
-    downloadCsv(`analytics-${period}d-${today}.csv`, joinSheets(sections));
+    const from = data.date_from || dayjs().subtract(period - 1, 'day').format('YYYY-MM-DD');
+    const to = data.date_to || dayjs().format('YYYY-MM-DD');
+    downloadCsv(`analytics-${from}-to-${to}.csv`, joinSheets(sections));
   };
 
   return (
@@ -257,7 +279,10 @@ export default function AdminAnalyticsPage() {
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <Select
             value={period}
-            onChange={setPeriod}
+            onChange={(days) => setDateRange([
+              dayjs().subtract(days - 1, 'day').startOf('day'),
+              dayjs().startOf('day'),
+            ])}
             style={{ width: isMobile ? 130 : 150 }}
             options={[
               { value: 7, label: t('analytics.last7') },
@@ -266,6 +291,17 @@ export default function AdminAnalyticsPage() {
               { value: 60, label: t('analytics.last60') },
               { value: 90, label: t('analytics.last90') },
             ]}
+          />
+          <DatePicker.RangePicker
+            value={dateRange}
+            onChange={(range) => {
+              if (range && range[0] && range[1]) {
+                setDateRange([range[0].startOf('day'), range[1].startOf('day')]);
+              }
+            }}
+            allowClear={false}
+            disabledDate={(d) => d && d > dayjs().endOf('day')}
+            style={{ borderRadius: 10 }}
           />
           <Button
             icon={<DownloadOutlined />}

@@ -296,16 +296,40 @@ class AdminAnalyticsView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
 
     def get(self, request):
+        from datetime import datetime
         from orders.models import Order
         from vehicles.models import Vehicle
 
         now = timezone.now()
         today = now.date()
-        days_param = int(request.query_params.get('days', 30))
-        start_date = today - timedelta(days=days_param)
+
+        # Accept either a fixed lookback (`days=N`) or an explicit date range
+        # (`date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`). Range wins when both are
+        # valid; otherwise fall back to `days` (default 30).
+        def _parse_date(s):
+            if not s:
+                return None
+            try:
+                return datetime.strptime(s, '%Y-%m-%d').date()
+            except ValueError:
+                return None
+
+        date_from = _parse_date(request.query_params.get('date_from'))
+        date_to = _parse_date(request.query_params.get('date_to'))
+        if date_from and date_to and date_from <= date_to:
+            start_date = date_from
+            end_date = date_to
+            days_param = (end_date - start_date).days + 1
+        else:
+            days_param = int(request.query_params.get('days', 30))
+            start_date = today - timedelta(days=days_param)
+            end_date = today
 
         orders = Order.objects.all()
-        period_orders = orders.filter(created_at__date__gte=start_date)
+        period_orders = orders.filter(
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date,
+        )
 
         # ── Daily order counts (last N days) ──
         daily_orders = (
@@ -440,6 +464,7 @@ class AdminAnalyticsView(APIView):
             .filter(
                 assigned_vehicle__price_per_hour__isnull=False,
                 created_at__date__gte=start_date,
+                created_at__date__lte=end_date,
             )
             .annotate(date=TruncDate('created_at'))
             .values('date')
@@ -477,7 +502,10 @@ class AdminAnalyticsView(APIView):
 
         # ── New users trend ──
         new_users_daily = (
-            User.objects.filter(created_at__date__gte=start_date)
+            User.objects.filter(
+                created_at__date__gte=start_date,
+                created_at__date__lte=end_date,
+            )
             .annotate(date=TruncDate('created_at'))
             .values('date')
             .annotate(count=Count('id'))
@@ -526,6 +554,7 @@ class AdminAnalyticsView(APIView):
             .filter(
                 new_status='completed',
                 order__created_at__date__gte=start_date,
+                order__created_at__date__lte=end_date,
             )
             .annotate(duration=ExpressionWrapper(
                 F('created_at') - F('order__created_at'),
@@ -573,6 +602,8 @@ class AdminAnalyticsView(APIView):
 
         return Response({
             'period_days': days_param,
+            'date_from': start_date.isoformat(),
+            'date_to': end_date.isoformat(),
             'today_orders': today_orders,
             'this_week_orders': this_week_orders,
             'this_month_orders': this_month_orders,

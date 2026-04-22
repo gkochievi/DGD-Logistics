@@ -856,6 +856,7 @@ export const translations = {
     // ── Admin Analytics ──
     analytics: {
       title: 'Analytics',
+      dateRange: 'Date range',
       last7: 'Last 7 days',
       last14: 'Last 14 days',
       last30: 'Last 30 days',
@@ -1752,6 +1753,7 @@ export const translations = {
 
     analytics: {
       title: 'ანალიტიკა',
+      dateRange: 'თარიღის დიაპაზონი',
       last7: 'ბოლო 7 დღე',
       last14: 'ბოლო 14 დღე',
       last30: 'ბოლო 30 დღე',
@@ -2646,6 +2648,7 @@ export const translations = {
 
     analytics: {
       title: 'Аналитика',
+      dateRange: 'Диапазон дат',
       last7: 'Последние 7 дней',
       last14: 'Последние 14 дней',
       last30: 'Последние 30 дней',
