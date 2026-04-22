@@ -17,11 +17,16 @@ from django.utils import timezone
 
 
 _ALLOWED_EXT = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg', '.ico', '.avif', '.heic'}
+_ALLOWED_DOC_EXT = {'.pdf', '.doc', '.docx', '.odt', '.rtf', '.txt'}
 
 
-def _new_name(filename):
+def _new_name(filename, extra_exts=None):
+    """UUID-based safe filename. By default only image extensions survive;
+    pass `extra_exts` (a set) to additionally preserve document extensions
+    such as `.pdf` for contract uploads."""
     ext = Path(filename or '').suffix.lower()
-    if ext not in _ALLOWED_EXT:
+    allowed = _ALLOWED_EXT if not extra_exts else (_ALLOWED_EXT | extra_exts)
+    if ext not in allowed:
         ext = ''
     return f'{uuid.uuid4().hex}{ext}'
 
@@ -69,6 +74,19 @@ def landing_favicon_path(instance, filename):
 
 def landing_hero_path(instance, filename):
     return f'landing/hero/{_new_name(filename)}'
+
+
+def site_settings_logo_path(instance, filename):
+    return f'site/logo/{_new_name(filename)}'
+
+
+def site_settings_favicon_path(instance, filename):
+    return f'site/favicon/{_new_name(filename)}'
+
+
+def company_contract_path(instance, filename):
+    user_id = getattr(instance, 'user_id', None) or 'unassigned'
+    return f'users/{user_id}/contracts/{_new_name(filename, _ALLOWED_DOC_EXT)}'
 
 
 # ── Cleanup helpers (registered from each app's AppConfig.ready). ──

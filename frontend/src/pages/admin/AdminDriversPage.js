@@ -214,7 +214,7 @@ export default function AdminDriversPage() {
       title: t('adminUsers.name'), dataIndex: 'full_name', ellipsis: true,
       render: (_, r) => <span style={{ fontWeight: 600 }}>{r.full_name}</span>,
     },
-    { title: t('adminDrivers.phone'), dataIndex: 'phone', width: 140 },
+    { title: t('adminDrivers.phone'), dataIndex: 'phone', width: 150, ellipsis: true },
     { title: t('adminDrivers.licenseNumber'), dataIndex: 'license_number', width: 140, ellipsis: true },
     {
       title: t('adminDrivers.licenseCategories'), dataIndex: 'license_categories',

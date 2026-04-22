@@ -7,6 +7,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBranding } from '../../contexts/BrandingContext';
 import { useLang } from '../../contexts/LanguageContext';
 import LocationAutocomplete from '../../components/common/LocationAutocomplete';
 import { getCategoryIcon, CategoryImage } from '../../utils/categoryIcons';
@@ -18,6 +19,7 @@ export default function LandingPage() {
   const screens = useBreakpoint();
   const { t, lang } = useLang();
   const { user } = useAuth();
+  const { defaultSearchScope, defaultSearchCountries } = useBranding();
   const [categories, setCategories] = useState([]);
   const [landing, setLanding] = useState(null);
   const [pickup, setPickup] = useState('');
@@ -47,14 +49,13 @@ export default function LandingPage() {
     return fallbackKey ? t(fallbackKey) : '';
   };
 
-  // Derive country code filter from landing search settings
+  // Derive country code filter from global site settings.
   const getSearchCountryCode = () => {
-    if (!landing) return 'ge'; // default fallback
-    const scope = landing.search_scope || 'georgia';
+    const scope = defaultSearchScope || 'georgia';
     if (scope === 'georgia') return 'ge';
-    if (scope === 'worldwide') return null; // no filter
+    if (scope === 'worldwide') return null;
     if (scope === 'custom') {
-      const countries = landing.search_countries || [];
+      const countries = defaultSearchCountries || [];
       return countries.length ? countries.join(',') : null;
     }
     return 'ge';

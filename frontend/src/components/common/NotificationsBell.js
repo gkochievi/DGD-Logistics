@@ -99,7 +99,7 @@ export default function NotificationsBell({ variant = 'admin' }) {
               <span style={{ opacity: 0.5 }}>·</span>
               <span style={{
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                maxWidth: 180,
+                maxWidth: 'calc(100% - 60px)', minWidth: 0,
               }}>{order.pickup_location}</span>
             </div>
             <div style={{

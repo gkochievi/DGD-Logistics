@@ -1,35 +1,12 @@
 from django.db import models
 
-from config.media_utils import (
-    landing_site_icon_path, landing_favicon_path, landing_hero_path,
-)
+from config.media_utils import landing_hero_path
 
 
 class LandingPageSettings(models.Model):
-    """Singleton model – stores all editable landing page content."""
-
-    # ── Branding ──
-    site_name = models.CharField(max_length=200, default='Heavyy Way',
-                                 help_text='Website name shown in navbar and browser tab')
-    site_icon = models.ImageField(upload_to=landing_site_icon_path, blank=True, null=True,
-                                  help_text='Website logo/icon shown in navbar')
-    favicon = models.ImageField(upload_to=landing_favicon_path, blank=True, null=True,
-                                help_text='Browser tab favicon (recommended: 32x32 or 64x64 PNG)')
-
-    COLOR_THEME_CHOICES = [
-        ('green', 'Green'),
-        ('blue', 'Blue'),
-        ('purple', 'Purple'),
-        ('orange', 'Orange'),
-        ('red', 'Red'),
-        ('teal', 'Teal'),
-        ('indigo', 'Indigo'),
-        ('rose', 'Rose'),
-    ]
-    color_theme = models.CharField(
-        max_length=20, choices=COLOR_THEME_CHOICES, default='green',
-        help_text='Site-wide accent color palette',
-    )
+    """Singleton model – stores landing page content (hero, stats, steps,
+    benefits, CTA). Site-wide branding & defaults moved to the
+    `site_settings` app — see SiteSettings."""
 
     # ── Hero Section ──
     hero_title = models.JSONField(
@@ -57,21 +34,6 @@ class LandingPageSettings(models.Model):
     benefits = models.JSONField(
         default=list,
         help_text='[{"icon": "RocketOutlined", "title": {...}, "description": {...}, "color": "#00B856"}]',
-    )
-
-    # ── Search / Location Settings ──
-    SEARCH_SCOPE_CHOICES = [
-        ('georgia', 'Georgia only'),
-        ('worldwide', 'Worldwide'),
-        ('custom', 'Custom countries'),
-    ]
-    search_scope = models.CharField(
-        max_length=20, choices=SEARCH_SCOPE_CHOICES, default='georgia',
-        help_text='Controls which countries are available in location search',
-    )
-    search_countries = models.JSONField(
-        default=list, blank=True,
-        help_text='List of ISO country codes when scope is "custom", e.g. ["ge","tr","az"]',
     )
 
     # ── CTA Section ──

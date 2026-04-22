@@ -259,51 +259,80 @@ export default function AppOrderDetailPage() {
         {/* ── Status Progress Tracker ── */}
         {!isTerminal && (
           <ConfirmSection delay={0.05} icon={<HistoryOutlined />} title={t('orders.orderProgress')}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, paddingTop: 4 }}>
+            {/* Equal-width step columns. The connector line is absolutely
+                positioned UNDER the circles (left/right of column center),
+                so a long Georgian label like "ელოდება თქვენს დადასტურებას"
+                can wrap without bowing the line through adjacent circles. */}
+            <div style={{
+              display: 'flex', alignItems: 'flex-start',
+              paddingTop: 4,
+            }}>
               {STATUS_STEPS.map((s, i) => {
                 const done = i <= statusIdx;
                 const isCurrent = i === statusIdx;
                 const stepColor = done ? (STATUS_BADGE_COLORS[s] || 'var(--accent)') : 'var(--border-color)';
+                const CIRCLE = 26;
+                const HALF = CIRCLE / 2;
+                const leftLineColor = i > 0
+                  ? (i <= statusIdx ? (STATUS_BADGE_COLORS[s] || 'var(--accent)') : 'var(--bg-tertiary)')
+                  : null;
+                const rightLineColor = i < STATUS_STEPS.length - 1
+                  ? (i < statusIdx ? (STATUS_BADGE_COLORS[STATUS_STEPS[i + 1]] || 'var(--accent)') : 'var(--bg-tertiary)')
+                  : null;
                 return (
-                  <React.Fragment key={s}>
-                    <div style={{
-                      display: 'flex', flexDirection: 'column', alignItems: 'center',
-                      flex: 0, minWidth: 0,
-                    }}>
+                  <div key={s} style={{
+                    flex: 1, minWidth: 0, position: 'relative',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    padding: '0 4px',
+                  }}>
+                    {/* Connector line halves — z-index 0 so circles cover them */}
+                    {leftLineColor && (
                       <div style={{
-                        width: isCurrent ? 32 : 22,
-                        height: isCurrent ? 32 : 22,
-                        borderRadius: '50%',
-                        background: done ? stepColor : 'var(--bg-tertiary)',
-                        border: done ? 'none' : '2px solid var(--border-color)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
-                        boxShadow: isCurrent ? `0 0 0 4px ${stepColor}20` : 'none',
-                      }}>
-                        {done && <CheckCircleOutlined style={{ color: '#fff', fontSize: isCurrent ? 16 : 11 }} />}
-                      </div>
-                      <div style={{
-                        fontSize: 10, marginTop: 8, textAlign: 'center',
-                        fontWeight: isCurrent ? 700 : done ? 500 : 400,
-                        color: isCurrent ? stepColor : done ? 'var(--text-primary)' : 'var(--text-placeholder)',
-                        whiteSpace: 'nowrap',
-                        letterSpacing: -0.1,
-                      }}>
-                        {getStatusLabel(t, s, { isCustomer: true })}
-                      </div>
-                    </div>
-                    {i < STATUS_STEPS.length - 1 && (
-                      <div style={{
-                        flex: 1, height: 3, marginBottom: 26,
-                        borderRadius: 2,
-                        background: i < statusIdx
-                          ? (STATUS_BADGE_COLORS[STATUS_STEPS[i + 1]] || 'var(--accent)')
-                          : 'var(--bg-tertiary)',
+                        position: 'absolute',
+                        top: HALF - 1.5, left: 0, right: '50%',
+                        height: 3, background: leftLineColor,
                         transition: 'background 0.35s ease',
-                        marginTop: isCurrent ? 14 : 9,
+                        zIndex: 0,
                       }} />
                     )}
-                  </React.Fragment>
+                    {rightLineColor && (
+                      <div style={{
+                        position: 'absolute',
+                        top: HALF - 1.5, left: '50%', right: 0,
+                        height: 3, background: rightLineColor,
+                        transition: 'background 0.35s ease',
+                        zIndex: 0,
+                      }} />
+                    )}
+
+                    {/* Circle — fixed size; active state uses a glow ring
+                        instead of a larger circle so all circles share a
+                        single vertical centerline. */}
+                    <div style={{
+                      width: CIRCLE, height: CIRCLE, borderRadius: '50%',
+                      background: done ? stepColor : 'var(--bg-tertiary)',
+                      border: done ? 'none' : '2px solid var(--border-color)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: isCurrent ? `0 0 0 5px ${stepColor}22` : 'none',
+                      transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
+                      position: 'relative', zIndex: 1,
+                      flexShrink: 0,
+                    }}>
+                      {done && <CheckCircleOutlined style={{ color: '#fff', fontSize: 13 }} />}
+                    </div>
+
+                    <div style={{
+                      fontSize: 10, marginTop: 10, textAlign: 'center',
+                      fontWeight: isCurrent ? 700 : done ? 500 : 400,
+                      color: isCurrent ? stepColor : done ? 'var(--text-primary)' : 'var(--text-placeholder)',
+                      lineHeight: 1.25,
+                      wordBreak: 'break-word',
+                      hyphens: 'auto',
+                      width: '100%',
+                    }}>
+                      {getStatusLabel(t, s, { isCustomer: true })}
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -857,8 +886,13 @@ export default function AppOrderDetailPage() {
                 const isLast = i === order.status_history.length - 1;
                 return (
                   <div key={i} style={{
-                    display: 'flex', gap: 14, marginBottom: isLast ? 0 : 20,
-                    alignItems: 'flex-start', position: 'relative',
+                    display: 'flex', gap: 14,
+                    paddingBottom: isLast ? 0 : 20,
+                    // Stretch columns so the dot column spans the full row
+                    // height — otherwise the line stops at minHeight and
+                    // leaves a visible gap before the next entry.
+                    alignItems: 'stretch',
+                    position: 'relative',
                   }}>
                     <div style={{
                       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -876,13 +910,16 @@ export default function AppOrderDetailPage() {
                           width: 2, flex: 1, minHeight: 24,
                           background: 'var(--border-color)',
                           marginTop: 4,
+                          // Extend the line through the row's bottom padding
+                          // so it meets the top of the next dot with no gap.
+                          marginBottom: -20,
                         }} />
                       )}
                     </div>
                     <div style={{ flex: 1, paddingBottom: isLast ? 0 : 4 }}>
                       <div style={{
                         fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
-                        lineHeight: 1, letterSpacing: -0.1,
+                        lineHeight: 1.2, letterSpacing: -0.1,
                       }}>
                         {getStatusLabel(t, h.new_status, { isCustomer: true }) || h.new_status}
                       </div>

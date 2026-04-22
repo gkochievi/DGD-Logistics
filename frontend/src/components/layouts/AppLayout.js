@@ -256,8 +256,10 @@ export default function AppLayout() {
           {/* Desktop horizontal nav */}
           <nav style={{
             display: 'flex', alignItems: 'center', gap: 2,
-            marginLeft: 36,
+            marginLeft: 28,
             flex: 1,
+            minWidth: 0,
+            overflow: 'hidden',
           }}>
             {NAV_ITEMS.map((item) => {
               const isActive = item.key === '/app'
@@ -273,15 +275,20 @@ export default function AppLayout() {
                     borderRadius: 10,
                     cursor: 'pointer',
                     fontSize: 13,
-                    fontWeight: isActive ? 600 : 450,
+                    fontWeight: isActive ? 600 : 500,
                     color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
                     background: isActive ? 'var(--nav-active-bg)' : 'transparent',
                     transition: 'all 0.15s ease',
-                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
                   }}
                 >
-                  <span style={{ fontSize: 15, opacity: isActive ? 1 : 0.75 }}>{item.icon}</span>
-                  {item.label}
+                  <span style={{ fontSize: 16, opacity: isActive ? 1 : 0.78 }}>{item.icon}</span>
+                  <span style={{
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: 160,
+                  }}>{item.label}</span>
                 </div>
               );
             })}
@@ -302,11 +309,18 @@ export default function AppLayout() {
               boxShadow: 'var(--fab-shadow)',
               transition: 'all 0.2s ease',
               marginRight: 16,
-              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              maxWidth: 200,
             }}
           >
-            <PlusOutlined style={{ fontSize: 13 }} />
-            {t('orders.newOrder')}
+            <PlusOutlined style={{ fontSize: 13, flexShrink: 0 }} />
+            <span style={{
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+              {t('orders.newOrder')}
+            </span>
           </div>
 
           {/* Notifications bell */}
@@ -408,6 +422,11 @@ function TabItem({ item, isActive, onClick }) {
         fontSize: 10,
         fontWeight: isActive ? 600 : 400,
         letterSpacing: 0.2,
+        maxWidth: '100%',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        padding: '0 4px',
       }}>
         {item.label}
       </span>

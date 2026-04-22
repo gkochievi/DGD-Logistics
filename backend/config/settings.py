@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'vehicles',
     'drivers',
     'landing',
+    'site_settings',
 ]
 
 MIDDLEWARE = [

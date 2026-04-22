@@ -1,4 +1,5 @@
 from rest_framework import generics, status, permissions
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -10,14 +11,21 @@ from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
 from datetime import timedelta
 
+from .models import CompanyContract
 from .serializers import (
     RegisterSerializer, UserSerializer, ProfileUpdateSerializer,
     ChangePasswordSerializer, AdminUserSerializer, AdminCreateUserSerializer,
-    AdminResetPasswordSerializer,
+    AdminResetPasswordSerializer, CompanyContractSerializer,
 )
 from .permissions import IsAdmin
 
 User = get_user_model()
+
+# Tracks contract documents accepted on upload. Mirrors the frontend
+# accept attribute. Anything else is rejected with a clear message.
+ALLOWED_CONTRACT_EXTS = {'.pdf', '.doc', '.docx', '.odt', '.rtf', '.txt',
+                         '.jpg', '.jpeg', '.png', '.webp'}
+MAX_CONTRACT_SIZE = 20 * 1024 * 1024  # 20 MB
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -118,6 +126,91 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = AdminUserSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
     queryset = User.objects.annotate(order_count=Count('orders'))
+
+
+def _validate_contract_file(uploaded):
+    """Reject obvious bad uploads early so the serializer error path is
+    consistent (and we never persist a 50MB PDF). Returns a string error
+    or None on success."""
+    if uploaded is None:
+        return 'No file was uploaded.'
+    name = (getattr(uploaded, 'name', '') or '').lower()
+    ext = name.rsplit('.', 1)[-1] if '.' in name else ''
+    if f'.{ext}' not in ALLOWED_CONTRACT_EXTS:
+        return 'Unsupported file type. Allowed: PDF, DOC, DOCX, ODT, RTF, TXT, JPG, PNG, WEBP.'
+    if getattr(uploaded, 'size', 0) > MAX_CONTRACT_SIZE:
+        return 'File exceeds the 20MB limit.'
+    return None
+
+
+class AdminUserContractsView(APIView):
+    """List a user's contracts and upload new ones (admin only)."""
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def _get_target(self, pk):
+        try:
+            return User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        target = self._get_target(pk)
+        if target is None:
+            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        qs = target.contracts.all().order_by('-created_at')
+        return Response(
+            CompanyContractSerializer(qs, many=True, context={'request': request}).data
+        )
+
+    def post(self, request, pk):
+        target = self._get_target(pk)
+        if target is None:
+            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if target.user_type != User.COMPANY:
+            return Response(
+                {'detail': 'Contracts can only be uploaded for company users.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        err = _validate_contract_file(request.FILES.get('document'))
+        if err:
+            return Response({'document': [err]}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = CompanyContractSerializer(
+            data=request.data,
+            context={'request': request, 'target_user': target},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class AdminUserContractDetailView(APIView):
+    """Delete a single contract belonging to a user (admin only)."""
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def delete(self, request, pk, contract_id):
+        try:
+            contract = CompanyContract.objects.get(pk=contract_id, user_id=pk)
+        except CompanyContract.DoesNotExist:
+            return Response({'detail': 'Contract not found.'}, status=status.HTTP_404_NOT_FOUND)
+        contract.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CustomerContractsView(APIView):
+    """A company customer reads their own contracts. Personal users get
+    an empty list — no error so the frontend can render a single profile
+    page regardless of user_type."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if request.user.user_type != User.COMPANY:
+            return Response([])
+        qs = request.user.contracts.all().order_by('-created_at')
+        return Response(
+            CompanyContractSerializer(qs, many=True, context={'request': request}).data
+        )
 
 
 class AdminResetUserPasswordView(APIView):

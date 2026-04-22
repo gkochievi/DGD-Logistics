@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import api from '../api/client';
 import { applyColorTheme, DEFAULT_COLOR_THEME } from '../utils/colorThemes';
-import { deriveCurrencyFromLanding, DEFAULT_CURRENCY } from '../utils/currency';
+import { deriveCurrencyFromSettings, DEFAULT_CURRENCY } from '../utils/currency';
 
 const BrandingContext = createContext({});
 
@@ -12,6 +12,9 @@ export function BrandingProvider({ children }) {
     faviconUrl: null,
     colorTheme: DEFAULT_COLOR_THEME,
     currency: DEFAULT_CURRENCY,
+    defaultSearchScope: 'georgia',
+    defaultSearchCountries: [],
+    restrictedTimeWindows: [],
   });
 
   const setColorTheme = useCallback((themeKey) => {
@@ -19,15 +22,18 @@ export function BrandingProvider({ children }) {
     setBranding((prev) => ({ ...prev, colorTheme: themeKey }));
   }, []);
 
-  useEffect(() => {
-    api.get('/landing/').then(({ data }) => {
+  const refresh = useCallback(() => {
+    return api.get('/site-settings/').then(({ data }) => {
       const themeKey = data.color_theme || DEFAULT_COLOR_THEME;
       setBranding({
         siteName: data.site_name || null,
-        siteIconUrl: data.site_icon_url || null,
+        siteIconUrl: data.site_logo_url || null,
         faviconUrl: data.favicon_url || null,
         colorTheme: themeKey,
-        currency: deriveCurrencyFromLanding(data),
+        currency: deriveCurrencyFromSettings(data),
+        defaultSearchScope: data.default_search_scope || 'georgia',
+        defaultSearchCountries: data.default_search_countries || [],
+        restrictedTimeWindows: data.restricted_time_windows || [],
       });
       applyColorTheme(themeKey);
 
@@ -44,8 +50,11 @@ export function BrandingProvider({ children }) {
         }
         link.href = data.favicon_url;
       }
-    }).catch(() => {});
+      return data;
+    }).catch(() => null);
   }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   // Re-apply palette when light/dark mode toggles, so accent picks the right shade.
   useEffect(() => {
@@ -61,7 +70,7 @@ export function BrandingProvider({ children }) {
   }, [branding.colorTheme]);
 
   return (
-    <BrandingContext.Provider value={{ ...branding, setColorTheme }}>
+    <BrandingContext.Provider value={{ ...branding, setColorTheme, refresh }}>
       {children}
     </BrandingContext.Provider>
   );

@@ -1,20 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Button, Typography, Form, Input, Collapse, Space, message, Grid, Upload,
-  ColorPicker, Select, Tabs, Spin, Radio, Tag,
+  Button, Typography, Form, Input, message, Grid, Upload,
+  ColorPicker, Select, Tabs, Spin,
 } from 'antd';
 import {
-  PlusOutlined, DeleteOutlined, SaveOutlined, PictureOutlined,
+  PlusOutlined, DeleteOutlined, SaveOutlined,
   RocketOutlined, FileTextOutlined, TrophyOutlined,
-  ThunderboltOutlined, StarOutlined, UploadOutlined, SearchOutlined,
-  GlobalOutlined,
+  ThunderboltOutlined, StarOutlined, UploadOutlined,
 } from '@ant-design/icons';
-import { BgColorsOutlined, CheckOutlined } from '@ant-design/icons';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
-import { useBranding } from '../../contexts/BrandingContext';
 import { getCategoryIcon, AVAILABLE_ICONS } from '../../utils/categoryIcons';
-import { COLOR_THEMES, DEFAULT_COLOR_THEME, applyColorTheme } from '../../utils/colorThemes';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -26,33 +22,9 @@ const LANG_TABS = [
   { key: 'ru', label: '🇷🇺 RU' },
 ];
 
-const COUNTRY_OPTIONS = [
-  { code: 'ge', name: 'Georgia', flag: '🇬🇪' },
-  { code: 'tr', name: 'Turkey', flag: '🇹🇷' },
-  { code: 'az', name: 'Azerbaijan', flag: '🇦🇿' },
-  { code: 'am', name: 'Armenia', flag: '🇦🇲' },
-  { code: 'ru', name: 'Russia', flag: '🇷🇺' },
-  { code: 'ua', name: 'Ukraine', flag: '🇺🇦' },
-  { code: 'de', name: 'Germany', flag: '🇩🇪' },
-  { code: 'fr', name: 'France', flag: '🇫🇷' },
-  { code: 'it', name: 'Italy', flag: '🇮🇹' },
-  { code: 'es', name: 'Spain', flag: '🇪🇸' },
-  { code: 'gb', name: 'United Kingdom', flag: '🇬🇧' },
-  { code: 'us', name: 'United States', flag: '🇺🇸' },
-  { code: 'pl', name: 'Poland', flag: '🇵🇱' },
-  { code: 'bg', name: 'Bulgaria', flag: '🇧🇬' },
-  { code: 'ro', name: 'Romania', flag: '🇷🇴' },
-  { code: 'gr', name: 'Greece', flag: '🇬🇷' },
-  { code: 'kz', name: 'Kazakhstan', flag: '🇰🇿' },
-  { code: 'il', name: 'Israel', flag: '🇮🇱' },
-  { code: 'ae', name: 'UAE', flag: '🇦🇪' },
-  { code: 'cn', name: 'China', flag: '🇨🇳' },
-];
-
 export default function AdminLandingPage() {
   const screens = useBreakpoint();
   const { t } = useLang();
-  const { setColorTheme } = useBranding();
   const isMobile = !screens.md;
 
   const [loading, setLoading] = useState(true);
@@ -60,17 +32,11 @@ export default function AdminLandingPage() {
   const [data, setData] = useState(null);
   const [heroImageFile, setHeroImageFile] = useState(null);
   const [heroImagePreview, setHeroImagePreview] = useState(null);
-  const [siteIconFile, setSiteIconFile] = useState(null);
-  const [siteIconPreview, setSiteIconPreview] = useState(null);
-  const [faviconFile, setFaviconFile] = useState(null);
-  const [faviconPreview, setFaviconPreview] = useState(null);
 
   useEffect(() => {
     api.get('/landing/admin/').then(({ data }) => {
       setData(data);
       if (data.hero_image_url) setHeroImagePreview(data.hero_image_url);
-      if (data.site_icon_url) setSiteIconPreview(data.site_icon_url);
-      if (data.favicon_url) setFaviconPreview(data.favicon_url);
     }).catch(() => message.error('Failed to load'))
       .finally(() => setLoading(false));
   }, []);
@@ -127,13 +93,8 @@ export default function AdminLandingPage() {
       const jsonFields = [
         'hero_title', 'hero_description', 'stats',
         'steps_title', 'steps', 'benefits_title', 'benefits',
-        'search_countries',
         'cta_title', 'cta_description', 'cta_button_text',
       ];
-
-      formData.append('site_name', data.site_name || '');
-      formData.append('color_theme', data.color_theme || DEFAULT_COLOR_THEME);
-      formData.append('search_scope', data.search_scope || 'georgia');
 
       jsonFields.forEach((field) => {
         formData.append(field, JSON.stringify(data[field] || {}));
@@ -142,17 +103,10 @@ export default function AdminLandingPage() {
       if (heroImageFile) {
         formData.append('hero_image', heroImageFile);
       }
-      if (siteIconFile) {
-        formData.append('site_icon', siteIconFile);
-      }
-      if (faviconFile) {
-        formData.append('favicon', faviconFile);
-      }
 
       await api.put('/landing/admin/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setColorTheme(data.color_theme || DEFAULT_COLOR_THEME);
       message.success(t('adminLanding.saved'));
     } catch (err) {
       message.error(t('adminLanding.saveFailed'));
@@ -214,182 +168,6 @@ export default function AdminLandingPage() {
         >
           {t('adminLanding.save')}
         </Button>
-      </div>
-
-      {/* ── Branding (Site Icon & Favicon) ── */}
-      <div style={cardStyle}>
-        <div style={sectionTitleStyle}>
-          <GlobalOutlined style={{ color: 'var(--accent)' }} />
-          {t('adminLanding.brandingSection')}
-        </div>
-
-        <Form layout="vertical" requiredMark={false}>
-          <Form.Item label={<span style={{ fontWeight: 600 }}>{t('adminLanding.siteName')}</span>}>
-            <Input
-              value={data.site_name}
-              onChange={(e) => updateField('site_name', e.target.value)}
-              style={inputStyle}
-              placeholder="Heavyy Way"
-            />
-            <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-tertiary)' }}>
-              {t('adminLanding.siteNameHint')}
-            </div>
-          </Form.Item>
-
-          <div style={{ display: 'flex', gap: isMobile ? 12 : 24, flexWrap: 'wrap', flexDirection: isMobile ? 'column' : 'row' }}>
-            {/* Site Icon */}
-            <div style={{ flex: 1, minWidth: isMobile ? '100%' : 200 }}>
-              <Form.Item label={<span style={{ fontWeight: 600 }}>{t('adminLanding.siteIcon')}</span>}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  {siteIconPreview && (
-                    <img
-                      src={siteIconPreview}
-                      alt="Site Icon"
-                      style={{
-                        width: 48, height: 48, objectFit: 'contain',
-                        borderRadius: 10, border: '1px solid var(--border-color)',
-                        background: 'var(--bg-secondary)',
-                      }}
-                    />
-                  )}
-                  <Upload
-                    beforeUpload={(file) => {
-                      setSiteIconFile(file);
-                      setSiteIconPreview(URL.createObjectURL(file));
-                      return false;
-                    }}
-                    showUploadList={false}
-                    accept="image/*"
-                  >
-                    <Button icon={<UploadOutlined />} style={{ borderRadius: 10 }}>
-                      {t('adminLanding.uploadIcon')}
-                    </Button>
-                  </Upload>
-                  {siteIconPreview && (
-                    <Button
-                      danger type="text"
-                      onClick={() => {
-                        setSiteIconFile(null);
-                        setSiteIconPreview(null);
-                        updateField('site_icon', null);
-                      }}
-                    >
-                      {t('adminLanding.removeImage')}
-                    </Button>
-                  )}
-                </div>
-                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
-                  {t('adminLanding.siteIconHint')}
-                </div>
-              </Form.Item>
-            </div>
-
-            {/* Favicon */}
-            <div style={{ flex: 1, minWidth: isMobile ? '100%' : 200 }}>
-              <Form.Item label={<span style={{ fontWeight: 600 }}>{t('adminLanding.favicon')}</span>}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  {faviconPreview && (
-                    <img
-                      src={faviconPreview}
-                      alt="Favicon"
-                      style={{
-                        width: 32, height: 32, objectFit: 'contain',
-                        borderRadius: 6, border: '1px solid var(--border-color)',
-                        background: 'var(--bg-secondary)',
-                      }}
-                    />
-                  )}
-                  <Upload
-                    beforeUpload={(file) => {
-                      setFaviconFile(file);
-                      setFaviconPreview(URL.createObjectURL(file));
-                      return false;
-                    }}
-                    showUploadList={false}
-                    accept="image/png,image/x-icon,image/svg+xml"
-                  >
-                    <Button icon={<UploadOutlined />} style={{ borderRadius: 10 }}>
-                      {t('adminLanding.uploadFavicon')}
-                    </Button>
-                  </Upload>
-                  {faviconPreview && (
-                    <Button
-                      danger type="text"
-                      onClick={() => {
-                        setFaviconFile(null);
-                        setFaviconPreview(null);
-                        updateField('favicon', null);
-                      }}
-                    >
-                      {t('adminLanding.removeImage')}
-                    </Button>
-                  )}
-                </div>
-                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
-                  {t('adminLanding.faviconHint')}
-                </div>
-              </Form.Item>
-            </div>
-          </div>
-        </Form>
-      </div>
-
-      {/* ── Color Theme ── */}
-      <div style={cardStyle}>
-        <div style={sectionTitleStyle}>
-          <BgColorsOutlined style={{ color: 'var(--accent)' }} />
-          {t('adminLanding.colorThemeSection')}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14 }}>
-          {t('adminLanding.colorThemeHint')}
-        </div>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(auto-fill, minmax(${isMobile ? 110 : 130}px, 1fr))`,
-          gap: 12,
-        }}>
-          {Object.entries(COLOR_THEMES).map(([key, theme]) => {
-            const selected = (data.color_theme || DEFAULT_COLOR_THEME) === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => {
-                  updateField('color_theme', key);
-                  applyColorTheme(key);
-                }}
-                style={{
-                  cursor: 'pointer',
-                  background: selected ? 'var(--accent-bg)' : 'var(--bg-secondary)',
-                  border: `2px solid ${selected ? theme.swatch : 'var(--border-color)'}`,
-                  borderRadius: 14,
-                  padding: '14px 12px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 8,
-                  transition: 'all 0.15s ease',
-                  position: 'relative',
-                }}
-              >
-                <div style={{
-                  width: 40, height: 40, borderRadius: '50%',
-                  background: theme.swatch,
-                  boxShadow: `0 4px 12px ${theme.swatch}40`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {selected && <CheckOutlined style={{ color: '#fff', fontSize: 18 }} />}
-                </div>
-                <span style={{
-                  fontSize: 13, fontWeight: 600,
-                  color: selected ? 'var(--text-primary)' : 'var(--text-secondary)',
-                }}>
-                  {theme.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       {/* ── Hero Section ── */}
@@ -454,55 +232,6 @@ export default function AdminLandingPage() {
               )}
             </div>
           </Form.Item>
-        </Form>
-      </div>
-
-      {/* ── Search / Location Settings ── */}
-      <div style={cardStyle}>
-        <div style={sectionTitleStyle}>
-          <SearchOutlined style={{ color: 'var(--accent)' }} />
-          {t('adminLanding.searchSection')}
-        </div>
-
-        <Form layout="vertical" requiredMark={false}>
-          <Form.Item label={<span style={{ fontWeight: 600 }}>{t('adminLanding.searchScope')}</span>}>
-            <Radio.Group
-              value={data.search_scope || 'georgia'}
-              onChange={(e) => {
-                updateField('search_scope', e.target.value);
-                if (e.target.value !== 'custom') updateField('search_countries', []);
-              }}
-            >
-              <Space direction="vertical" style={{ gap: 10 }}>
-                <Radio value="georgia" style={{ fontWeight: 500 }}>
-                  🇬🇪 {t('adminLanding.scopeGeorgia')}
-                </Radio>
-                <Radio value="worldwide" style={{ fontWeight: 500 }}>
-                  🌍 {t('adminLanding.scopeWorldwide')}
-                </Radio>
-                <Radio value="custom" style={{ fontWeight: 500 }}>
-                  🗺️ {t('adminLanding.scopeCustom')}
-                </Radio>
-              </Space>
-            </Radio.Group>
-          </Form.Item>
-
-          {data.search_scope === 'custom' && (
-            <Form.Item label={<span style={{ fontWeight: 600 }}>{t('adminLanding.searchCountries')}</span>}>
-              <Select
-                mode="multiple"
-                value={data.search_countries || []}
-                onChange={(val) => updateField('search_countries', val)}
-                placeholder={t('adminLanding.selectCountries')}
-                style={{ borderRadius: 10 }}
-                optionFilterProp="label"
-                options={COUNTRY_OPTIONS.map((c) => ({
-                  value: c.code,
-                  label: `${c.flag} ${c.name}`,
-                }))}
-              />
-            </Form.Item>
-          )}
         </Form>
       </div>
 

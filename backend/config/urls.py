@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/vehicles/', include('vehicles.urls')),
     path('api/drivers/', include('drivers.urls')),
     path('api/landing/', include('landing.urls')),
+    path('api/site-settings/', include('site_settings.urls')),
 ]
 
 if settings.DEBUG:

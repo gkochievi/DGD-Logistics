@@ -187,6 +187,47 @@ class OrderCreateSerializer(serializers.ModelSerializer):
             'selected_category': {'required': False, 'allow_null': True},
         }
 
+    def validate(self, attrs):
+        """Reject orders whose requested_time falls inside a restricted window
+        for any matching pickup/destination/route stop. Mirrors the
+        customer-side disable so a hand-crafted POST can't bypass the rule.
+        """
+        from site_settings.models import RestrictedTimeWindow
+
+        requested_time = attrs.get('requested_time')
+        if requested_time is None:
+            return attrs
+
+        # Collect every text location attached to the order so any stop in a
+        # restricted city is enough to block the chosen time.
+        location_texts = [
+            attrs.get('pickup_location') or '',
+            attrs.get('destination_location') or '',
+        ]
+        route_stops_raw = attrs.get('route_stops') or ''
+        if route_stops_raw:
+            try:
+                parsed = json.loads(route_stops_raw)
+            except (ValueError, TypeError):
+                parsed = None
+            if isinstance(parsed, dict):
+                for key in ('pickups', 'destinations'):
+                    for stop in parsed.get(key, []) or []:
+                        if isinstance(stop, dict) and stop.get('address'):
+                            location_texts.append(str(stop['address']))
+
+        for window in RestrictedTimeWindow.objects.filter(is_active=True):
+            if not window.covers_time(requested_time):
+                continue
+            if any(window.matches_location(t) for t in location_texts):
+                detail = window.description or (
+                    f'Special transport is not allowed in {window.location_keyword} '
+                    f'between {window.start_time.strftime("%H:%M")} and '
+                    f'{window.end_time.strftime("%H:%M")}.'
+                )
+                raise serializers.ValidationError({'requested_time': detail})
+        return attrs
+
     def create(self, validated_data):
         images_data = validated_data.pop('images', [])
         user = self.context['request'].user

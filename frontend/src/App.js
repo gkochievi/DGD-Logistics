@@ -33,6 +33,7 @@ import AdminVehiclesPage from './pages/admin/AdminVehiclesPage';
 import AdminDriversPage from './pages/admin/AdminDriversPage';
 import AdminAnalyticsPage from './pages/admin/AdminAnalyticsPage';
 import AdminLandingPage from './pages/admin/AdminLandingPage';
+import AdminSettingsPage from './pages/admin/AdminSettingsPage';
 
 export default function App() {
   return (
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="/admin/vehicles" element={<AdminVehiclesPage />} />
           <Route path="/admin/drivers" element={<AdminDriversPage />} />
           <Route path="/admin/landing" element={<AdminLandingPage />} />
+          <Route path="/admin/settings" element={<AdminSettingsPage />} />
         </Route>
 
         {/* Forced password change (after admin reset) */}

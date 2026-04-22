@@ -2,6 +2,8 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 
+from .models import CompanyContract
+
 User = get_user_model()
 
 
@@ -131,3 +133,50 @@ class AdminCreateUserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
+
+
+class CompanyContractSerializer(serializers.ModelSerializer):
+    document_url = serializers.SerializerMethodField()
+    uploaded_by_name = serializers.CharField(
+        source='uploaded_by.full_name', read_only=True, default='',
+    )
+
+    class Meta:
+        model = CompanyContract
+        fields = [
+            'id', 'title', 'original_filename', 'file_size',
+            'document', 'document_url',
+            'uploaded_by', 'uploaded_by_name',
+            'created_at',
+        ]
+        read_only_fields = [
+            'id', 'original_filename', 'file_size', 'document_url',
+            'uploaded_by', 'uploaded_by_name', 'created_at',
+        ]
+        extra_kwargs = {
+            'document': {'write_only': True, 'required': True},
+            'title': {'required': False, 'allow_blank': True},
+        }
+
+    def get_document_url(self, obj):
+        if not obj.document:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.document.url)
+        return obj.document.url
+
+    def create(self, validated_data):
+        request = self.context['request']
+        target_user = self.context['target_user']
+        document = validated_data['document']
+        validated_data['original_filename'] = getattr(document, 'name', '') or ''
+        validated_data['file_size'] = getattr(document, 'size', 0) or 0
+        if not validated_data.get('title'):
+            # Drop the extension so the visible label is "Service Agreement"
+            # rather than "Service Agreement.pdf".
+            base = validated_data['original_filename'].rsplit('.', 1)[0]
+            validated_data['title'] = base or 'Contract'
+        validated_data['user'] = target_user
+        validated_data['uploaded_by'] = request.user
+        return CompanyContract.objects.create(**validated_data)

@@ -423,3 +423,7 @@ body {
 .page-enter {
   animation: fadeInUp 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+/* Hide scrollbar on horizontally-scrolled mobile tab bars (admin nav with
+   9 items in KA/RU). Container itself stays scrollable via touch/wheel. */
+.admin-mobile-tabbar::-webkit-scrollbar { display: none; }

@@ -225,7 +225,7 @@ export default function AdminVehiclesPage() {
       title: t('adminUsers.name'), dataIndex: 'name', ellipsis: true,
       render: (name) => <span style={{ fontWeight: 600 }}>{name}</span>,
     },
-    { title: t('adminVehicles.plateNumber'), dataIndex: 'plate_number', width: 110 },
+    { title: t('adminVehicles.plateNumber'), dataIndex: 'plate_number', width: 120, ellipsis: true },
     {
       title: t('adminOrders.category'), dataIndex: 'categories_detail', width: 180,
       render: (list) => {
@@ -262,7 +262,7 @@ export default function AdminVehiclesPage() {
       ),
     },
     {
-      title: t('adminVehicles.status'), dataIndex: 'status', width: 150,
+      title: t('adminVehicles.status'), dataIndex: 'status', width: 170,
       render: (s, record) => (
         <Dropdown
           trigger={['click']}

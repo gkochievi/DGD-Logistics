@@ -1,7 +1,8 @@
+from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 
-from config.media_utils import user_avatar_path
+from config.media_utils import user_avatar_path, company_contract_path
 
 
 class UserManager(BaseUserManager):
@@ -65,3 +66,33 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def full_name(self):
         return f'{self.first_name} {self.last_name}'
+
+
+class CompanyContract(models.Model):
+    """Contract document uploaded by an admin and visible to a company user.
+
+    Restricted to users with `user_type='company'` — enforced in the
+    serializer rather than at the DB level so existing personal users
+    aren't migrated. Original filenames are kept on the row for display;
+    the on-disk filename is a UUID via `company_contract_path`.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='contracts',
+    )
+    document = models.FileField(upload_to=company_contract_path)
+    title = models.CharField(max_length=200, blank=True)
+    original_filename = models.CharField(max_length=255, blank=True)
+    file_size = models.PositiveIntegerField(default=0)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Contract #{self.pk} for {self.user_id}'

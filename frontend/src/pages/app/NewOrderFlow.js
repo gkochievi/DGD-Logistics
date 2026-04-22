@@ -12,6 +12,7 @@ import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import api from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBranding } from '../../contexts/BrandingContext';
 import { useLang } from '../../contexts/LanguageContext';
 import { CategoryImage } from '../../utils/categoryIcons';
 import MapPicker from '../../components/map/MapPicker';
@@ -20,10 +21,78 @@ import LocationAutocomplete from '../../components/common/LocationAutocomplete';
 const { TextArea } = Input;
 const { useBreakpoint } = Grid;
 
+// Build an AntD TimePicker `disabledTime` callback from the restricted
+// windows that apply to the current order, plus a list of human-readable
+// rules for the warning banner. A window applies if any pickup,
+// destination, or route stop text contains its `location_keyword`
+// (case-insensitive substring).
+function computeRestrictions(windows, locationTexts) {
+  const lowered = locationTexts
+    .map((t) => (t || '').toLowerCase())
+    .filter(Boolean);
+
+  const applicable = (windows || []).filter((w) => {
+    if (!w.is_active) return false;
+    const kw = (w.location_keyword || '').toLowerCase().trim();
+    if (!kw) return false;
+    return lowered.some((txt) => txt.includes(kw));
+  });
+
+  if (applicable.length === 0) {
+    return { applicable: [], disabledTime: undefined };
+  }
+
+  // For each window like 17:00–19:00, mark every minute in [start, end) as
+  // blocked. Wrap-around windows (e.g. 22:00–06:00) are split into two
+  // ranges. Each minute is one bit in a 1440-entry array.
+  const blocked = new Array(24 * 60).fill(false);
+  const minutesOf = (hms) => {
+    if (!hms) return null;
+    const [h, m] = hms.split(':').map(Number);
+    return h * 60 + m;
+  };
+  applicable.forEach((w) => {
+    const s = minutesOf(w.start_time);
+    const e = minutesOf(w.end_time);
+    if (s == null || e == null) return;
+    if (s < e) {
+      for (let i = s; i < e; i++) blocked[i] = true;
+    } else if (s > e) {
+      for (let i = s; i < 24 * 60; i++) blocked[i] = true;
+      for (let i = 0; i < e; i++) blocked[i] = true;
+    }
+  });
+
+  const disabledTime = () => ({
+    disabledHours: () => {
+      const hours = [];
+      for (let h = 0; h < 24; h++) {
+        let allBlocked = true;
+        for (let m = 0; m < 60; m++) {
+          if (!blocked[h * 60 + m]) { allBlocked = false; break; }
+        }
+        if (allBlocked) hours.push(h);
+      }
+      return hours;
+    },
+    disabledMinutes: (h) => {
+      if (h == null || h < 0) return [];
+      const mins = [];
+      for (let m = 0; m < 60; m++) {
+        if (blocked[h * 60 + m]) mins.push(m);
+      }
+      return mins;
+    },
+  });
+
+  return { applicable, disabledTime };
+}
+
 export default function NewOrderFlow() {
   const [form] = Form.useForm();
   const { user } = useAuth();
   const { t, lang } = useLang();
+  const { restrictedTimeWindows } = useBranding();
   const localized = (field) => {
     if (!field) return '';
     if (typeof field === 'string') return field;
@@ -809,25 +878,60 @@ export default function NewOrderFlow() {
 
           {/* ── SECTION: Date & Time ── */}
           <SectionCard icon={<CalendarOutlined />} title={t('newOrder.when')}>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <Form.Item name="requested_date" style={{ flex: 1, marginBottom: 0 }}
-                rules={[{ required: true, message: t('newOrder.selectDate') }]}>
-                <DatePicker
-                  style={{ width: '100%', height: 48, borderRadius: 12, fontSize: 15 }}
-                  placeholder={t('newOrder.selectDate')}
-                  disabledDate={(d) => d && d < dayjs().startOf('day')}
-                  inputReadOnly suffixIcon={<CalendarOutlined />}
-                />
-              </Form.Item>
-              <Form.Item name="requested_time" style={{ flex: 1, marginBottom: 0 }}>
-                <TimePicker
-                  format="HH:mm"
-                  style={{ width: '100%', height: 48, borderRadius: 12, fontSize: 15 }}
-                  placeholder={t('newOrder.preferredTime')}
-                  inputReadOnly suffixIcon={<ClockCircleOutlined />}
-                />
-              </Form.Item>
-            </div>
+            {(() => {
+              const allLocations = [
+                ...pickupStops.map((s) => s.text),
+                ...destStops.map((s) => s.text),
+              ];
+              const { applicable, disabledTime } = computeRestrictions(
+                restrictedTimeWindows, allLocations,
+              );
+              return (
+                <>
+                  {applicable.length > 0 && (
+                    <div style={{
+                      background: '#fff7ed', borderRadius: 12, padding: '10px 14px',
+                      marginBottom: 12, border: '1px solid #fed7aa',
+                      display: 'flex', gap: 10, alignItems: 'flex-start',
+                    }}>
+                      <ClockCircleOutlined style={{ color: '#c2410c', fontSize: 16, marginTop: 2 }} />
+                      <div style={{ flex: 1, fontSize: 13, color: '#7c2d12', lineHeight: 1.5 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                          {t('newOrder.restrictedTimesTitle')}
+                        </div>
+                        {applicable.map((w) => (
+                          <div key={w.id}>
+                            • {w.location_keyword}: {w.start_time?.slice(0, 5)}–{w.end_time?.slice(0, 5)}
+                            {w.description ? ` — ${w.description}` : ''}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <Form.Item name="requested_date" style={{ flex: 1, marginBottom: 0 }}
+                      rules={[{ required: true, message: t('newOrder.selectDate') }]}>
+                      <DatePicker
+                        style={{ width: '100%', height: 48, borderRadius: 12, fontSize: 15 }}
+                        placeholder={t('newOrder.selectDate')}
+                        disabledDate={(d) => d && d < dayjs().startOf('day')}
+                        inputReadOnly suffixIcon={<CalendarOutlined />}
+                      />
+                    </Form.Item>
+                    <Form.Item name="requested_time" style={{ flex: 1, marginBottom: 0 }}>
+                      <TimePicker
+                        format="HH:mm"
+                        style={{ width: '100%', height: 48, borderRadius: 12, fontSize: 15 }}
+                        placeholder={t('newOrder.preferredTime')}
+                        inputReadOnly suffixIcon={<ClockCircleOutlined />}
+                        disabledTime={disabledTime}
+                        hideDisabledOptions
+                      />
+                    </Form.Item>
+                  </div>
+                </>
+              );
+            })()}
           </SectionCard>
 
           {/* ── SECTION: Description ── */}

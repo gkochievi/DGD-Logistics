@@ -59,7 +59,7 @@ export default function AdminUsersPage() {
       render: (name) => <span style={{ fontWeight: 600 }}>{name}</span>,
     },
     { title: t('adminUsers.email'), dataIndex: 'email', ellipsis: true },
-    { title: t('adminUsers.phone'), dataIndex: 'phone_number', width: 130 },
+    { title: t('adminUsers.phone'), dataIndex: 'phone_number', width: 140, ellipsis: true },
     {
       title: t('adminUsers.role'), dataIndex: 'role', width: 90,
       render: (role) => <Tag color={role === 'admin' ? 'purple' : 'blue'}>{role}</Tag>,

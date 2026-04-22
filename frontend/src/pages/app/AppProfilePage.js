@@ -6,12 +6,21 @@ import {
   FileTextOutlined, ClockCircleOutlined, CheckCircleOutlined,
   MoonFilled, SunFilled, TranslationOutlined,
   CameraOutlined, DeleteOutlined, LoadingOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
 import api from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLang } from '../../contexts/LanguageContext';
+
+function formatBytes(n) {
+  if (!n) return '0 B';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -87,6 +96,18 @@ export default function AppProfilePage() {
   useEffect(() => {
     api.get('/auth/profile/stats/').then(({ data }) => setStats(data)).catch(() => {});
   }, []);
+
+  const [contracts, setContracts] = useState([]);
+  const [contractsLoading, setContractsLoading] = useState(false);
+
+  useEffect(() => {
+    if (user?.user_type !== 'company') return;
+    setContractsLoading(true);
+    api.get('/auth/profile/contracts/')
+      .then(({ data }) => setContracts(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setContractsLoading(false));
+  }, [user?.user_type]);
 
   const handleProfileSave = async (values) => {
     setSaving(true);
@@ -359,6 +380,89 @@ export default function AppProfilePage() {
             />
           </div>
         </SettingsCard>
+
+        {user?.user_type === 'company' && (
+          <SettingsCard>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '14px 16px',
+              borderBottom: contracts.length > 0 || contractsLoading
+                ? '1px solid var(--border-light)' : 'none',
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: 'var(--accent-bg)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 16, color: 'var(--accent)',
+                flexShrink: 0,
+              }}>
+                <FileTextOutlined />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 15, color: 'var(--text-primary)', fontWeight: 500,
+                }}>
+                  {t('profile.contractsTitle')}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                  {t('profile.contractsHint')}
+                </div>
+              </div>
+            </div>
+            {contractsLoading ? (
+              <div style={{ padding: '20px 16px', textAlign: 'center' }}>
+                <LoadingOutlined style={{ color: 'var(--accent)', fontSize: 18 }} />
+              </div>
+            ) : contracts.length === 0 ? (
+              <div style={{
+                padding: '18px 16px', fontSize: 13,
+                color: 'var(--text-tertiary)', textAlign: 'center',
+              }}>
+                {t('profile.noContracts')}
+              </div>
+            ) : (
+              contracts.map((c, idx) => (
+                <a
+                  key={c.id}
+                  href={c.document_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 14,
+                    padding: '14px 16px',
+                    borderBottom: idx < contracts.length - 1
+                      ? '1px solid var(--border-light)' : 'none',
+                    color: 'inherit', textDecoration: 'none',
+                    WebkitTapHighlightColor: 'transparent',
+                  }}
+                >
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 10,
+                    background: 'var(--bg-tertiary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, color: 'var(--text-secondary)',
+                    flexShrink: 0,
+                  }}>
+                    <FileTextOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 14, fontWeight: 600, color: 'var(--text-primary)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {c.title || c.original_filename || `Contract #${c.id}`}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                      {dayjs(c.created_at).format('DD MMM YYYY')}
+                      {c.file_size ? ` · ${formatBytes(c.file_size)}` : ''}
+                    </div>
+                  </div>
+                  <DownloadOutlined style={{ color: 'var(--accent)', fontSize: 16 }} />
+                </a>
+              ))
+            )}
+          </SettingsCard>
+        )}
 
         <SettingsCard>
           <SettingsItem

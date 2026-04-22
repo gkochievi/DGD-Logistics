@@ -7,5 +7,6 @@ class AccountsConfig(AppConfig):
 
     def ready(self):
         from config.media_utils import register_file_cleanup
-        from .models import User
+        from .models import User, CompanyContract
         register_file_cleanup(User, 'avatar')
+        register_file_cleanup(CompanyContract, 'document')

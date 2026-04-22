@@ -29,10 +29,10 @@ export function getCurrencyForCountry(code) {
   return COUNTRY_CURRENCY[code.toLowerCase()] || null;
 }
 
-export function deriveCurrencyFromLanding({ search_scope, search_countries } = {}) {
-  if (search_scope === 'georgia') return GEORGIA_CURRENCY;
-  if (search_scope === 'custom' && Array.isArray(search_countries) && search_countries.length) {
-    return getCurrencyForCountry(search_countries[0]) || DEFAULT_CURRENCY;
+export function deriveCurrencyFromSettings({ default_search_scope, default_search_countries } = {}) {
+  if (default_search_scope === 'georgia') return GEORGIA_CURRENCY;
+  if (default_search_scope === 'custom' && Array.isArray(default_search_countries) && default_search_countries.length) {
+    return getCurrencyForCountry(default_search_countries[0]) || DEFAULT_CURRENCY;
   }
   return DEFAULT_CURRENCY;
 }

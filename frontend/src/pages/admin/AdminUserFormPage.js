@@ -1,15 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import {
   Form, Input, Button, Select, Switch, Typography, message, Spin, Modal, Tag,
+  Upload, Popconfirm,
 } from 'antd';
 import {
   ArrowLeftOutlined, UserOutlined, MailOutlined, PhoneOutlined,
   LockOutlined, BankOutlined, KeyOutlined, ThunderboltOutlined,
-  CopyOutlined, CheckOutlined,
+  CopyOutlined, CheckOutlined, FileTextOutlined, UploadOutlined,
+  DeleteOutlined, DownloadOutlined,
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
+
+const ACCEPT_CONTRACT = '.pdf,.doc,.docx,.odt,.rtf,.txt,.jpg,.jpeg,.png,.webp';
+const MAX_CONTRACT_SIZE = 20 * 1024 * 1024;
+
+function formatBytes(n) {
+  if (!n) return '0 B';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const { Title, Text } = Typography;
 
@@ -58,6 +71,12 @@ export default function AdminUserFormPage() {
     }
   };
 
+  const [contracts, setContracts] = useState([]);
+  const [contractsLoading, setContractsLoading] = useState(false);
+  const [contractTitle, setContractTitle] = useState('');
+  const [pendingFile, setPendingFile] = useState(null);
+  const [uploadingContract, setUploadingContract] = useState(false);
+
   const fetchUser = () => {
     if (!isEdit) return;
     setLoading(true);
@@ -68,7 +87,53 @@ export default function AdminUserFormPage() {
       .finally(() => setLoading(false));
   };
 
+  const fetchContracts = () => {
+    if (!isEdit) return;
+    setContractsLoading(true);
+    api.get(`/auth/admin/users/${id}/contracts/`).then(({ data }) => {
+      setContracts(Array.isArray(data) ? data : []);
+    }).catch(() => {})
+      .finally(() => setContractsLoading(false));
+  };
+
   useEffect(() => { fetchUser(); }, [id]); // eslint-disable-line
+  useEffect(() => { fetchContracts(); }, [id]); // eslint-disable-line
+
+  const handleContractUpload = async () => {
+    if (!pendingFile) {
+      message.warning(t('adminUsers.selectContractFile'));
+      return;
+    }
+    setUploadingContract(true);
+    try {
+      const fd = new FormData();
+      fd.append('document', pendingFile);
+      if (contractTitle.trim()) fd.append('title', contractTitle.trim());
+      await api.post(`/auth/admin/users/${id}/contracts/`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      message.success(t('adminUsers.contractUploaded'));
+      setPendingFile(null);
+      setContractTitle('');
+      fetchContracts();
+    } catch (err) {
+      const detail = err.response?.data;
+      const firstErr = detail ? Object.values(detail).flat()[0] : null;
+      message.error(typeof firstErr === 'string' ? firstErr : t('adminUsers.contractUploadFailed'));
+    } finally {
+      setUploadingContract(false);
+    }
+  };
+
+  const handleContractDelete = async (contractId) => {
+    try {
+      await api.delete(`/auth/admin/users/${id}/contracts/${contractId}/`);
+      message.success(t('adminUsers.contractDeleted'));
+      fetchContracts();
+    } catch {
+      message.error(t('adminUsers.contractDeleteFailed'));
+    }
+  };
 
   const handleReset = async (values) => {
     setResetting(true);
@@ -359,6 +424,142 @@ export default function AdminUserFormPage() {
           </Form.Item>
         </Form>
       </div>
+
+      {/* ── Contracts (company users only, edit mode) ── */}
+      {isEdit && userData?.user_type === 'company' && (
+        <div style={{
+          marginTop: 24,
+          background: 'var(--card-bg)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 16,
+          padding: 28,
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
+            fontSize: 15, fontWeight: 700, color: 'var(--text-primary)',
+          }}>
+            <FileTextOutlined style={{ color: 'var(--accent)' }} />
+            {t('adminUsers.contractsSection')}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 18 }}>
+            {t('adminUsers.contractsHint')}
+          </div>
+
+          {/* Upload row */}
+          <div style={{
+            background: 'var(--bg-secondary)', borderRadius: 12,
+            padding: 14, marginBottom: 14,
+            display: 'flex', flexDirection: 'column', gap: 10,
+          }}>
+            <Input
+              placeholder={t('adminUsers.contractTitlePlaceholder')}
+              value={contractTitle}
+              onChange={(e) => setContractTitle(e.target.value)}
+              maxLength={200}
+              style={{ borderRadius: 10 }}
+            />
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Upload
+                accept={ACCEPT_CONTRACT}
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  if (file.size > MAX_CONTRACT_SIZE) {
+                    message.error(t('adminUsers.contractTooLarge'));
+                    return false;
+                  }
+                  setPendingFile(file);
+                  return false;
+                }}
+              >
+                <Button icon={<UploadOutlined />} style={{ borderRadius: 10 }}>
+                  {pendingFile ? t('adminUsers.changeFile') : t('adminUsers.chooseFile')}
+                </Button>
+              </Upload>
+              {pendingFile && (
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {pendingFile.name} <span style={{ color: 'var(--text-tertiary)' }}>
+                    ({formatBytes(pendingFile.size)})
+                  </span>
+                </span>
+              )}
+              <Button
+                type="primary"
+                onClick={handleContractUpload}
+                loading={uploadingContract}
+                disabled={!pendingFile}
+                style={{
+                  background: 'var(--accent)', borderColor: 'var(--accent)',
+                  borderRadius: 10, fontWeight: 600, marginLeft: 'auto',
+                }}
+              >
+                {t('adminUsers.uploadContract')}
+              </Button>
+            </div>
+          </div>
+
+          {contractsLoading ? (
+            <div style={{ textAlign: 'center', padding: 24 }}>
+              <Spin />
+            </div>
+          ) : contracts.length === 0 ? (
+            <div style={{
+              padding: '28px 16px', textAlign: 'center',
+              background: 'var(--bg-secondary)', borderRadius: 12,
+              color: 'var(--text-tertiary)', fontSize: 13,
+            }}>
+              {t('adminUsers.noContracts')}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {contracts.map((c) => (
+                <div key={c.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 14px',
+                  background: 'var(--bg-secondary)', borderRadius: 12,
+                }}>
+                  <div style={{
+                    width: 38, height: 38, borderRadius: 10,
+                    background: 'var(--accent-bg)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--accent)', fontSize: 16, flexShrink: 0,
+                  }}>
+                    <FileTextOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 14, fontWeight: 600, color: 'var(--text-primary)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {c.title || c.original_filename || `Contract #${c.id}`}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                      {dayjs(c.created_at).format('DD MMM YYYY')}
+                      {c.file_size ? ` · ${formatBytes(c.file_size)}` : ''}
+                      {c.uploaded_by_name ? ` · ${c.uploaded_by_name}` : ''}
+                    </div>
+                  </div>
+                  <Button
+                    href={c.document_url}
+                    target="_blank"
+                    rel="noopener"
+                    icon={<DownloadOutlined />}
+                    style={{ borderRadius: 8 }}
+                  />
+                  <Popconfirm
+                    title={t('adminUsers.deleteContractConfirm')}
+                    onConfirm={() => handleContractDelete(c.id)}
+                    okText={t('common.yes')}
+                    cancelText={t('common.no')}
+                  >
+                    <Button danger icon={<DeleteOutlined />} style={{ borderRadius: 8 }} />
+                  </Popconfirm>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <Modal
         title={t('adminUsers.resetPasswordTitle')}
