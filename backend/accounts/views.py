@@ -298,7 +298,6 @@ class AdminAnalyticsView(APIView):
     def get(self, request):
         from orders.models import Order
         from vehicles.models import Vehicle
-        from categories.models import TransportCategory
 
         now = timezone.now()
         today = now.date()
@@ -365,11 +364,11 @@ class AdminAnalyticsView(APIView):
             for m in monthly_orders
         ]
 
-        # ── Orders by category ──
-        by_category = (
+        # ── Orders by service (customer-facing pivot) ──
+        by_service = (
             period_orders
-            .filter(selected_category__isnull=False)
-            .values(name=F('selected_category__name'), color=F('selected_category__color'))
+            .filter(selected_service__isnull=False)
+            .values(name=F('selected_service__name'), color=F('selected_service__color'))
             .annotate(count=Count('id'))
             .order_by('-count')
         )
@@ -423,11 +422,11 @@ class AdminAnalyticsView(APIView):
             is_active=True, price_per_km__isnull=False
         ).aggregate(avg=Avg('price_per_km'))['avg'] or 0
 
-        # Revenue by category (estimated hourly rate per completed order)
-        revenue_by_category = (
+        # Revenue by service (estimated hourly rate per completed order)
+        revenue_by_service = (
             completed_with_vehicle
             .filter(assigned_vehicle__price_per_hour__isnull=False)
-            .values(name=F('selected_category__name'), color=F('selected_category__color'))
+            .values(name=F('selected_service__name'), color=F('selected_service__color'))
             .annotate(
                 orders=Count('id'),
                 revenue=Sum('assigned_vehicle__price_per_hour'),
@@ -580,7 +579,7 @@ class AdminAnalyticsView(APIView):
             'daily_orders': daily_list,
             'weekly_orders': weekly_list,
             'monthly_orders': monthly_list,
-            'by_category': list(by_category),
+            'by_service': list(by_service),
             'by_status': list(by_status),
             'by_urgency': list(by_urgency),
             'fleet_by_status': list(fleet_by_status),
@@ -589,7 +588,7 @@ class AdminAnalyticsView(APIView):
                 'total_estimated': float(total_revenue_hourly),
                 'avg_price_per_hour': round(float(avg_price_per_hour), 2),
                 'avg_price_per_km': round(float(avg_price_per_km), 2),
-                'by_category': list(revenue_by_category),
+                'by_service': list(revenue_by_service),
                 'daily_trend': daily_revenue_list,
             },
             'comparison': {

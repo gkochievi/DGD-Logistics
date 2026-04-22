@@ -223,14 +223,14 @@ export default function AppOrderDetailPage() {
                 {getStatusLabel(t, order.status, { isCustomer: true }) || order.status}
               </div>
             </div>
-            {localized(order.selected_category_detail?.name) && (
+            {localized((order.selected_service_detail || order.selected_category_detail)?.name) && (
               <div style={{
                 padding: '6px 12px', borderRadius: 10,
                 background: 'rgba(255,255,255,0.18)',
                 fontSize: 12, fontWeight: 600, color: '#fff',
                 whiteSpace: 'nowrap',
               }}>
-                {localized(order.selected_category_detail?.name)}
+                {localized((order.selected_service_detail || order.selected_category_detail)?.name)}
               </div>
             )}
           </div>
@@ -468,19 +468,19 @@ export default function AppOrderDetailPage() {
               fontSize: 20, color: 'var(--accent)',
             }}>
               <CategoryImage
-                imageUrl={order.selected_category_detail?.image_url}
-                icon={order.selected_category_detail?.icon || 'inbox'}
-                size={order.selected_category_detail?.image_url ? 44 : 28}
+                imageUrl={(order.selected_service_detail || order.selected_category_detail)?.image_url}
+                icon={(order.selected_service_detail || order.selected_category_detail)?.icon || 'inbox'}
+                size={(order.selected_service_detail || order.selected_category_detail)?.image_url ? 44 : 28}
               />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-                {localized(order.selected_category_detail?.name) || '—'}
+                {localized((order.selected_service_detail || order.selected_category_detail)?.name) || '—'}
               </div>
-              {order.final_category_detail?.name && (
+              {(order.final_service_detail || order.final_category_detail)?.name && (
                 <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
                   <CheckCircleOutlined style={{ marginRight: 4, fontSize: 11 }} />
-                  {t('orders.assigned')}: {localized(order.final_category_detail.name)}
+                  {t('orders.assigned')}: {localized((order.final_service_detail || order.final_category_detail).name)}
                 </div>
               )}
             </div>

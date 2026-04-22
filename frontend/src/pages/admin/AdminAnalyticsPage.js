@@ -221,14 +221,14 @@ export default function AdminAnalyticsPage() {
         ]),
       },
       {
-        title: t('analytics.ordersByCategory'),
-        headers: [t('adminOrders.category'), t('analytics.orders')],
-        rows: (data.by_category || []).map((c) => [c.name, c.count]),
+        title: t('analytics.ordersByService'),
+        headers: [t('adminOrders.service'), t('analytics.orders')],
+        rows: (data.by_service || []).map((c) => [c.name, c.count]),
       },
       {
-        title: t('analytics.revenueByCategory'),
-        headers: [t('adminOrders.category'), t('analytics.orders'), `${t('analytics.revenue')} (${currency.code})`],
-        rows: (data.revenue.by_category || []).map((c) => [c.name, c.orders, fmt(c.revenue)]),
+        title: t('analytics.revenueByService'),
+        headers: [t('adminOrders.service'), t('analytics.orders'), `${t('analytics.revenue')} (${currency.code})`],
+        rows: (data.revenue.by_service || []).map((c) => [c.name, c.orders, fmt(c.revenue)]),
       },
       {
         title: t('analytics.topCustomers'),
@@ -385,10 +385,10 @@ export default function AdminAnalyticsPage() {
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} lg={12}>
           <div style={chartCardStyle}>
-            <div style={chartHeaderStyle}>{t('analytics.ordersByCategory')}</div>
+            <div style={chartHeaderStyle}>{t('analytics.ordersByService')}</div>
             <div style={chartBodyStyle}>
               <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
-                <BarChart data={data.by_category} layout="vertical">
+                <BarChart data={data.by_service} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                   <XAxis type="number" tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor} allowDecimals={false} />
                   <YAxis
@@ -397,7 +397,7 @@ export default function AdminAnalyticsPage() {
                   />
                   <Tooltip {...customTooltip} />
                   <Bar dataKey="count" name={t('nav.orders')} radius={[0, 6, 6, 0]}>
-                    {data.by_category.map((entry, i) => (
+                    {(data.by_service || []).map((entry, i) => (
                       <Cell key={i} fill={entry.color || PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
                   </Bar>
@@ -409,11 +409,11 @@ export default function AdminAnalyticsPage() {
 
         <Col xs={24} lg={12}>
           <div style={chartCardStyle}>
-            <div style={chartHeaderStyle}>{t('analytics.revenueByCategory')}</div>
+            <div style={chartHeaderStyle}>{t('analytics.revenueByService')}</div>
             <div style={chartBodyStyle}>
-              {data.revenue.by_category.length > 0 ? (
+              {(data.revenue.by_service || []).length > 0 ? (
                 <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
-                  <BarChart data={data.revenue.by_category} layout="vertical">
+                  <BarChart data={data.revenue.by_service} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                     <XAxis
                       type="number" tick={{ fontSize: 11, fill: subTextColor }} stroke={gridColor}
@@ -428,7 +428,7 @@ export default function AdminAnalyticsPage() {
                       formatter={(value, name) => [`${currency.symbol}${Number(value).toLocaleString()}`, name]}
                     />
                     <Bar dataKey="revenue" name={`${t('analytics.revenue')} (${currency.symbol})`} fill="#f59e0b" radius={[0, 6, 6, 0]}>
-                      {data.revenue.by_category.map((entry, i) => (
+                      {(data.revenue.by_service || []).map((entry, i) => (
                         <Cell key={i} fill={entry.color || PIE_COLORS[i % PIE_COLORS.length]} />
                       ))}
                     </Bar>

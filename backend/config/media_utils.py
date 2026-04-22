@@ -64,6 +64,10 @@ def category_image_path(instance, filename):
     return f'categories/{_new_name(filename)}'
 
 
+def service_image_path(instance, filename):
+    return f'services/{_new_name(filename)}'
+
+
 def landing_site_icon_path(instance, filename):
     return f'landing/site_icon/{_new_name(filename)}'
 

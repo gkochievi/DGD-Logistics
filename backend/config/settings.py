@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'orders',
     'vehicles',
     'drivers',
+    'services',
     'landing',
     'site_settings',
 ]

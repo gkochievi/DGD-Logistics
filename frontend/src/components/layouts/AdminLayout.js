@@ -5,7 +5,7 @@ import {
   TeamOutlined, AppstoreOutlined, UserOutlined, LogoutOutlined,
   CarOutlined, MoonFilled, SunFilled, BarChartOutlined,
   GlobalOutlined, DesktopOutlined, ExportOutlined, IdcardOutlined,
-  SettingOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
+  SettingOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ToolOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -67,6 +67,7 @@ export default function AdminLayout() {
     { key: '/admin/drivers', icon: <IdcardOutlined />, label: t('nav.drivers') },
     { key: '/admin/analytics', icon: <BarChartOutlined />, label: t('nav.analytics') },
     { key: '/admin/categories', icon: <AppstoreOutlined />, label: t('nav.categories') },
+    { key: '/admin/services', icon: <ToolOutlined />, label: t('nav.services') },
     { key: '/admin/landing', icon: <DesktopOutlined />, label: t('nav.landing') },
     { key: '/admin/settings', icon: <SettingOutlined />, label: t('nav.settings') },
   ];

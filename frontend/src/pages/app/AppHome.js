@@ -51,11 +51,11 @@ export default function AppHome() {
 
   useEffect(() => {
     Promise.all([
-      api.get('/categories/'),
+      api.get('/services/'),
       api.get('/orders/active/'),
-    ]).then(([catRes, ordersRes]) => {
-      const cats = Array.isArray(catRes.data) ? catRes.data : catRes.data.results || [];
-      setCategories(cats);
+    ]).then(([svcRes, ordersRes]) => {
+      const svcs = Array.isArray(svcRes.data) ? svcRes.data : svcRes.data.results || [];
+      setCategories(svcs);
       const orders = Array.isArray(ordersRes.data) ? ordersRes.data : ordersRes.data.results || [];
       setActiveOrders(orders);
     }).catch(() => {})
@@ -332,7 +332,7 @@ export default function AppHome() {
                 return (
                   <div
                     key={cat.id}
-                    onClick={() => navigate(`/app/order/new?category=${cat.id}`)}
+                    onClick={() => navigate(`/app/order/new?service=${cat.id}`)}
                     className="card-interactive"
                     style={{
                       background: 'var(--card-bg)',

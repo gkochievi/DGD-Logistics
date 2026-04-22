@@ -1,12 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Table, Button, Typography, Tag, Modal, Form, Input, Switch, Space,
+  Table, Button, Typography, Tag, Modal, Form, Input, Select, Switch, Space,
   ColorPicker, message, Grid, Empty, Upload, Tabs,
 } from 'antd';
-import { PlusOutlined, EditOutlined, StopOutlined, CheckCircleOutlined, CameraOutlined, DeleteOutlined, CheckOutlined, SearchOutlined, FilterOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined, EditOutlined, StopOutlined, CheckCircleOutlined,
+  DeleteOutlined, CheckOutlined, SearchOutlined, FilterOutlined,
+} from '@ant-design/icons';
 import ImgCrop from 'antd-img-crop';
 import api from '../../api/client';
-import { CategoryImage, getCategoryIcon, searchIcons, getIconMeta, AVAILABLE_ICONS } from '../../utils/categoryIcons';
+import {
+  CategoryImage, getCategoryIcon, searchIcons, getIconMeta, AVAILABLE_ICONS,
+} from '../../utils/categoryIcons';
 import { useLang } from '../../contexts/LanguageContext';
 
 const { Title, Text } = Typography;
@@ -19,13 +24,14 @@ const LANG_TABS = [
   { key: 'ru', label: '🇷🇺 RU' },
 ];
 
-export default function AdminCategoriesPage() {
+export default function AdminServicesPage() {
   const screens = useBreakpoint();
   const { t, lang } = useLang();
-  const [categories, setCategories] = useState([]);
+  const [services, setServices] = useState([]);
+  const [carCategories, setCarCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null);
+  const [editingService, setEditingService] = useState(null);
   const [saving, setSaving] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -34,121 +40,134 @@ export default function AdminCategoriesPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState('');
 
-  // i18n fields managed as state (not via Form)
-  const [catName, setCatName] = useState({ en: '', ka: '', ru: '' });
-  const [catDesc, setCatDesc] = useState({ en: '', ka: '', ru: '' });
+  // i18n fields
+  const [svcName, setSvcName] = useState({ en: '', ka: '', ru: '' });
+  const [svcDesc, setSvcDesc] = useState({ en: '', ka: '', ru: '' });
   // Non-i18n fields
-  const [catIcon, setCatIcon] = useState('car');
-  const [catColor, setCatColor] = useState('#00B856');
-  const [catKeywords, setCatKeywords] = useState('');
-  const [catIsActive, setCatIsActive] = useState(true);
+  const [svcIcon, setSvcIcon] = useState('tool');
+  const [svcColor, setSvcColor] = useState('#00B856');
+  const [svcKeywords, setSvcKeywords] = useState('');
+  const [svcCarCategoryIds, setSvcCarCategoryIds] = useState([]);
+  const [svcIsActive, setSvcIsActive] = useState(true);
 
-  // Helper: resolve i18n field to current language
   const localized = (field) => {
     if (!field) return '';
     if (typeof field === 'string') return field;
     return field[lang] || field['en'] || '';
   };
 
-  const fetchCategories = () => {
+  const fetchServices = () => {
     setLoading(true);
-    api.get('/categories/admin/').then(({ data }) => {
+    api.get('/services/admin/').then(({ data }) => {
       const results = data.results || data;
-      setCategories(Array.isArray(results) ? results : []);
+      setServices(Array.isArray(results) ? results : []);
     }).catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchCategories(); }, []);
+  const fetchCarCategories = () => {
+    api.get('/categories/admin/').then(({ data }) => {
+      const results = data.results || data;
+      setCarCategories(Array.isArray(results) ? results : []);
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchServices();
+    fetchCarCategories();
+  }, []);
 
   const filteredIcons = useMemo(() => searchIcons(iconSearch), [iconSearch]);
-  const visibleCategories = useMemo(() => {
+  const visibleServices = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return categories.filter((c) => {
-      if (showArchived ? c.is_active !== false : c.is_active === false) return false;
+    return services.filter((s) => {
+      if (showArchived ? s.is_active !== false : s.is_active === false) return false;
       if (q) {
-        const name = typeof c.name === 'object' ? Object.values(c.name).join(' ') : (c.name || '');
-        const desc = typeof c.description === 'object' ? Object.values(c.description).join(' ') : (c.description || '');
-        const hay = `${name} ${desc} ${c.suggestion_keywords || ''}`.toLowerCase();
+        const name = typeof s.name === 'object' ? Object.values(s.name).join(' ') : (s.name || '');
+        const desc = typeof s.description === 'object' ? Object.values(s.description).join(' ') : (s.description || '');
+        const hay = `${name} ${desc} ${s.suggestion_keywords || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [categories, showArchived, search]);
+  }, [services, showArchived, search]);
 
-  const openModal = (category = null) => {
-    setEditingCategory(category);
+  const openModal = (service = null) => {
+    setEditingService(service);
     setImageFile(null);
-    setImagePreview(category?.image_url || null);
+    setImagePreview(service?.image_url || null);
     setImageRemoved(false);
     setIconSearch('');
-    if (category) {
-      setCatName(typeof category.name === 'object' ? { en: '', ka: '', ru: '', ...category.name } : { en: category.name || '', ka: '', ru: '' });
-      setCatDesc(typeof category.description === 'object' ? { en: '', ka: '', ru: '', ...category.description } : { en: category.description || '', ka: '', ru: '' });
-      setCatIcon(category.icon || 'car');
-      setCatColor(category.color || '#00B856');
-      setCatKeywords(category.suggestion_keywords || '');
-      setCatIsActive(category.is_active !== false);
+    if (service) {
+      setSvcName(typeof service.name === 'object' ? { en: '', ka: '', ru: '', ...service.name } : { en: service.name || '', ka: '', ru: '' });
+      setSvcDesc(typeof service.description === 'object' ? { en: '', ka: '', ru: '', ...service.description } : { en: service.description || '', ka: '', ru: '' });
+      setSvcIcon(service.icon || 'tool');
+      setSvcColor(service.color || '#00B856');
+      setSvcKeywords(service.suggestion_keywords || '');
+      setSvcCarCategoryIds(Array.isArray(service.car_categories) ? service.car_categories : []);
+      setSvcIsActive(service.is_active !== false);
     } else {
-      setCatName({ en: '', ka: '', ru: '' });
-      setCatDesc({ en: '', ka: '', ru: '' });
-      setCatIcon('car');
-      setCatColor('#00B856');
-      setCatKeywords('');
-      setCatIsActive(true);
+      setSvcName({ en: '', ka: '', ru: '' });
+      setSvcDesc({ en: '', ka: '', ru: '' });
+      setSvcIcon('tool');
+      setSvcColor('#00B856');
+      setSvcKeywords('');
+      setSvcCarCategoryIds([]);
+      setSvcIsActive(true);
     }
     setModalOpen(true);
   };
 
   const handleSave = async () => {
-    if (!catName.en && !catName.ka && !catName.ru) {
+    if (!svcName.en && !svcName.ka && !svcName.ru) {
       message.error(t('common.required'));
       return;
     }
     setSaving(true);
     try {
       const formData = new FormData();
-      formData.append('name', JSON.stringify(catName));
-      formData.append('description', JSON.stringify(catDesc));
-      formData.append('icon', catIcon || 'car');
-      formData.append('color', typeof catColor === 'string' ? catColor : catColor?.toHexString?.() || '#00B856');
-      formData.append('suggestion_keywords', catKeywords);
-      formData.append('is_active', catIsActive ? 'true' : 'false');
+      formData.append('name', JSON.stringify(svcName));
+      formData.append('description', JSON.stringify(svcDesc));
+      formData.append('icon', svcIcon || 'tool');
+      formData.append('color', typeof svcColor === 'string' ? svcColor : svcColor?.toHexString?.() || '#00B856');
+      formData.append('suggestion_keywords', svcKeywords);
+      formData.append('is_active', svcIsActive ? 'true' : 'false');
+      formData.append('car_categories', JSON.stringify(svcCarCategoryIds));
       if (imageFile) {
         formData.append('image', imageFile);
       } else if (imageRemoved) {
         formData.append('image', '');
       }
 
-      if (editingCategory) {
-        await api.patch(`/categories/admin/${editingCategory.id}/`, formData, {
+      if (editingService) {
+        await api.patch(`/services/admin/${editingService.id}/`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        message.success(t('adminCats.categoryUpdated'));
+        message.success(t('adminServices.serviceUpdated'));
       } else {
-        await api.post('/categories/admin/', formData, {
+        await api.post('/services/admin/', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        message.success(t('adminCats.categoryCreated'));
+        message.success(t('adminServices.serviceCreated'));
       }
       setModalOpen(false);
-      fetchCategories();
+      fetchServices();
     } catch (err) {
       const detail = err.response?.data;
-      const firstErr = detail ? Object.values(detail).flat()[0] : t('adminCats.failedUpdateCat');
-      message.error(typeof firstErr === 'string' ? firstErr : t('adminCats.failedUpdateCat'));
+      const firstErr = detail ? Object.values(detail).flat()[0] : t('adminServices.failedUpdateSvc');
+      message.error(typeof firstErr === 'string' ? firstErr : t('adminServices.failedUpdateSvc'));
     } finally {
       setSaving(false);
     }
   };
 
-  const toggleActive = async (cat) => {
+  const toggleActive = async (svc) => {
     try {
-      await api.patch(`/categories/admin/${cat.id}/`, { is_active: !cat.is_active });
-      message.success(cat.is_active ? t('adminCats.categoryDeactivated') : t('adminCats.categoryActivated'));
-      fetchCategories();
+      await api.patch(`/services/admin/${svc.id}/`, { is_active: !svc.is_active });
+      message.success(svc.is_active ? t('adminServices.serviceDeactivated') : t('adminServices.serviceActivated'));
+      fetchServices();
     } catch {
-      message.error(t('adminCats.failedUpdateCat'));
+      message.error(t('adminServices.failedUpdateSvc'));
     }
   };
 
@@ -171,6 +190,43 @@ export default function AdminCategoriesPage() {
 
   const isMobile = !screens.md;
 
+  // Dropdown only offers active car categories, but if a service is already
+  // linked to a now-inactive one, keep it in the option list so the tag renders
+  // with its name (and flag it "(inactive)" + disabled so it can't be re-added
+  // after removal).
+  const carCategoryOptions = carCategories
+    .filter((c) => c.is_active !== false || svcCarCategoryIds.includes(c.id))
+    .map((c) => {
+      const inactive = c.is_active === false;
+      const baseLabel = localized(c.name) || `#${c.id}`;
+      return {
+        value: c.id,
+        label: inactive ? `${baseLabel} (${t('common.inactive')})` : baseLabel,
+        disabled: inactive,
+      };
+    });
+
+  const renderCarCategoryTags = (ids) => {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return <Text style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>—</Text>;
+    }
+    return (
+      <Space size={4} wrap>
+        {ids.slice(0, 3).map((id) => {
+          const cat = carCategories.find((c) => c.id === id);
+          return (
+            <Tag key={id} color={cat?.color || 'default'} style={{ margin: 0 }}>
+              {cat ? localized(cat.name) : `#${id}`}
+            </Tag>
+          );
+        })}
+        {ids.length > 3 && (
+          <Tag style={{ margin: 0 }}>+{ids.length - 3}</Tag>
+        )}
+      </Space>
+    );
+  };
+
   const columns = [
     {
       title: '', width: 60,
@@ -189,6 +245,10 @@ export default function AdminCategoriesPage() {
     {
       title: t('adminUsers.name'), dataIndex: 'name', ellipsis: true,
       render: (name) => <span style={{ fontWeight: 600 }}>{localized(name)}</span>,
+    },
+    {
+      title: t('adminServices.carCategories'), dataIndex: 'car_categories', width: 260,
+      render: renderCarCategoryTags,
     },
     {
       title: t('adminCats.color'), dataIndex: 'color', width: 110,
@@ -243,7 +303,7 @@ export default function AdminCategoriesPage() {
           margin: 0, fontWeight: 800, letterSpacing: '-0.02em',
           color: 'var(--text-primary)',
         }}>
-          {t('adminCats.title')}
+          {t('adminServices.title')}
         </Title>
         <Button
           type="primary"
@@ -254,7 +314,7 @@ export default function AdminCategoriesPage() {
             borderRadius: 10, height: 40, fontWeight: 600,
           }}
         >
-          {t('adminCats.newCategory')}
+          {t('adminServices.newService')}
         </Button>
       </div>
 
@@ -303,16 +363,16 @@ export default function AdminCategoriesPage() {
 
       {/* Content */}
       {isMobile ? (
-        loading && visibleCategories.length === 0 ? (
+        loading && visibleServices.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-tertiary)' }}>
             {t('common.loading')}
           </div>
-        ) : visibleCategories.length === 0 ? (
-          <Empty description={t('adminCats.noCategories')} />
+        ) : visibleServices.length === 0 ? (
+          <Empty description={t('adminServices.noServices')} />
         ) : (
-          visibleCategories.map((cat) => (
+          visibleServices.map((svc) => (
             <div
-              key={cat.id}
+              key={svc.id}
               style={{
                 background: 'var(--card-bg)',
                 border: '1px solid var(--border-color)',
@@ -325,41 +385,44 @@ export default function AdminCategoriesPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                 <div style={{
                   width: 48, height: 48, borderRadius: 14,
-                  background: `color-mix(in srgb, ${cat.color || 'var(--accent)'} 12%, transparent)`,
+                  background: `color-mix(in srgb, ${svc.color || 'var(--accent)'} 12%, transparent)`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 22, color: cat.color || 'var(--accent)', flexShrink: 0,
+                  fontSize: 22, color: svc.color || 'var(--accent)', flexShrink: 0,
                   overflow: 'hidden',
                 }}>
-                  <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={cat.image_url ? 48 : 36} />
+                  <CategoryImage imageUrl={svc.image_url} icon={svc.icon} size={svc.image_url ? 48 : 36} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Text style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
-                    {localized(cat.name)}
+                    {localized(svc.name)}
                   </Text>
                 </div>
-                <Tag color={cat.is_active ? 'green' : 'red'}>
-                  {cat.is_active ? t('common.active') : t('common.inactive')}
+                <Tag color={svc.is_active ? 'green' : 'red'}>
+                  {svc.is_active ? t('common.active') : t('common.inactive')}
                 </Tag>
               </div>
-              {localized(cat.description) && (
+              {localized(svc.description) && (
                 <Text style={{ fontSize: 13, color: 'var(--text-tertiary)', display: 'block', marginBottom: 8 }}>
-                  {localized(cat.description)}
+                  {localized(svc.description)}
                 </Text>
               )}
+              <div style={{ marginBottom: 8 }}>
+                {renderCarCategoryTags(svc.car_categories)}
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Button
                   size="small" type="text"
                   icon={<EditOutlined />}
-                  onClick={() => openModal(cat)}
+                  onClick={() => openModal(svc)}
                   style={{ color: 'var(--accent)', fontWeight: 600 }}
                 >
                   Edit
                 </Button>
                 <Button
                   size="small" type="text"
-                  danger={cat.is_active}
-                  icon={cat.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
-                  onClick={() => toggleActive(cat)}
+                  danger={svc.is_active}
+                  icon={svc.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
+                  onClick={() => toggleActive(svc)}
                 />
               </div>
             </div>
@@ -375,7 +438,7 @@ export default function AdminCategoriesPage() {
         }}>
           <Table
             columns={columns}
-            dataSource={visibleCategories}
+            dataSource={visibleServices}
             rowKey="id"
             loading={loading}
             size="middle"
@@ -388,7 +451,7 @@ export default function AdminCategoriesPage() {
       <Modal
         title={
           <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.02em' }}>
-            {editingCategory ? t('adminCats.editCategory') : t('adminCats.newCategory')}
+            {editingService ? t('adminServices.editService') : t('adminServices.newService')}
           </span>
         }
         open={modalOpen}
@@ -415,9 +478,9 @@ export default function AdminCategoriesPage() {
                 label: tab.label,
                 children: (
                   <Input
-                    value={catName[tab.key] || ''}
-                    onChange={(e) => setCatName((prev) => ({ ...prev, [tab.key]: e.target.value }))}
-                    placeholder={t('adminCats.categoryName')}
+                    value={svcName[tab.key] || ''}
+                    onChange={(e) => setSvcName((prev) => ({ ...prev, [tab.key]: e.target.value }))}
+                    placeholder={t('adminServices.serviceName')}
                     style={{ borderRadius: 10 }}
                   />
                 ),
@@ -437,8 +500,8 @@ export default function AdminCategoriesPage() {
                 label: tab.label,
                 children: (
                   <TextArea
-                    value={catDesc[tab.key] || ''}
-                    onChange={(e) => setCatDesc((prev) => ({ ...prev, [tab.key]: e.target.value }))}
+                    value={svcDesc[tab.key] || ''}
+                    onChange={(e) => setSvcDesc((prev) => ({ ...prev, [tab.key]: e.target.value }))}
                     rows={3}
                     placeholder={t('adminCats.briefDesc')}
                     style={{ borderRadius: 10 }}
@@ -449,12 +512,33 @@ export default function AdminCategoriesPage() {
             />
           </Form.Item>
 
-          {/* Image Upload */}
+          {/* Car categories (M2M) */}
           <Form.Item
-            label={<span style={{ fontWeight: 600 }}>{t('adminCats.image') || 'Image'}</span>}
+            label={<span style={{ fontWeight: 600 }}>{t('adminServices.carCategories')}</span>}
             extra={
               <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
-                {t('adminCats.imageIconHint') || 'When an image is uploaded, it replaces the icon.'}
+                {t('adminServices.carCategoriesHelp')}
+              </span>
+            }
+          >
+            <Select
+              mode="multiple"
+              allowClear
+              value={svcCarCategoryIds}
+              onChange={setSvcCarCategoryIds}
+              options={carCategoryOptions}
+              placeholder={t('adminServices.selectCarCategories')}
+              style={{ width: '100%', borderRadius: 10 }}
+              optionFilterProp="label"
+            />
+          </Form.Item>
+
+          {/* Image Upload */}
+          <Form.Item
+            label={<span style={{ fontWeight: 600 }}>{t('adminCats.image')}</span>}
+            extra={
+              <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
+                {t('adminCats.imageIconHint')}
               </span>
             }
           >
@@ -463,10 +547,10 @@ export default function AdminCategoriesPage() {
               rotationSlider
               showReset
               showGrid
-              modalTitle={t('adminCats.cropImage') || 'Adjust image'}
-              modalOk={t('common.save') || 'Save'}
-              modalCancel={t('common.cancel') || 'Cancel'}
-              resetText={t('common.reset') || 'Reset'}
+              modalTitle={t('adminCats.cropImage')}
+              modalOk={t('common.save')}
+              modalCancel={t('common.cancel')}
+              resetText={t('common.reset')}
             >
             <Upload
               accept="image/*"
@@ -503,23 +587,23 @@ export default function AdminCategoriesPage() {
                 ) : (
                   <div style={{
                     width: 56, height: 56, borderRadius: 12,
-                    background: `color-mix(in srgb, ${catColor} 12%, transparent)`,
+                    background: `color-mix(in srgb, ${svcColor} 12%, transparent)`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 22, color: catColor, flexShrink: 0,
+                    fontSize: 22, color: svcColor, flexShrink: 0,
                   }}>
-                    {React.cloneElement(getCategoryIcon(catIcon), { style: { fontSize: 28 } })}
+                    {React.cloneElement(getCategoryIcon(svcIcon), { style: { fontSize: 28 } })}
                   </div>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
                     {imagePreview
-                      ? (t('adminCats.changeImage') || 'Change image')
-                      : (t('adminCats.uploadImage') || 'Upload image')}
+                      ? t('adminCats.changeImage')
+                      : t('adminCats.uploadImage')}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
                     {imagePreview
                       ? 'PNG, JPG, SVG'
-                      : (t('adminCats.iconFallbackHint') || 'No image — the icon below will be used.')}
+                      : t('adminCats.iconFallbackHint')}
                   </div>
                 </div>
                 {imagePreview && (
@@ -531,7 +615,7 @@ export default function AdminCategoriesPage() {
                     onClick={handleRemoveImage}
                     style={{ flexShrink: 0 }}
                   >
-                    {t('adminCats.removeImage') || 'Remove'}
+                    {t('adminCats.removeImage')}
                   </Button>
                 )}
               </div>
@@ -543,16 +627,16 @@ export default function AdminCategoriesPage() {
           <Form.Item
             label={
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                <span style={{ fontWeight: 600 }}>{t('adminCats.icon') || 'Icon'}</span>
+                <span style={{ fontWeight: 600 }}>{t('adminCats.icon')}</span>
                 <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 500 }}>
                   {filteredIcons.length}/{AVAILABLE_ICONS.length}
-                  {getIconMeta(catIcon)?.label && ` · ${getIconMeta(catIcon).label}`}
+                  {getIconMeta(svcIcon)?.label && ` · ${getIconMeta(svcIcon).label}`}
                 </span>
               </div>
             }
             extra={
               <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
-                {t('adminCats.iconHelp') || 'Shown when no image is uploaded.'}
+                {t('adminCats.iconHelp')}
               </span>
             }
           >
@@ -560,7 +644,7 @@ export default function AdminCategoriesPage() {
               allowClear
               value={iconSearch}
               onChange={(e) => setIconSearch(e.target.value)}
-              placeholder={t('adminCats.searchIcons') || 'Search icons (e.g. car, crane, box, clock)'}
+              placeholder={t('adminCats.searchIcons')}
               prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
               style={{ borderRadius: 10, marginBottom: 10 }}
             />
@@ -577,7 +661,7 @@ export default function AdminCategoriesPage() {
                   textAlign: 'center', padding: '24px 8px',
                   color: 'var(--text-tertiary)', fontSize: 13,
                 }}>
-                  {t('adminCats.noIconsMatch') || 'No icons match your search'}
+                  {t('adminCats.noIconsMatch')}
                 </div>
               ) : (
                 <div style={{
@@ -586,13 +670,13 @@ export default function AdminCategoriesPage() {
                   gap: isMobile ? 6 : 8,
                 }}>
                   {filteredIcons.map((iconKey) => {
-                    const selected = catIcon === iconKey;
+                    const selected = svcIcon === iconKey;
                     const meta = getIconMeta(iconKey);
                     return (
                       <button
                         key={iconKey}
                         type="button"
-                        onClick={() => setCatIcon(iconKey)}
+                        onClick={() => setSvcIcon(iconKey)}
                         aria-pressed={selected}
                         aria-label={meta?.label || iconKey}
                         title={meta?.label || iconKey}
@@ -600,13 +684,13 @@ export default function AdminCategoriesPage() {
                           width: '100%', height: 48,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           border: selected
-                            ? `2px solid ${catColor}`
+                            ? `2px solid ${svcColor}`
                             : '1px solid var(--border-color)',
                           borderRadius: 10,
                           background: selected
-                            ? `color-mix(in srgb, ${catColor} 14%, transparent)`
+                            ? `color-mix(in srgb, ${svcColor} 14%, transparent)`
                             : 'var(--card-bg)',
-                          color: selected ? catColor : 'var(--text-secondary)',
+                          color: selected ? svcColor : 'var(--text-secondary)',
                           fontSize: 20,
                           cursor: 'pointer',
                           transition: 'all 0.15s ease',
@@ -619,7 +703,7 @@ export default function AdminCategoriesPage() {
                             style={{
                               position: 'absolute',
                               top: -6, right: -6,
-                              background: catColor,
+                              background: svcColor,
                               color: '#fff',
                               borderRadius: '50%',
                               fontSize: 10,
@@ -640,8 +724,8 @@ export default function AdminCategoriesPage() {
           >
             <ColorPicker
               format="hex"
-              value={catColor}
-              onChange={(c) => setCatColor(c.toHexString())}
+              value={svcColor}
+              onChange={(c) => setSvcColor(c.toHexString())}
             />
           </Form.Item>
 
@@ -651,8 +735,8 @@ export default function AdminCategoriesPage() {
           >
             <TextArea
               rows={2}
-              value={catKeywords}
-              onChange={(e) => setCatKeywords(e.target.value)}
+              value={svcKeywords}
+              onChange={(e) => setSvcKeywords(e.target.value)}
               placeholder="keyword1, keyword2, keyword3"
               style={{ borderRadius: 10 }}
             />
@@ -666,7 +750,7 @@ export default function AdminCategoriesPage() {
             <Text style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
               {t('common.active')}
             </Text>
-            <Switch checked={catIsActive} onChange={setCatIsActive} />
+            <Switch checked={svcIsActive} onChange={setSvcIsActive} />
           </div>
 
           <Form.Item style={{ marginBottom: 0 }}>
@@ -681,7 +765,7 @@ export default function AdminCategoriesPage() {
                 borderRadius: 12, height: 46, fontWeight: 700, fontSize: 15,
               }}
             >
-              {editingCategory ? t('profile.saveChanges') : t('adminCats.newCategory')}
+              {editingService ? t('profile.saveChanges') : t('adminServices.newService')}
             </Button>
           </Form.Item>
         </Form>

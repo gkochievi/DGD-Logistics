@@ -1,6 +1,8 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
+from django.utils.text import slugify
 from categories.models import TransportCategory
+from services.models import Service
 from orders.models import Order, OrderStatusHistory
 from vehicles.models import Vehicle
 from datetime import date, time, timedelta
@@ -43,7 +45,6 @@ class Command(BaseCommand):
                     'description': cat_data['description'],
                     'icon': cat_data['icon'],
                     'color': cat_data['color'],
-                    'requires_destination': cat_data.get('requires_destination', False),
                     'suggestion_keywords': cat_data['suggestion_keywords'],
                 },
             )
@@ -57,6 +58,30 @@ class Command(BaseCommand):
             'Cement Mixer / Concrete Mixer Truck',
         ]
         TransportCategory.objects.filter(name__in=old_names).delete()
+
+        # Seed one Service per category so the customer-facing flow has tiles
+        # on first boot. Each service is linked to its matching car category
+        # (the M2M `car_categories` captures "which vehicles can perform this").
+        self.stdout.write('Seeding services...')
+        for cat_data in CATEGORIES:
+            slug = slugify(cat_data['name']) or 'service'
+            svc, created = Service.objects.update_or_create(
+                slug=slug,
+                defaults={
+                    'name': cat_data['name'],
+                    'description': cat_data['description'],
+                    'icon': cat_data['icon'],
+                    'color': cat_data['color'],
+                    'requires_destination': cat_data.get('requires_destination', False),
+                    'suggestion_keywords': cat_data['suggestion_keywords'],
+                    'is_active': True,
+                },
+            )
+            matching_cat = cats.get(cat_data['name'])
+            if matching_cat:
+                svc.car_categories.set([matching_cat])
+            status_msg = 'created' if created else 'updated'
+            self.stdout.write(f'  {cat_data["name"]} - {status_msg}')
 
         self.stdout.write('Seeding users...')
         admin_user, created = User.objects.get_or_create(
@@ -149,10 +174,19 @@ class Command(BaseCommand):
             {'user': customer2, 'selected_category': cats['Tow Truck'], 'pickup_location': 'Shopping Mall Parking, Level B2', 'destination_location': 'Smith Auto Service', 'requested_date': today - timedelta(days=1), 'contact_name': 'Jane Smith', 'contact_phone': '+1555000111', 'description': 'Car won\'t start, battery or starter issue, underground parking', 'urgency': 'normal', 'status': 'cancelled'},
         ]
 
+        # Quick slug→Service lookup so we can mirror the category pick onto
+        # selected_service (customer-facing taxonomy).
+        svc_by_slug = {s.slug: s for s in Service.objects.all()}
+
         for order_data in demo_orders:
             desc = order_data['description']
             if not Order.objects.filter(user=order_data['user'], description=desc).exists():
                 admin_comment = order_data.pop('admin_comment', '')
+                matched_cat = order_data['selected_category']
+                # Services are keyed on the same slug as their matching car
+                # category (see services-seeding block above), so a slug lookup
+                # maps the legacy category pick onto the customer-facing service.
+                order_data['selected_service'] = svc_by_slug.get(matched_cat.slug)
                 order = Order.objects.create(admin_comment=admin_comment, **order_data)
                 OrderStatusHistory.objects.create(
                     order=order, old_status='', new_status='new',

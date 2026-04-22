@@ -29,7 +29,7 @@ export default function LandingPage() {
   const [pickupCountryCode, setPickupCountryCode] = useState(null);
 
   useEffect(() => {
-    api.get('/categories/').then(({ data }) => {
+    api.get('/services/').then(({ data }) => {
       setCategories(Array.isArray(data) ? data : data.results || []);
     }).catch(() => {});
     api.get('/landing/').then(({ data }) => {
@@ -77,7 +77,7 @@ export default function LandingPage() {
 
   const handleCategoryClick = (cat) => {
     if (user) {
-      navigate(`/app/order/new?category=${cat.id}`);
+      navigate(`/app/order/new?service=${cat.id}`);
     } else {
       navigate('/register');
     }

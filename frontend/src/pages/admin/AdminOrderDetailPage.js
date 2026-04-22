@@ -60,7 +60,7 @@ export default function AdminOrderDetailPage() {
   const { refresh: refreshNotifications } = useNotifications();
 
   useEffect(() => {
-    api.get('/categories/').then(({ data }) => {
+    api.get('/services/').then(({ data }) => {
       setCategories(Array.isArray(data) ? data : data.results || []);
     });
     api.get('/vehicles/admin/').then(({ data }) => {
@@ -163,13 +163,13 @@ export default function AdminOrderDetailPage() {
     applyStatusChange(effectiveComment);
   };
 
-  const handleCategoryChange = async (categoryId) => {
+  const handleCategoryChange = async (serviceId) => {
     try {
-      await api.patch(`/orders/admin/${id}/`, { final_category: categoryId });
-      message.success(t('adminOrderDetail.categoryUpdated'));
+      await api.patch(`/orders/admin/${id}/`, { final_service: serviceId });
+      message.success(t('adminOrderDetail.serviceUpdated'));
       fetchOrder();
     } catch {
-      message.error(t('adminOrderDetail.categoryUpdateFailed'));
+      message.error(t('adminOrderDetail.serviceUpdateFailed'));
     }
   };
 
@@ -527,14 +527,14 @@ export default function AdminOrderDetailPage() {
               <span style={{ color: 'var(--text-tertiary)' }}> ({order.user_detail?.email})</span>
             </Descriptions.Item>
             <Descriptions.Item label={t('orders.assigned')}><UrgencyBadge urgency={order.urgency} /></Descriptions.Item>
-            <Descriptions.Item label={t('adminOrderDetail.selectedCategory')}>
-              {localized(order.selected_category_detail?.name) || '—'}
+            <Descriptions.Item label={t('adminOrderDetail.selectedService')}>
+              {localized(order.selected_service_detail?.name || order.selected_category_detail?.name) || '—'}
             </Descriptions.Item>
-            <Descriptions.Item label={t('adminOrderDetail.finalCategory')}>
-              {localized(order.final_category_detail?.name) || '—'}
+            <Descriptions.Item label={t('adminOrderDetail.finalService')}>
+              {localized(order.final_service_detail?.name || order.final_category_detail?.name) || '—'}
             </Descriptions.Item>
-            <Descriptions.Item label={t('adminOrderDetail.suggestedCategory')}>
-              {localized(order.suggested_category_detail?.name) || '—'}
+            <Descriptions.Item label={t('adminOrderDetail.suggestedService')}>
+              {localized(order.suggested_service_detail?.name || order.suggested_category_detail?.name) || '—'}
             </Descriptions.Item>
             <Descriptions.Item label={t('orders.pickup')} span={isMobile ? 1 : 2}>
               {renderStopList(pickupStops)}
@@ -667,19 +667,19 @@ export default function AdminOrderDetailPage() {
             </div>
           )}
 
-          {/* Assign Category */}
+          {/* Assign Service */}
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
               <TagOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
               <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                {t('adminOrderDetail.assignCategory')}
+                {t('adminOrderDetail.assignService')}
               </Text>
             </div>
             <Select
               style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
               size={isMobile ? 'large' : 'middle'}
-              value={order.final_category || undefined}
-              placeholder={t('adminOrderDetail.selectFinalCategory')}
+              value={order.final_service || undefined}
+              placeholder={t('adminOrderDetail.selectFinalService')}
               onChange={handleCategoryChange}
               disabled={isTerminal}
               options={categories.map((c) => ({ value: c.id, label: localized(c.name) }))}

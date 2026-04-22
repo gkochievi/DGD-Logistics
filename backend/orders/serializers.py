@@ -4,6 +4,7 @@ from rest_framework import serializers
 from .models import Order, OrderImage, OrderStatusHistory, OrderEditHistory
 from .assignment import validate_assignment, sync_vehicle_status
 from categories.serializers import TransportCategoryPublicSerializer
+from services.serializers import ServicePublicSerializer
 from accounts.serializers import UserSerializer
 from vehicles.serializers import VehicleListSerializer
 
@@ -52,19 +53,25 @@ class OrderEditHistorySerializer(serializers.ModelSerializer):
 
 
 class OrderListSerializer(serializers.ModelSerializer):
+    # Primary customer-facing taxonomy is now Service; these fields preserve
+    # the old *_category_* names so the frontend doesn't need a dual-path,
+    # but their values come from Service (with legacy category as fallback
+    # for orders created before services existed).
     selected_category_name = serializers.SerializerMethodField()
-    selected_category_icon = serializers.CharField(
-        source='selected_category.icon', read_only=True, default='car'
-    )
+    selected_category_icon = serializers.SerializerMethodField()
     selected_category_image = serializers.SerializerMethodField()
-    selected_category_color = serializers.CharField(
-        source='selected_category.color', read_only=True, default='#1677ff'
-    )
+    selected_category_color = serializers.SerializerMethodField()
     final_category_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     urgency_display = serializers.CharField(source='get_urgency_display', read_only=True)
     image_count = serializers.IntegerField(source='images.count', read_only=True)
     is_unread = serializers.SerializerMethodField()
+
+    def _primary_selected(self, obj):
+        return obj.selected_service or obj.selected_category
+
+    def _primary_final(self, obj):
+        return obj.final_service or obj.final_category
 
     def get_is_unread(self, obj):
         request = self.context.get('request')
@@ -77,21 +84,28 @@ class OrderListSerializer(serializers.ModelSerializer):
         return False
 
     def get_selected_category_name(self, obj):
-        if obj.selected_category:
-            return obj.selected_category.name
-        return ''
+        primary = self._primary_selected(obj)
+        return primary.name if primary else ''
+
+    def get_selected_category_icon(self, obj):
+        primary = self._primary_selected(obj)
+        return (primary.icon if primary else '') or 'car'
+
+    def get_selected_category_color(self, obj):
+        primary = self._primary_selected(obj)
+        return (primary.color if primary else '') or '#1677ff'
 
     def get_final_category_name(self, obj):
-        if obj.final_category:
-            return obj.final_category.name
-        return ''
+        primary = self._primary_final(obj)
+        return primary.name if primary else ''
 
     def get_selected_category_image(self, obj):
-        if obj.selected_category and obj.selected_category.image:
+        primary = self._primary_selected(obj)
+        if primary and getattr(primary, 'image', None):
             request = self.context.get('request')
             if request:
-                return request.build_absolute_uri(obj.selected_category.image.url)
-            return obj.selected_category.image.url
+                return request.build_absolute_uri(primary.image.url)
+            return primary.image.url
         return None
 
     class Meta:
@@ -114,6 +128,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     admin_edited_by_name = serializers.CharField(
         source='admin_edited_by.full_name', read_only=True, default='',
     )
+    selected_service_detail = ServicePublicSerializer(source='selected_service', read_only=True)
+    suggested_service_detail = ServicePublicSerializer(source='suggested_service', read_only=True)
+    final_service_detail = ServicePublicSerializer(source='final_service', read_only=True)
     selected_category_detail = TransportCategoryPublicSerializer(source='selected_category', read_only=True)
     suggested_category_detail = TransportCategoryPublicSerializer(source='suggested_category', read_only=True)
     final_category_detail = TransportCategoryPublicSerializer(source='final_category', read_only=True)
@@ -139,6 +156,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'user', 'user_detail',
+            'suggested_service', 'suggested_service_detail',
+            'selected_service', 'selected_service_detail',
+            'final_service', 'final_service_detail',
             'suggested_category', 'suggested_category_detail',
             'selected_category', 'selected_category_detail',
             'final_category', 'final_category_detail',
@@ -174,6 +194,7 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id',
+            'selected_service', 'suggested_service',
             'selected_category', 'suggested_category',
             'pickup_location', 'pickup_lat', 'pickup_lng',
             'destination_location', 'destination_lat', 'destination_lng',
@@ -184,7 +205,10 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id']
         extra_kwargs = {
+            'selected_service': {'required': False, 'allow_null': True},
+            'suggested_service': {'required': False, 'allow_null': True},
             'selected_category': {'required': False, 'allow_null': True},
+            'suggested_category': {'required': False, 'allow_null': True},
         }
 
     def validate(self, attrs):
@@ -266,7 +290,7 @@ class AdminOrderUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = [
-            'final_category', 'assigned_vehicle', 'assigned_driver',
+            'final_service', 'final_category', 'assigned_vehicle', 'assigned_driver',
             'scheduled_from', 'scheduled_to',
             'admin_comment', 'status', 'urgency', 'price',
             'pickup_location', 'pickup_lat', 'pickup_lng',

@@ -30,7 +30,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    api.get('/categories/').then(({ data }) => {
+    api.get('/services/').then(({ data }) => {
       setCategories(Array.isArray(data) ? data : data.results || []);
     });
   }, []);
@@ -41,12 +41,12 @@ export default function AdminOrdersPage({ historyMode = false }) {
 
     const status = searchParams.get('status');
     const urgency = searchParams.get('urgency');
-    const category = searchParams.get('category');
+    const service = searchParams.get('service');
     const userId = searchParams.get('user_id');
 
     if (status) params.status = status;
     if (urgency) params.urgency = urgency;
-    if (category) params.selected_category = category;
+    if (service) params.selected_service = service;
     if (userId) params.user_id = userId;
     if (search) params.search = search;
 
@@ -98,7 +98,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
       title: t('orders.pickup'), dataIndex: 'pickup_location', ellipsis: true,
       render: (text) => <span style={{ fontWeight: 500 }}>{text}</span>,
     },
-    { title: t('adminOrders.category'), dataIndex: 'selected_category_name', width: 140, ellipsis: true, render: (v) => localized(v) },
+    { title: t('adminOrders.service'), dataIndex: 'selected_category_name', width: 140, ellipsis: true, render: (v) => localized(v) },
     { title: t('orders.date'), dataIndex: 'requested_date', width: 110 },
     { title: t('adminOrders.status'), dataIndex: 'status', width: 130, render: (s) => <StatusBadge status={s} /> },
     { title: t('adminOrders.urgencyLabel'), dataIndex: 'urgency', width: 100, render: (u) => <UrgencyBadge urgency={u} /> },
@@ -209,14 +209,14 @@ export default function AdminOrdersPage({ historyMode = false }) {
             options={URGENCY_OPTIONS}
           />
           <Select
-            placeholder={t('adminOrders.category')}
+            placeholder={t('adminOrders.service')}
             allowClear
             style={{ width: isMobile ? 140 : 170 }}
-            value={searchParams.get('category') || undefined}
-            onChange={(val) => updateFilter('category', val)}
+            value={searchParams.get('service') || undefined}
+            onChange={(val) => updateFilter('service', val)}
             showSearch
             filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-            options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
+            options={categories.map((c) => ({ value: String(c.id), label: localized(c.name) }))}
           />
         </Space>
       </div>

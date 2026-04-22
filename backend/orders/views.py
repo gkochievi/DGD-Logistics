@@ -165,7 +165,8 @@ class CustomerUploadImagesView(APIView):
 class AdminOrderListView(generics.ListAPIView):
     serializer_class = OrderListSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
-    filterset_fields = ['status', 'urgency', 'selected_category', 'final_category']
+    filterset_fields = ['status', 'urgency', 'selected_service', 'final_service',
+                        'selected_category', 'final_category']
     search_fields = ['contact_name', 'contact_phone', 'pickup_location', 'description']
     ordering_fields = ['created_at', 'requested_date', 'status', 'urgency']
 

@@ -110,6 +110,7 @@ export default function NewOrderFlow() {
   const [suggestion, setSuggestion] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fileList, setFileList] = useState([]);
+  const [photoError, setPhotoError] = useState('');
   const [formValues, setFormValues] = useState({});
   const [catSearch, setCatSearch] = useState('');
   const [showAllCategories, setShowAllCategories] = useState(false);
@@ -145,12 +146,13 @@ export default function NewOrderFlow() {
   }, [location.state]); // eslint-disable-line
 
   useEffect(() => {
-    api.get('/categories/').then(({ data }) => {
-      const cats = Array.isArray(data) ? data : data.results || [];
-      setCategories(cats);
-      const catId = searchParams.get('category');
-      if (catId) {
-        const found = cats.find((c) => String(c.id) === catId);
+    api.get('/services/').then(({ data }) => {
+      const svcs = Array.isArray(data) ? data : data.results || [];
+      setCategories(svcs);
+      // Accept both ?service= (new) and ?category= (legacy deep links).
+      const svcId = searchParams.get('service') || searchParams.get('category');
+      if (svcId) {
+        const found = svcs.find((s) => String(s.id) === svcId);
         if (found) {
           setSelectedCategory(found);
         }
@@ -176,7 +178,7 @@ export default function NewOrderFlow() {
     const desc = form.getFieldValue('description');
     if (desc && desc.length > 10) {
       try {
-        const { data } = await api.post('/categories/suggest/', { description: desc });
+        const { data } = await api.post('/services/suggest/', { description: desc });
         if (data.id && data.id !== selectedCategory?.id) setSuggestion(data);
       } catch { /* ignore */ }
     }
@@ -196,8 +198,18 @@ export default function NewOrderFlow() {
       message.warning(t('newOrder.pleaseSelectCategory'));
       return;
     }
+    // Photo upload sits outside the Form, so validate its state manually
+    // alongside the Form's own validateFields call.
+    const photoMissing = fileList.length === 0;
+    if (photoMissing) {
+      setPhotoError(t('newOrder.addAtLeastOnePhoto'));
+    }
     try {
       const values = await form.validateFields();
+      if (photoMissing) {
+        message.warning(t('newOrder.addAtLeastOnePhoto'));
+        return;
+      }
       setFormValues(values);
       setStep(1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -215,7 +227,7 @@ export default function NewOrderFlow() {
       const values = formValues;
       const fd = new FormData();
       if (selectedCategory.id !== 'admin_decide') {
-        fd.append('selected_category', selectedCategory.id);
+        fd.append('selected_service', selectedCategory.id);
       }
       fd.append('pickup_location', pickupStops[0]?.text || values.pickup_location);
       if (pickupStops[0]?.coords) {
@@ -254,7 +266,7 @@ export default function NewOrderFlow() {
       if (values.cargo_weight) cargoParts.push(`${values.cargo_weight} kg`);
       fd.append('cargo_details', cargoParts.join(', '));
       fd.append('user_note', values.user_note || '');
-      if (suggestion?.id) fd.append('suggested_category', suggestion.id);
+      if (suggestion?.id) fd.append('suggested_service', suggestion.id);
       fileList.forEach((f) => fd.append('images', f.originFileObj));
 
       const { data } = await api.post('/orders/create/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
@@ -918,7 +930,8 @@ export default function NewOrderFlow() {
                         inputReadOnly suffixIcon={<CalendarOutlined />}
                       />
                     </Form.Item>
-                    <Form.Item name="requested_time" style={{ flex: 1, marginBottom: 0 }}>
+                    <Form.Item name="requested_time" style={{ flex: 1, marginBottom: 0 }}
+                      rules={[{ required: true, message: t('newOrder.selectTime') }]}>
                       <TimePicker
                         format="HH:mm"
                         style={{ width: '100%', height: 48, borderRadius: 12, fontSize: 15 }}
@@ -1022,12 +1035,20 @@ export default function NewOrderFlow() {
 
           {/* ── SECTION: Photos & Notes ── */}
           <SectionCard icon={<CameraOutlined />} title={t('newOrder.additional')} last>
-            <Form.Item name="user_note" style={{ marginBottom: 12 }}>
+            <Form.Item name="user_note" style={{ marginBottom: 12 }}
+              rules={[{ required: true, message: t('newOrder.enterNote') }]}>
               <TextArea rows={2} placeholder={t('newOrder.notesForUs')}
                 style={{ borderRadius: 12, fontSize: 15, padding: '12px 14px', resize: 'none' }} />
             </Form.Item>
-            <Form.Item style={{ marginBottom: 0 }}>
-              <Upload listType="picture" fileList={fileList} onChange={({ fileList: fl }) => setFileList(fl)}
+            <Form.Item style={{ marginBottom: 0 }}
+              required
+              validateStatus={photoError ? 'error' : ''}
+              help={photoError || undefined}>
+              <Upload listType="picture" fileList={fileList}
+                onChange={({ fileList: fl }) => {
+                  setFileList(fl);
+                  if (fl.length > 0) setPhotoError('');
+                }}
                 beforeUpload={() => false} multiple accept="image/*">
                 <Button icon={<CameraOutlined />}
                   style={{

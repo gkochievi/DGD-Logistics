@@ -59,6 +59,21 @@ class Order(models.Model):
     ]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='orders')
+    # Customer-facing "what is being requested" — customers pick a Service.
+    suggested_service = models.ForeignKey(
+        'services.Service', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='suggested_orders',
+    )
+    selected_service = models.ForeignKey(
+        'services.Service', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='selected_orders',
+    )
+    final_service = models.ForeignKey(
+        'services.Service', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='final_orders',
+    )
+    # Legacy car-category FKs — kept for pre-service orders; new orders use
+    # the *_service fields above. Stays nullable; no UI writes to these now.
     suggested_category = models.ForeignKey(
         'categories.TransportCategory', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='suggested_orders',

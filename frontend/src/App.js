@@ -29,6 +29,7 @@ import AdminOrderDetailPage from './pages/admin/AdminOrderDetailPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminUserFormPage from './pages/admin/AdminUserFormPage';
 import AdminCategoriesPage from './pages/admin/AdminCategoriesPage';
+import AdminServicesPage from './pages/admin/AdminServicesPage';
 import AdminVehiclesPage from './pages/admin/AdminVehiclesPage';
 import AdminDriversPage from './pages/admin/AdminDriversPage';
 import AdminAnalyticsPage from './pages/admin/AdminAnalyticsPage';
@@ -79,6 +80,7 @@ export default function App() {
           <Route path="/admin/users/new" element={<AdminUserFormPage />} />
           <Route path="/admin/users/:id" element={<AdminUserFormPage />} />
           <Route path="/admin/categories" element={<AdminCategoriesPage />} />
+          <Route path="/admin/services" element={<AdminServicesPage />} />
           <Route path="/admin/vehicles" element={<AdminVehiclesPage />} />
           <Route path="/admin/drivers" element={<AdminDriversPage />} />
           <Route path="/admin/landing" element={<AdminLandingPage />} />
