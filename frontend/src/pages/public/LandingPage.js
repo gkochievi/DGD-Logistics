@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Row, Col, Grid } from 'antd';
+import { Button, Row, Col, Grid, Modal, Empty, Spin } from 'antd';
 import {
   EnvironmentOutlined,
-  ArrowRightOutlined, AimOutlined,
+  ArrowRightOutlined, AimOutlined, CloseOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
@@ -21,6 +21,12 @@ export default function LandingPage() {
   const { user } = useAuth();
   const { defaultSearchScope, defaultSearchCountries } = useBranding();
   const [categories, setCategories] = useState([]);
+  const [carCategories, setCarCategories] = useState([]);
+  const [showAllServices, setShowAllServices] = useState(false);
+  const [showAllCarCategories, setShowAllCarCategories] = useState(false);
+  const [vehicleModalCat, setVehicleModalCat] = useState(null);
+  const [vehicleModalList, setVehicleModalList] = useState([]);
+  const [vehicleModalLoading, setVehicleModalLoading] = useState(false);
   const [landing, setLanding] = useState(null);
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
@@ -32,10 +38,30 @@ export default function LandingPage() {
     api.get('/services/').then(({ data }) => {
       setCategories(Array.isArray(data) ? data : data.results || []);
     }).catch(() => {});
+    api.get('/categories/').then(({ data }) => {
+      setCarCategories(Array.isArray(data) ? data : data.results || []);
+    }).catch(() => {});
     api.get('/landing/').then(({ data }) => {
       setLanding(data);
     }).catch(() => {});
   }, []);
+
+  const openVehicleModal = (cat) => {
+    setVehicleModalCat(cat);
+    setVehicleModalList([]);
+    setVehicleModalLoading(true);
+    api.get('/vehicles/', { params: { category: cat.id } })
+      .then(({ data }) => {
+        setVehicleModalList(Array.isArray(data) ? data : data.results || []);
+      })
+      .catch(() => setVehicleModalList([]))
+      .finally(() => setVehicleModalLoading(false));
+  };
+
+  const closeVehicleModal = () => {
+    setVehicleModalCat(null);
+    setVehicleModalList([]);
+  };
 
   const isMobile = !screens.md;
 
@@ -76,10 +102,14 @@ export default function LandingPage() {
   };
 
   const handleCategoryClick = (cat) => {
+    const target = `/app/order/new?service=${cat.id}`;
     if (user) {
-      navigate(`/app/order/new?service=${cat.id}`);
+      navigate(target);
     } else {
-      navigate('/register');
+      // Send the user to login; LoginPage honors state.redirectTo after
+      // successful login so they land back on the order flow with the
+      // chosen service pre-selected.
+      navigate('/login', { state: { redirectTo: target } });
     }
   };
 
@@ -356,7 +386,7 @@ export default function LandingPage() {
             </div>
 
             <Row gutter={[16, 16]} justify="center">
-              {categories.map((cat, i) => (
+              {(showAllServices ? categories : categories.slice(0, 8)).map((cat, i) => (
                 <Col xs={12} sm={8} md={6} key={cat.id}>
                   <div
                     className="lt-cat-card"
@@ -398,9 +428,202 @@ export default function LandingPage() {
                 </Col>
               ))}
             </Row>
+            {categories.length > 8 && (
+              <div style={{ textAlign: 'center', marginTop: 24 }}>
+                <Button
+                  type="default"
+                  onClick={() => setShowAllServices((v) => !v)}
+                  style={{
+                    height: 42, padding: '0 22px', borderRadius: 12,
+                    fontWeight: 600, fontSize: 14,
+                    background: 'var(--card-bg)',
+                    borderColor: 'var(--border-color)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {showAllServices
+                    ? t('landing.showLess')
+                    : t('landing.showMore', { count: categories.length - 8 })}
+                </Button>
+              </div>
+            )}
           </div>
         </section>
       )}
+
+      {/* ══════════════════════════════════════════
+          CAR CATEGORIES (Our Fleet)
+          Clicking a tile opens a modal with the vehicles in that category.
+      ══════════════════════════════════════════ */}
+      {carCategories.length > 0 && (
+        <section style={{
+          padding: isMobile ? '48px 20px' : '72px 48px',
+          background: 'var(--bg-primary)',
+        }}>
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 48 }}>
+              <p style={{
+                fontSize: 13, fontWeight: 700, letterSpacing: '0.08em',
+                textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 12,
+              }}>
+                {t('landing.ourFleet')}
+              </p>
+              <h2 style={{
+                fontSize: isMobile ? 26 : 36, fontWeight: 800,
+                color: 'var(--text-primary)', letterSpacing: '-0.03em',
+                lineHeight: 1.2, margin: 0,
+              }}>
+                {t('landing.browseByCategory')}
+              </h2>
+            </div>
+
+            <Row gutter={[16, 16]} justify="center">
+              {(showAllCarCategories ? carCategories : carCategories.slice(0, 8)).map((cat, i) => (
+                <Col xs={12} sm={8} md={6} key={cat.id}>
+                  <div
+                    className="lt-cat-card"
+                    onClick={() => openVehicleModal(cat)}
+                    style={{
+                      animation: `fadeInUp ${0.3 + i * 0.08}s cubic-bezier(0.22,1,0.36,1)`,
+                    }}
+                  >
+                    <div
+                      className="lt-cat-icon"
+                      style={{
+                        width: 88, height: 88, borderRadius: 20,
+                        background: 'var(--accent-bg)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        margin: '0 auto 14px',
+                        color: 'var(--accent)', overflow: 'hidden',
+                        transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1)',
+                      }}
+                    >
+                      <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={cat.image_url ? 88 : 56} />
+                    </div>
+                    <h4 style={{
+                      fontSize: 15, fontWeight: 700, color: 'var(--text-primary)',
+                      letterSpacing: '-0.01em', margin: '0 0 4px',
+                    }}>
+                      {typeof cat.name === 'object' ? (cat.name[lang] || cat.name.en || '') : cat.name}
+                    </h4>
+                    {cat.description && (typeof cat.description === 'object' ? (cat.description[lang] || cat.description.en) : cat.description) && (
+                      <p style={{
+                        fontSize: 13, color: 'var(--text-secondary)',
+                        lineHeight: 1.5, margin: 0,
+                        display: '-webkit-box', WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      }}>
+                        {typeof cat.description === 'object' ? (cat.description[lang] || cat.description.en || '') : cat.description}
+                      </p>
+                    )}
+                  </div>
+                </Col>
+              ))}
+            </Row>
+            {carCategories.length > 8 && (
+              <div style={{ textAlign: 'center', marginTop: 24 }}>
+                <Button
+                  type="default"
+                  onClick={() => setShowAllCarCategories((v) => !v)}
+                  style={{
+                    height: 42, padding: '0 22px', borderRadius: 12,
+                    fontWeight: 600, fontSize: 14,
+                    background: 'var(--card-bg)',
+                    borderColor: 'var(--border-color)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {showAllCarCategories
+                    ? t('landing.showLess')
+                    : t('landing.showMore', { count: carCategories.length - 8 })}
+                </Button>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Vehicles-in-category modal (public, read-only view) */}
+      <Modal
+        open={!!vehicleModalCat}
+        onCancel={closeVehicleModal}
+        footer={null}
+        width={isMobile ? '94vw' : 820}
+        closeIcon={<CloseOutlined />}
+        title={
+          <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.02em' }}>
+            {vehicleModalCat
+              ? (typeof vehicleModalCat.name === 'object'
+                  ? (vehicleModalCat.name[lang] || vehicleModalCat.name.en || '')
+                  : vehicleModalCat.name)
+              : ''}
+          </span>
+        }
+        styles={{
+          content: { borderRadius: 16, padding: 0 },
+          header: { padding: isMobile ? '16px 18px 0' : '20px 24px 0', borderBottom: 'none' },
+          body: { padding: isMobile ? '12px 18px 18px' : '16px 24px 24px' },
+        }}
+      >
+        {vehicleModalLoading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+            <Spin />
+          </div>
+        ) : vehicleModalList.length === 0 ? (
+          <Empty description={t('landing.noVehiclesInCategory')} />
+        ) : (
+          <Row gutter={[16, 16]}>
+            {vehicleModalList.map((v) => {
+              const photo = v.image || (v.images && v.images[0]?.image) || null;
+              return (
+                <Col xs={24} sm={12} key={v.id}>
+                  <div style={{
+                    background: 'var(--card-bg)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 14,
+                    overflow: 'hidden',
+                    height: '100%',
+                    display: 'flex', flexDirection: 'column',
+                  }}>
+                    <div style={{
+                      width: '100%', aspectRatio: '16 / 10',
+                      background: 'var(--bg-secondary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      overflow: 'hidden',
+                    }}>
+                      {photo ? (
+                        <img
+                          src={photo}
+                          alt={v.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
+                          {t('landing.noPhoto')}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ padding: '12px 14px 14px', flex: 1 }}>
+                      <div style={{
+                        fontWeight: 700, fontSize: 15,
+                        color: 'var(--text-primary)', letterSpacing: '-0.01em',
+                        marginBottom: 4,
+                      }}>
+                        {v.name}
+                      </div>
+                      {v.capacity && (
+                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                          {v.capacity}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </Col>
+              );
+            })}
+          </Row>
+        )}
+      </Modal>
 
       {/* ══════════════════════════════════════════
           HOW IT WORKS

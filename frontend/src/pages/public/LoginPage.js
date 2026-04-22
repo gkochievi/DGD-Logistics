@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Form, Input, Button, Card, Typography, message, Divider } from 'antd';
 import { MailOutlined, LockOutlined } from '@ant-design/icons';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLang } from '../../contexts/LanguageContext';
 
@@ -11,6 +11,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const { t } = useLang();
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
 
   const onFinish = async (values) => {
@@ -22,6 +23,14 @@ export default function LoginPage() {
         return;
       }
       message.success(t('auth.welcome'));
+      // Landing-page deep links (e.g. "/login" → "/app/order/new?service=3")
+      // stash their intended destination in location.state.redirectTo;
+      // honor it for non-admin users so the order flow opens preselected.
+      const redirectTo = location.state?.redirectTo;
+      if (redirectTo && user.role !== 'admin') {
+        navigate(redirectTo);
+        return;
+      }
       navigate(user.role === 'admin' ? '/admin' : '/app');
     } catch (err) {
       const detail = err.response?.data?.detail || t('auth.invalidCredentials');
