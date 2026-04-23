@@ -15,8 +15,10 @@ urlpatterns = [
 
     # Admin
     path('admin/', views.AdminOrderListView.as_view(), name='admin_orders'),
+    path('admin/export/', views.AdminOrdersExportView.as_view(), name='admin_orders_export'),
     path('admin/notifications/', views.AdminNotificationsView.as_view(), name='admin_notifications'),
     path('admin/notifications/mark-read/', views.AdminMarkAllReadView.as_view(), name='admin_mark_read'),
     path('admin/<int:pk>/', views.AdminOrderDetailView.as_view(), name='admin_order_detail'),
+    path('admin/<int:pk>/export/', views.AdminOrderExportDetailView.as_view(), name='admin_order_export'),
     path('admin/<int:pk>/status/', views.AdminOrderStatusChangeView.as_view(), name='admin_order_status'),
 ]

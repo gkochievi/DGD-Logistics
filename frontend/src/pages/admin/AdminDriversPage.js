@@ -43,6 +43,10 @@ export default function AdminDriversPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [phoneFilter, setPhoneFilter] = useState('');
+  const [licenseNumberFilter, setLicenseNumberFilter] = useState('');
+  const [licenseCatsFilter, setLicenseCatsFilter] = useState('');
+  const [vehicleFilter, setVehicleFilter] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [clearPhoto, setClearPhoto] = useState(false);
@@ -50,16 +54,27 @@ export default function AdminDriversPage() {
 
   const visibleDrivers = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const phoneQ = phoneFilter.trim().toLowerCase();
+    const lnQ = licenseNumberFilter.trim().toLowerCase();
+    const lcQ = licenseCatsFilter.trim().toLowerCase();
     return drivers.filter((d) => {
       if (showArchived ? d.is_active !== false : d.is_active === false) return false;
       if (statusFilter && d.status !== statusFilter) return false;
+      if (phoneQ && !(d.phone || '').toLowerCase().includes(phoneQ)) return false;
+      if (lnQ && !(d.license_number || '').toLowerCase().includes(lnQ)) return false;
+      if (lcQ && !(d.license_categories || '').toLowerCase().includes(lcQ)) return false;
+      if (vehicleFilter) {
+        // d.vehicles is an array of {id, name, plate_number, ...}
+        const hasVehicle = (d.vehicles || []).some((v) => String(v.id) === String(vehicleFilter));
+        if (!hasVehicle) return false;
+      }
       if (q) {
         const hay = `${d.full_name || ''} ${d.phone || ''} ${d.email || ''} ${d.license_number || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [drivers, showArchived, search, statusFilter]);
+  }, [drivers, showArchived, search, statusFilter, phoneFilter, licenseNumberFilter, licenseCatsFilter, vehicleFilter]);
 
   const DRIVER_STATUS_OPTIONS = [
     { value: 'active', label: t('adminDrivers.active') },
@@ -314,9 +329,30 @@ export default function AdminDriversPage() {
             placeholder={t('common.search')}
             prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
             allowClear
-            style={{ width: 220, borderRadius: 10 }}
+            style={{ width: 200, borderRadius: 10 }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+          />
+          <Input
+            placeholder={t('auth.phone')}
+            allowClear
+            style={{ width: 150, borderRadius: 10 }}
+            value={phoneFilter}
+            onChange={(e) => setPhoneFilter(e.target.value)}
+          />
+          <Input
+            placeholder={t('adminDrivers.licenseNumber')}
+            allowClear
+            style={{ width: 170, borderRadius: 10 }}
+            value={licenseNumberFilter}
+            onChange={(e) => setLicenseNumberFilter(e.target.value)}
+          />
+          <Input
+            placeholder={t('adminVehicles.licenseCategories')}
+            allowClear
+            style={{ width: 170, borderRadius: 10 }}
+            value={licenseCatsFilter}
+            onChange={(e) => setLicenseCatsFilter(e.target.value)}
           />
           <Select
             placeholder={t('adminVehicles.status')}
@@ -325,6 +361,19 @@ export default function AdminDriversPage() {
             value={statusFilter || undefined}
             onChange={(v) => setStatusFilter(v || '')}
             options={DRIVER_STATUS_OPTIONS}
+          />
+          <Select
+            placeholder={t('adminDrivers.assignedVehicles')}
+            allowClear
+            showSearch
+            filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+            style={{ width: 200 }}
+            value={vehicleFilter || undefined}
+            onChange={(v) => setVehicleFilter(v || '')}
+            options={vehicles.map((v) => ({
+              value: String(v.id),
+              label: `${v.name} (${v.plate_number})`,
+            }))}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 4 }}>
             <Switch

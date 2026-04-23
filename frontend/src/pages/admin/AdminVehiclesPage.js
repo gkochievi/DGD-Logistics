@@ -56,20 +56,29 @@ export default function AdminVehiclesPage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [plateFilter, setPlateFilter] = useState('');
+  const [capacityFilter, setCapacityFilter] = useState('');
+  const [licenseFilter, setLicenseFilter] = useState('');
 
   const visibleVehicles = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const plateQ = plateFilter.trim().toLowerCase();
+    const capQ = capacityFilter.trim().toLowerCase();
+    const licQ = licenseFilter.trim().toLowerCase();
     return vehicles.filter((v) => {
       if (showArchived ? v.is_active !== false : v.is_active === false) return false;
       if (categoryFilter && !(v.categories || []).includes(categoryFilter)) return false;
       if (statusFilter && v.status !== statusFilter) return false;
+      if (plateQ && !(v.plate_number || '').toLowerCase().includes(plateQ)) return false;
+      if (capQ && !(v.capacity || '').toLowerCase().includes(capQ)) return false;
+      if (licQ && !(v.license_categories || '').toLowerCase().includes(licQ)) return false;
       if (q) {
         const hay = `${v.name || ''} ${v.plate_number || ''} ${v.capacity || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [vehicles, showArchived, search, categoryFilter, statusFilter]);
+  }, [vehicles, showArchived, search, categoryFilter, statusFilter, plateFilter, capacityFilter, licenseFilter]);
 
   const VEHICLE_STATUS_OPTIONS = [
     { value: 'available', label: t('adminVehicles.available') },
@@ -368,9 +377,30 @@ export default function AdminVehiclesPage() {
             placeholder={t('common.search')}
             prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
             allowClear
-            style={{ width: 220, borderRadius: 10 }}
+            style={{ width: 200, borderRadius: 10 }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+          />
+          <Input
+            placeholder={t('adminVehicles.plateNumber')}
+            allowClear
+            style={{ width: 150, borderRadius: 10 }}
+            value={plateFilter}
+            onChange={(e) => setPlateFilter(e.target.value)}
+          />
+          <Input
+            placeholder={t('adminVehicles.capacity')}
+            allowClear
+            style={{ width: 150, borderRadius: 10 }}
+            value={capacityFilter}
+            onChange={(e) => setCapacityFilter(e.target.value)}
+          />
+          <Input
+            placeholder={t('adminVehicles.licenseCategories')}
+            allowClear
+            style={{ width: 170, borderRadius: 10 }}
+            value={licenseFilter}
+            onChange={(e) => setLicenseFilter(e.target.value)}
           />
           <Select
             placeholder={t('adminOrders.category')}

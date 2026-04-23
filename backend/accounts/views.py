@@ -109,12 +109,24 @@ class ProfileStatsView(APIView):
 class AdminUserListView(generics.ListAPIView):
     serializer_class = AdminUserSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
-    filterset_fields = ['role', 'is_active']
+    filterset_fields = ['role', 'is_active', 'user_type']
     search_fields = ['email', 'first_name', 'last_name', 'phone_number']
     ordering_fields = ['created_at', 'email', 'first_name']
 
     def get_queryset(self):
-        return User.objects.annotate(order_count=Count('orders'))
+        qs = User.objects.annotate(
+            order_count=Count('orders', distinct=True),
+            contract_count=Count('contracts', distinct=True),
+        )
+        # Dedicated per-field contains filters so admins can scope precisely
+        # by email or phone without the generic `search` matching other fields.
+        email_q = self.request.query_params.get('email_q')
+        if email_q:
+            qs = qs.filter(email__icontains=email_q)
+        phone_q = self.request.query_params.get('phone_q')
+        if phone_q:
+            qs = qs.filter(phone_number__icontains=phone_q)
+        return qs
 
 
 class AdminUserCreateView(generics.CreateAPIView):
@@ -125,7 +137,10 @@ class AdminUserCreateView(generics.CreateAPIView):
 class AdminUserDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = AdminUserSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
-    queryset = User.objects.annotate(order_count=Count('orders'))
+    queryset = User.objects.annotate(
+        order_count=Count('orders', distinct=True),
+        contract_count=Count('contracts', distinct=True),
+    )
 
 
 def _validate_contract_file(uploaded):

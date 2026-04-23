@@ -1,8 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Table, Select, Button, Input, Typography, Space, Grid, Empty, Badge,
+  Table, Select, Button, Input, Typography, Space, Grid, Empty, Badge, DatePicker, TimePicker,
+  Modal, message,
 } from 'antd';
-import { EyeOutlined, SearchOutlined, RightOutlined, FilterOutlined, UserOutlined, CloseOutlined } from '@ant-design/icons';
+import {
+  EyeOutlined, SearchOutlined, RightOutlined, FilterOutlined, UserOutlined,
+  CloseOutlined, DownloadOutlined,
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { StatusBadge, UrgencyBadge } from '../../components/common/StatusBadge';
@@ -27,12 +32,21 @@ export default function AdminOrdersPage({ historyMode = false }) {
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
   const [categories, setCategories] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
   const [search, setSearch] = useState('');
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportRange, setExportRange] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const [rowExportingId, setRowExportingId] = useState(null);
 
   useEffect(() => {
     api.get('/services/').then(({ data }) => {
       setCategories(Array.isArray(data) ? data : data.results || []);
     });
+    api.get('/vehicles/admin/').then(({ data }) => {
+      const results = data.results || data;
+      setVehicles(Array.isArray(results) ? results : []);
+    }).catch(() => {});
   }, []);
 
   const fetchOrders = useCallback((page = 1, { silent = false } = {}) => {
@@ -43,11 +57,19 @@ export default function AdminOrdersPage({ historyMode = false }) {
     const urgency = searchParams.get('urgency');
     const service = searchParams.get('service');
     const userId = searchParams.get('user_id');
+    const requestedDateFrom = searchParams.get('requested_date_from');
+    const requestedDateTo = searchParams.get('requested_date_to');
+    const requestedTime = searchParams.get('requested_time');
+    const vehicleId = searchParams.get('vehicle');
 
     if (status) params.status = status;
     if (urgency) params.urgency = urgency;
     if (service) params.selected_service = service;
     if (userId) params.user_id = userId;
+    if (requestedDateFrom) params.requested_date_from = requestedDateFrom;
+    if (requestedDateTo) params.requested_date_to = requestedDateTo;
+    if (requestedTime) params.requested_time = requestedTime;
+    if (vehicleId) params.assigned_vehicle = vehicleId;
     if (search) params.search = search;
 
     if (historyMode) {
@@ -72,6 +94,57 @@ export default function AdminOrdersPage({ historyMode = false }) {
     const params = Object.fromEntries(searchParams.entries());
     if (val) params[key] = val; else delete params[key];
     setSearchParams(params);
+  };
+
+  const triggerDownload = (blob, filename) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const filenameFromHeaders = (headers, fallback) => {
+    const disposition = headers?.['content-disposition'] || '';
+    const match = /filename="?([^";]+)"?/.exec(disposition);
+    return match ? match[1] : fallback;
+  };
+
+  const handleExportOrders = async () => {
+    const params = {};
+    if (exportRange && exportRange[0] && exportRange[1]) {
+      params.date_from = exportRange[0].format('YYYY-MM-DD');
+      params.date_to = exportRange[1].format('YYYY-MM-DD');
+    }
+    if (historyMode) params.status = searchParams.get('status') || 'completed';
+    setExporting(true);
+    try {
+      const resp = await api.get('/orders/admin/export/', { params, responseType: 'blob' });
+      const filename = filenameFromHeaders(resp.headers, `orders_${dayjs().format('YYYYMMDD_HHmm')}.csv`);
+      triggerDownload(resp.data, filename);
+      setExportOpen(false);
+    } catch {
+      message.error(t('adminOrders.exportFailed'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportOrder = async (e, orderId) => {
+    e.stopPropagation();
+    setRowExportingId(orderId);
+    try {
+      const resp = await api.get(`/orders/admin/${orderId}/export/`, { responseType: 'blob' });
+      const filename = filenameFromHeaders(resp.headers, `order_${orderId}.csv`);
+      triggerDownload(resp.data, filename);
+    } catch {
+      message.error(t('adminOrders.exportFailed'));
+    } finally {
+      setRowExportingId(null);
+    }
   };
 
   const isMobile = !screens.md;
@@ -103,14 +176,24 @@ export default function AdminOrdersPage({ historyMode = false }) {
     { title: t('adminOrders.status'), dataIndex: 'status', width: 130, render: (s) => <StatusBadge status={s} /> },
     { title: t('adminOrders.urgencyLabel'), dataIndex: 'urgency', width: 100, render: (u) => <UrgencyBadge urgency={u} /> },
     {
-      title: '', width: 50,
+      title: '', width: 90,
       render: (_, r) => (
-        <Button
-          type="text"
-          icon={<EyeOutlined />}
-          onClick={() => navigate(`/admin/orders/${r.id}`)}
-          style={{ color: 'var(--accent)' }}
-        />
+        <Space size={0}>
+          <Button
+            type="text"
+            icon={<DownloadOutlined />}
+            loading={rowExportingId === r.id}
+            onClick={(e) => handleExportOrder(e, r.id)}
+            title={t('adminOrders.downloadOrder')}
+            style={{ color: 'var(--text-secondary)' }}
+          />
+          <Button
+            type="text"
+            icon={<EyeOutlined />}
+            onClick={() => navigate(`/admin/orders/${r.id}`)}
+            style={{ color: 'var(--accent)' }}
+          />
+        </Space>
       ),
     },
   ];
@@ -119,12 +202,46 @@ export default function AdminOrdersPage({ historyMode = false }) {
 
   return (
     <div className="page-enter">
-      <Title level={3} style={{
-        margin: '0 0 24px 0', fontWeight: 800,
-        letterSpacing: '-0.02em', color: 'var(--text-primary)',
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, margin: '0 0 24px 0', flexWrap: 'wrap',
       }}>
-        {historyMode ? t('adminOrders.orderHistory') : t('adminOrders.activeOrders')}
-      </Title>
+        <Title level={3} style={{
+          margin: 0, fontWeight: 800,
+          letterSpacing: '-0.02em', color: 'var(--text-primary)',
+        }}>
+          {historyMode ? t('adminOrders.orderHistory') : t('adminOrders.activeOrders')}
+        </Title>
+        <Button
+          icon={<DownloadOutlined />}
+          onClick={() => setExportOpen(true)}
+          style={{ borderRadius: 10, fontWeight: 600 }}
+        >
+          {t('adminOrders.exportOrders')}
+        </Button>
+      </div>
+
+      <Modal
+        title={t('adminOrders.exportOrdersTitle')}
+        open={exportOpen}
+        onCancel={() => setExportOpen(false)}
+        onOk={handleExportOrders}
+        okText={t('adminOrders.downloadCsv')}
+        cancelText={t('common.cancel')}
+        confirmLoading={exporting}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Text style={{ color: 'var(--text-secondary)' }}>
+            {t('adminOrders.exportDateHint')}
+          </Text>
+          <DatePicker.RangePicker
+            value={exportRange}
+            onChange={(range) => setExportRange(range)}
+            style={{ width: '100%' }}
+            allowClear
+          />
+        </div>
+      </Modal>
 
       {/* User filter banner */}
       {searchParams.get('user_id') && (
@@ -180,11 +297,11 @@ export default function AdminOrdersPage({ historyMode = false }) {
         </div>
         <Space wrap size={isMobile ? 'small' : 'middle'} style={{ width: '100%' }}>
           <Input
-            placeholder={t('common.search')}
+            placeholder={t('adminOrders.searchUsers')}
             prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
             allowClear
             style={{
-              width: isMobile ? '100%' : 200,
+              width: isMobile ? '100%' : 220,
               borderRadius: 10,
             }}
             value={search}
@@ -217,6 +334,49 @@ export default function AdminOrdersPage({ historyMode = false }) {
             showSearch
             filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
             options={categories.map((c) => ({ value: String(c.id), label: localized(c.name) }))}
+          />
+          <Select
+            placeholder={t('adminOrders.vehicle')}
+            allowClear
+            style={{ width: isMobile ? 160 : 200 }}
+            value={searchParams.get('vehicle') || undefined}
+            onChange={(val) => updateFilter('vehicle', val)}
+            showSearch
+            filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+            options={vehicles.map((v) => ({
+              value: String(v.id),
+              label: `${v.name} (${v.plate_number})`,
+            }))}
+          />
+          <DatePicker.RangePicker
+            value={[
+              searchParams.get('requested_date_from') ? dayjs(searchParams.get('requested_date_from')) : null,
+              searchParams.get('requested_date_to') ? dayjs(searchParams.get('requested_date_to')) : null,
+            ]}
+            onChange={(range) => {
+              const params = Object.fromEntries(searchParams.entries());
+              if (range && range[0] && range[1]) {
+                params.requested_date_from = range[0].format('YYYY-MM-DD');
+                params.requested_date_to = range[1].format('YYYY-MM-DD');
+              } else {
+                delete params.requested_date_from;
+                delete params.requested_date_to;
+              }
+              setSearchParams(params);
+            }}
+            placeholder={[t('orders.date'), t('orders.date')]}
+            style={{ borderRadius: 10 }}
+          />
+          <TimePicker
+            format="HH:mm"
+            value={searchParams.get('requested_time')
+              ? dayjs(searchParams.get('requested_time'), 'HH:mm')
+              : null}
+            onChange={(val) => {
+              updateFilter('requested_time', val ? val.format('HH:mm') : null);
+            }}
+            placeholder={t('orders.time')}
+            style={{ borderRadius: 10, width: isMobile ? 120 : 140 }}
           />
         </Space>
       </div>
@@ -276,7 +436,18 @@ export default function AdminOrdersPage({ historyMode = false }) {
                     <Text style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                       {order.requested_date} · {localized(order.selected_category_name) || '—'} · <UrgencyBadge urgency={order.urgency} />
                     </Text>
-                    <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 11 }} />
+                    <Space size={0}>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<DownloadOutlined />}
+                        loading={rowExportingId === order.id}
+                        onClick={(e) => handleExportOrder(e, order.id)}
+                        title={t('adminOrders.downloadOrder')}
+                        style={{ color: 'var(--text-tertiary)' }}
+                      />
+                      <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 11 }} />
+                    </Space>
                   </div>
                 </div>
               ))}

@@ -36,7 +36,9 @@ class AdminServiceListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     queryset = Service.objects.all().prefetch_related('car_categories')
-    filterset_fields = ['is_active']
+    # `car_categories` is a ManyToMany; DRF's FilterSet matches ?car_categories=ID
+    # (repeat the param to match any of several ids).
+    filterset_fields = ['is_active', 'car_categories']
     search_fields = ['name', 'description']
 
 

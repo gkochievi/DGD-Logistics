@@ -13,7 +13,19 @@ class AdminDriverListCreateView(generics.ListCreateAPIView):
     search_fields = ['first_name', 'last_name', 'phone', 'email', 'license_number']
 
     def get_queryset(self):
-        return Driver.objects.prefetch_related('vehicles__categories').all()
+        qs = Driver.objects.prefetch_related('vehicles__categories').all()
+        # Per-field contains filters so the admin filter bar can target
+        # phone / license number / license categories independently.
+        phone_q = self.request.query_params.get('phone_q')
+        if phone_q:
+            qs = qs.filter(phone__icontains=phone_q)
+        license_number_q = self.request.query_params.get('license_number_q')
+        if license_number_q:
+            qs = qs.filter(license_number__icontains=license_number_q)
+        license_cats_q = self.request.query_params.get('license_categories_q')
+        if license_cats_q:
+            qs = qs.filter(license_categories__icontains=license_cats_q)
+        return qs
 
     def get_serializer_class(self):
         if self.request.method == 'GET':

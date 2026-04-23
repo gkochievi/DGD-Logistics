@@ -105,6 +105,7 @@ class ChangePasswordSerializer(serializers.Serializer):
 class AdminUserSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
     order_count = serializers.IntegerField(read_only=True, required=False)
+    contract_count = serializers.IntegerField(read_only=True, required=False)
 
     class Meta:
         model = User
@@ -112,7 +113,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
             'id', 'email', 'phone_number', 'first_name', 'last_name',
             'full_name', 'role', 'user_type', 'company_name', 'company_id',
             'is_active', 'must_change_password', 'created_at', 'updated_at',
-            'order_count',
+            'order_count', 'contract_count',
         ]
         read_only_fields = ['id', 'must_change_password', 'created_at', 'updated_at']
 

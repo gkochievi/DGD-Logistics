@@ -1,7 +1,10 @@
+import csv
+
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.http import HttpResponse
 from django.utils import timezone
 from django.db.models import Q
 
@@ -166,8 +169,16 @@ class AdminOrderListView(generics.ListAPIView):
     serializer_class = OrderListSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
     filterset_fields = ['status', 'urgency', 'selected_service', 'final_service',
-                        'selected_category', 'final_category']
-    search_fields = ['contact_name', 'contact_phone', 'pickup_location', 'description']
+                        'selected_category', 'final_category', 'assigned_vehicle']
+    # Free-text `search` hits the customer (User) fields first, plus the
+    # contact name/phone that the order carries. Location/description are
+    # intentionally out — admins filter location via specific fields when
+    # needed, not via a generic search.
+    search_fields = [
+        'user__first_name', 'user__last_name',
+        'user__email', 'user__phone_number', 'user__company_name',
+        'contact_name', 'contact_phone',
+    ]
     ordering_fields = ['created_at', 'requested_date', 'status', 'urgency']
 
     def get_queryset(self):
@@ -175,12 +186,24 @@ class AdminOrderListView(generics.ListAPIView):
         user_id = self.request.query_params.get('user_id')
         if user_id:
             qs = qs.filter(user_id=user_id)
+        # `date_from` / `date_to` filter on created_at (used by the admin
+        # dashboard and reports). `requested_date_from`/`_to` filter on the
+        # customer's requested_date so admins can scope by scheduled day.
         date_from = self.request.query_params.get('date_from')
         date_to = self.request.query_params.get('date_to')
         if date_from:
             qs = qs.filter(created_at__date__gte=date_from)
         if date_to:
             qs = qs.filter(created_at__date__lte=date_to)
+        req_date_from = self.request.query_params.get('requested_date_from')
+        req_date_to = self.request.query_params.get('requested_date_to')
+        if req_date_from:
+            qs = qs.filter(requested_date__gte=req_date_from)
+        if req_date_to:
+            qs = qs.filter(requested_date__lte=req_date_to)
+        requested_time = self.request.query_params.get('requested_time')
+        if requested_time:
+            qs = qs.filter(requested_time=requested_time)
         return qs
 
 
@@ -338,6 +361,169 @@ class AdminOrderStatusChangeView(APIView):
         sync_vehicle_status(order.assigned_vehicle)
 
         return Response(OrderDetailSerializer(order).data)
+
+
+# --- CSV export ---
+
+ORDER_EXPORT_COLUMNS = [
+    'ID', 'Created', 'Status', 'Urgency',
+    'Customer name', 'Customer email', 'Customer phone', 'Company',
+    'Contact name', 'Contact phone',
+    'Pickup location', 'Pickup lat', 'Pickup lng',
+    'Destination location', 'Destination lat', 'Destination lng',
+    'Requested date', 'Requested time',
+    'Service', 'Category',
+    'Assigned vehicle', 'Vehicle plate', 'Assigned driver',
+    'Scheduled from', 'Scheduled to',
+    'Price', 'Customer accepted at',
+    'Description', 'Cargo details', 'Admin comment', 'User note',
+]
+
+
+def _multilingual(value):
+    if isinstance(value, dict):
+        return value.get('en') or next((v for v in value.values() if v), '') or ''
+    return value or ''
+
+
+def _order_export_row(order):
+    user = order.user
+    service = order.final_service or order.selected_service
+    category = order.final_category or order.selected_category
+    vehicle = order.assigned_vehicle
+    driver = order.assigned_driver
+    return [
+        order.id,
+        order.created_at.strftime('%Y-%m-%d %H:%M') if order.created_at else '',
+        order.get_status_display(),
+        order.get_urgency_display(),
+        getattr(user, 'full_name', '') or f'{user.first_name} {user.last_name}'.strip(),
+        getattr(user, 'email', ''),
+        getattr(user, 'phone_number', ''),
+        getattr(user, 'company_name', '') or '',
+        order.contact_name,
+        order.contact_phone,
+        order.pickup_location,
+        order.pickup_lat if order.pickup_lat is not None else '',
+        order.pickup_lng if order.pickup_lng is not None else '',
+        order.destination_location,
+        order.destination_lat if order.destination_lat is not None else '',
+        order.destination_lng if order.destination_lng is not None else '',
+        order.requested_date.isoformat() if order.requested_date else '',
+        order.requested_time.strftime('%H:%M') if order.requested_time else '',
+        _multilingual(service.name) if service else '',
+        _multilingual(category.name) if category else '',
+        vehicle.name if vehicle else '',
+        vehicle.plate_number if vehicle else '',
+        driver.full_name if driver else '',
+        order.scheduled_from.strftime('%Y-%m-%d %H:%M') if order.scheduled_from else '',
+        order.scheduled_to.strftime('%Y-%m-%d %H:%M') if order.scheduled_to else '',
+        order.price if order.price is not None else '',
+        order.customer_accepted_at.strftime('%Y-%m-%d %H:%M') if order.customer_accepted_at else '',
+        order.description,
+        order.cargo_details,
+        order.admin_comment,
+        order.user_note,
+    ]
+
+
+def _csv_response(filename, rows):
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    # BOM so Excel opens UTF-8 (Cyrillic/Georgian) cleanly.
+    response.write('﻿')
+    writer = csv.writer(response)
+    for row in rows:
+        writer.writerow(row)
+    return response
+
+
+class AdminOrdersExportView(APIView):
+    """Stream filtered orders as CSV. Respects the same filter params as the
+    admin list view, plus optional `date_from`/`date_to` on created_at."""
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        qs = Order.objects.select_related(
+            'user', 'assigned_vehicle', 'assigned_driver',
+            'selected_service', 'final_service',
+            'selected_category', 'final_category',
+        ).all()
+
+        status_filter = request.query_params.get('status')
+        urgency = request.query_params.get('urgency')
+        service = request.query_params.get('selected_service') or request.query_params.get('service')
+        vehicle = request.query_params.get('assigned_vehicle') or request.query_params.get('vehicle')
+        user_id = request.query_params.get('user_id')
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        req_date_from = request.query_params.get('requested_date_from')
+        req_date_to = request.query_params.get('requested_date_to')
+        requested_time = request.query_params.get('requested_time')
+        search = request.query_params.get('search')
+
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        if urgency:
+            qs = qs.filter(urgency=urgency)
+        if service:
+            qs = qs.filter(selected_service_id=service)
+        if vehicle:
+            qs = qs.filter(assigned_vehicle_id=vehicle)
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+        if req_date_from:
+            qs = qs.filter(requested_date__gte=req_date_from)
+        if req_date_to:
+            qs = qs.filter(requested_date__lte=req_date_to)
+        if requested_time:
+            qs = qs.filter(requested_time=requested_time)
+        if search:
+            qs = qs.filter(
+                Q(user__first_name__icontains=search)
+                | Q(user__last_name__icontains=search)
+                | Q(user__email__icontains=search)
+                | Q(user__phone_number__icontains=search)
+                | Q(user__company_name__icontains=search)
+                | Q(contact_name__icontains=search)
+                | Q(contact_phone__icontains=search)
+            )
+
+        stamp = timezone.now().strftime('%Y%m%d_%H%M')
+        range_suffix = ''
+        if date_from or date_to:
+            range_suffix = f'_{date_from or "start"}_to_{date_to or "end"}'
+        filename = f'orders{range_suffix}_{stamp}.csv'
+
+        rows = [ORDER_EXPORT_COLUMNS]
+        for order in qs.order_by('-created_at'):
+            rows.append(_order_export_row(order))
+        return _csv_response(filename, rows)
+
+
+class AdminOrderExportDetailView(APIView):
+    """Export a single order as a two-column CSV (Field, Value)."""
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def get(self, request, pk):
+        try:
+            order = Order.objects.select_related(
+                'user', 'assigned_vehicle', 'assigned_driver',
+                'selected_service', 'final_service',
+                'selected_category', 'final_category',
+            ).get(pk=pk)
+        except Order.DoesNotExist:
+            return Response({'detail': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        row = _order_export_row(order)
+        rows = [['Field', 'Value']]
+        rows.extend(zip(ORDER_EXPORT_COLUMNS, row))
+        filename = f'order_{order.id}.csv'
+        return _csv_response(filename, rows)
 
 
 # --- Notifications (polling) ---

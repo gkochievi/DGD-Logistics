@@ -1,14 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import {
   Table, Button, Input, Select, Typography, Space, Grid, Tag, message, Empty, Switch,
+  Modal, Upload, Tooltip, Badge, Spin, Popconfirm,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, SearchOutlined, StopOutlined,
   CheckCircleOutlined, FilterOutlined, RightOutlined, ShoppingOutlined,
+  FileAddOutlined, UploadOutlined, FileTextOutlined, DownloadOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { useLang } from '../../contexts/LanguageContext';
+
+const ACCEPT_CONTRACT = '.pdf,.doc,.docx,.odt,.rtf,.txt,.jpg,.jpeg,.png,.webp';
+const MAX_CONTRACT_SIZE = 20 * 1024 * 1024;
+
+function formatBytes(n) {
+  if (!n) return '0 B';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -21,13 +35,97 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
   const [search, setSearch] = useState('');
+  const [emailFilter, setEmailFilter] = useState('');
+  const [phoneFilter, setPhoneFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [contractUser, setContractUser] = useState(null);
+  const [contractTitle, setContractTitle] = useState('');
+  const [pendingFile, setPendingFile] = useState(null);
+  const [uploadingContract, setUploadingContract] = useState(false);
+  const [contracts, setContracts] = useState([]);
+  const [contractsLoading, setContractsLoading] = useState(false);
+
+  const fetchContracts = async (userId) => {
+    setContractsLoading(true);
+    try {
+      const { data } = await api.get(`/auth/admin/users/${userId}/contracts/`);
+      setContracts(Array.isArray(data) ? data : []);
+    } catch {
+      setContracts([]);
+    } finally {
+      setContractsLoading(false);
+    }
+  };
+
+  const openContractModal = (user) => {
+    setContractUser(user);
+    setContractTitle('');
+    setPendingFile(null);
+    setContracts([]);
+    fetchContracts(user.id);
+  };
+
+  const closeContractModal = () => {
+    setContractUser(null);
+    setContractTitle('');
+    setPendingFile(null);
+    setContracts([]);
+  };
+
+  const refreshContractCount = (userId, nextCount) => {
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, contract_count: nextCount } : u)));
+  };
+
+  const handleContractUpload = async () => {
+    if (!contractUser) return;
+    if (!pendingFile) {
+      message.warning(t('adminUsers.selectContractFile'));
+      return;
+    }
+    setUploadingContract(true);
+    try {
+      const fd = new FormData();
+      fd.append('document', pendingFile);
+      if (contractTitle.trim()) fd.append('title', contractTitle.trim());
+      await api.post(`/auth/admin/users/${contractUser.id}/contracts/`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      message.success(t('adminUsers.contractUploaded'));
+      setPendingFile(null);
+      setContractTitle('');
+      await fetchContracts(contractUser.id);
+      refreshContractCount(contractUser.id, (contractUser.contract_count || 0) + 1);
+      setContractUser((cu) => (cu ? { ...cu, contract_count: (cu.contract_count || 0) + 1 } : cu));
+    } catch (err) {
+      const detail = err.response?.data;
+      const firstErr = detail ? Object.values(detail).flat()[0] : null;
+      message.error(typeof firstErr === 'string' ? firstErr : t('adminUsers.contractUploadFailed'));
+    } finally {
+      setUploadingContract(false);
+    }
+  };
+
+  const handleContractDelete = async (contractId) => {
+    if (!contractUser) return;
+    try {
+      await api.delete(`/auth/admin/users/${contractUser.id}/contracts/${contractId}/`);
+      message.success(t('adminUsers.contractDeleted'));
+      const nextContracts = contracts.filter((c) => c.id !== contractId);
+      setContracts(nextContracts);
+      refreshContractCount(contractUser.id, Math.max(0, (contractUser.contract_count || 1) - 1));
+      setContractUser((cu) => (cu ? { ...cu, contract_count: Math.max(0, (cu.contract_count || 1) - 1) } : cu));
+    } catch {
+      message.error(t('adminUsers.contractDeleteFailed'));
+    }
+  };
 
   const fetchUsers = (page = 1) => {
     setLoading(true);
     const params = { page };
     if (search) params.search = search;
+    if (emailFilter) params.email_q = emailFilter;
+    if (phoneFilter) params.phone_q = phoneFilter;
     if (roleFilter) params.role = roleFilter;
     params.is_active = showArchived ? 'false' : 'true';
 
@@ -97,38 +195,68 @@ export default function AdminUsersPage() {
       ) : count,
     },
     {
-      title: '', width: 120,
-      render: (_, record) => (
-        <Space size={4}>
-          {record.role === 'customer' && (
+      title: '', width: 160,
+      render: (_, record) => {
+        const isCompany = record.user_type === 'company';
+        return (
+          <Space size={4}>
+            {record.role === 'customer' && (
+              <Button
+                size="small"
+                type="text"
+                icon={<ShoppingOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/admin/orders?user_id=${record.id}&user_name=${encodeURIComponent(record.full_name)}`);
+                }}
+                title={t('adminUsers.viewOrders')}
+                style={{ color: 'var(--text-secondary)' }}
+              />
+            )}
+            <Tooltip
+              title={!isCompany
+                ? t('adminUsers.uploadContractOnlyCompany')
+                : (record.contract_count > 0
+                    ? t('adminUsers.contractsUploadedCount', { count: record.contract_count })
+                    : t('adminUsers.uploadContract'))}
+            >
+              <Badge
+                count={record.contract_count || 0}
+                size="small"
+                offset={[-2, 4]}
+                color="var(--accent)"
+              >
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<FileAddOutlined />}
+                  disabled={!isCompany}
+                  onClick={(e) => { e.stopPropagation(); openContractModal(record); }}
+                  style={{
+                    color: !isCompany
+                      ? undefined
+                      : (record.contract_count > 0 ? 'var(--accent)' : 'var(--text-secondary)'),
+                  }}
+                />
+              </Badge>
+            </Tooltip>
             <Button
               size="small"
               type="text"
-              icon={<ShoppingOutlined />}
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/admin/orders?user_id=${record.id}&user_name=${encodeURIComponent(record.full_name)}`);
-              }}
-              title={t('adminUsers.viewOrders')}
-              style={{ color: 'var(--text-secondary)' }}
+              icon={<EditOutlined />}
+              onClick={(e) => { e.stopPropagation(); navigate(`/admin/users/${record.id}`); }}
+              style={{ color: 'var(--accent)' }}
             />
-          )}
-          <Button
-            size="small"
-            type="text"
-            icon={<EditOutlined />}
-            onClick={(e) => { e.stopPropagation(); navigate(`/admin/users/${record.id}`); }}
-            style={{ color: 'var(--accent)' }}
-          />
-          <Button
-            size="small"
-            type="text"
-            danger={record.is_active}
-            icon={record.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
-            onClick={(e) => { e.stopPropagation(); toggleActive(record); }}
-          />
-        </Space>
-      ),
+            <Button
+              size="small"
+              type="text"
+              danger={record.is_active}
+              icon={record.is_active ? <StopOutlined /> : <CheckCircleOutlined />}
+              onClick={(e) => { e.stopPropagation(); toggleActive(record); }}
+            />
+          </Space>
+        );
+      },
     },
   ];
 
@@ -184,10 +312,28 @@ export default function AdminUsersPage() {
             placeholder={t('common.search')}
             prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
             allowClear
-            style={{ width: 220, borderRadius: 10 }}
+            style={{ width: 200, borderRadius: 10 }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onPressEnter={() => fetchUsers()}
+          />
+          <Input
+            placeholder={t('auth.email')}
+            allowClear
+            style={{ width: 180, borderRadius: 10 }}
+            value={emailFilter}
+            onChange={(e) => setEmailFilter(e.target.value)}
+            onPressEnter={() => fetchUsers()}
+            onBlur={() => fetchUsers()}
+          />
+          <Input
+            placeholder={t('auth.phone')}
+            allowClear
+            style={{ width: 160, borderRadius: 10 }}
+            value={phoneFilter}
+            onChange={(e) => setPhoneFilter(e.target.value)}
+            onPressEnter={() => fetchUsers()}
+            onBlur={() => fetchUsers()}
           />
           <Select
             placeholder={t('adminUsers.role')}
@@ -280,7 +426,30 @@ export default function AdminUsersPage() {
                         </Tag>
                       )}
                     </div>
-                    <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 11 }} />
+                    <Space size={0}>
+                      {u.user_type === 'company' && (
+                        <Badge
+                          count={u.contract_count || 0}
+                          size="small"
+                          offset={[-2, 4]}
+                          color="var(--accent)"
+                        >
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<FileAddOutlined />}
+                            title={u.contract_count > 0
+                              ? t('adminUsers.contractsUploadedCount', { count: u.contract_count })
+                              : t('adminUsers.uploadContract')}
+                            onClick={(e) => { e.stopPropagation(); openContractModal(u); }}
+                            style={{
+                              color: u.contract_count > 0 ? 'var(--accent)' : 'var(--text-tertiary)',
+                            }}
+                          />
+                        </Badge>
+                      )}
+                      <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 11 }} />
+                    </Space>
                   </div>
                 </div>
               ))}
@@ -324,6 +493,137 @@ export default function AdminUsersPage() {
           />
         </div>
       )}
+
+      <Modal
+        title={contractUser
+          ? t('adminUsers.uploadContractFor', { name: contractUser.full_name })
+          : t('adminUsers.uploadContract')}
+        open={!!contractUser}
+        onCancel={closeContractModal}
+        onOk={handleContractUpload}
+        okText={t('adminUsers.uploadContract')}
+        cancelText={t('common.close')}
+        confirmLoading={uploadingContract}
+        okButtonProps={{ disabled: !pendingFile }}
+        destroyOnClose
+        width={560}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Existing contracts */}
+          <div>
+            <div style={{
+              fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)',
+              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8,
+            }}>
+              {t('adminUsers.existingContracts')}
+            </div>
+            {contractsLoading ? (
+              <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+            ) : contracts.length === 0 ? (
+              <div style={{
+                padding: '18px 14px', textAlign: 'center',
+                background: 'var(--bg-secondary)', borderRadius: 10,
+                color: 'var(--text-tertiary)', fontSize: 13,
+              }}>
+                {t('adminUsers.noContracts')}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {contracts.map((c) => (
+                  <div key={c.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 12px',
+                    background: 'var(--bg-secondary)', borderRadius: 10,
+                  }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 8,
+                      background: 'var(--accent-bg)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'var(--accent)', fontSize: 14, flexShrink: 0,
+                    }}>
+                      <FileTextOutlined />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 13, fontWeight: 600, color: 'var(--text-primary)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {c.title || c.original_filename || `Contract #${c.id}`}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                        {dayjs(c.created_at).format('DD MMM YYYY')}
+                        {c.file_size ? ` · ${formatBytes(c.file_size)}` : ''}
+                      </div>
+                    </div>
+                    <Button
+                      size="small"
+                      href={c.document_url}
+                      target="_blank"
+                      rel="noopener"
+                      icon={<DownloadOutlined />}
+                      style={{ borderRadius: 8 }}
+                    />
+                    <Popconfirm
+                      title={t('adminUsers.deleteContractConfirm')}
+                      onConfirm={() => handleContractDelete(c.id)}
+                      okText={t('common.yes')}
+                      cancelText={t('common.no')}
+                    >
+                      <Button size="small" danger icon={<DeleteOutlined />} style={{ borderRadius: 8 }} />
+                    </Popconfirm>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Upload new */}
+          <div>
+            <div style={{
+              fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)',
+              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8,
+            }}>
+              {t('adminUsers.uploadNewContract')}
+            </div>
+            <Text style={{ color: 'var(--text-secondary)', fontSize: 13, display: 'block', marginBottom: 10 }}>
+              {t('adminUsers.contractsHint')}
+            </Text>
+            <Input
+              placeholder={t('adminUsers.contractTitlePlaceholder')}
+              value={contractTitle}
+              onChange={(e) => setContractTitle(e.target.value)}
+              maxLength={200}
+              style={{ borderRadius: 10, marginBottom: 10 }}
+            />
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Upload
+                accept={ACCEPT_CONTRACT}
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  if (file.size > MAX_CONTRACT_SIZE) {
+                    message.error(t('adminUsers.contractTooLarge'));
+                    return false;
+                  }
+                  setPendingFile(file);
+                  return false;
+                }}
+              >
+                <Button icon={<UploadOutlined />} style={{ borderRadius: 10 }}>
+                  {pendingFile ? t('adminUsers.changeFile') : t('adminUsers.chooseFile')}
+                </Button>
+              </Upload>
+              {pendingFile && (
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {pendingFile.name}
+                  <span style={{ color: 'var(--text-tertiary)' }}>
+                    {' '}({formatBytes(pendingFile.size)})
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -33,7 +33,20 @@ class AdminVehicleListCreateView(generics.ListCreateAPIView):
     search_fields = ['name', 'plate_number', 'description']
 
     def get_queryset(self):
-        return Vehicle.objects.prefetch_related('categories', 'images').all()
+        qs = Vehicle.objects.prefetch_related('categories', 'images').all()
+        # Per-field contains filters for the admin filter bar. Keep these
+        # separate from `search` so admins can stack them (e.g. plate=AB +
+        # capacity=5 tons) without interference.
+        plate_q = self.request.query_params.get('plate_number_q')
+        if plate_q:
+            qs = qs.filter(plate_number__icontains=plate_q)
+        capacity_q = self.request.query_params.get('capacity_q')
+        if capacity_q:
+            qs = qs.filter(capacity__icontains=capacity_q)
+        license_q = self.request.query_params.get('license_categories_q')
+        if license_q:
+            qs = qs.filter(license_categories__icontains=license_q)
+        return qs
 
     def get_serializer_class(self):
         if self.request.method == 'GET':

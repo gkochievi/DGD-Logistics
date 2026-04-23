@@ -39,6 +39,7 @@ export default function AdminServicesPage() {
   const [iconSearch, setIconSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState('');
+  const [carCategoryFilter, setCarCategoryFilter] = useState('');
 
   // i18n fields
   const [svcName, setSvcName] = useState({ en: '', ka: '', ru: '' });
@@ -82,6 +83,7 @@ export default function AdminServicesPage() {
     const q = search.trim().toLowerCase();
     return services.filter((s) => {
       if (showArchived ? s.is_active !== false : s.is_active === false) return false;
+      if (carCategoryFilter && !(s.car_categories || []).includes(carCategoryFilter)) return false;
       if (q) {
         const name = typeof s.name === 'object' ? Object.values(s.name).join(' ') : (s.name || '');
         const desc = typeof s.description === 'object' ? Object.values(s.description).join(' ') : (s.description || '');
@@ -90,7 +92,7 @@ export default function AdminServicesPage() {
       }
       return true;
     });
-  }, [services, showArchived, search]);
+  }, [services, showArchived, search, carCategoryFilter]);
 
   const openModal = (service = null) => {
     setEditingService(service);
@@ -355,6 +357,18 @@ export default function AdminServicesPage() {
             style={{ width: 220, borderRadius: 10 }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+          />
+          <Select
+            placeholder={t('adminServices.carCategories')}
+            allowClear
+            showSearch
+            filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+            style={{ width: 200, borderRadius: 10 }}
+            value={carCategoryFilter || undefined}
+            onChange={(v) => setCarCategoryFilter(v || '')}
+            options={carCategories
+              .filter((c) => c.is_active !== false)
+              .map((c) => ({ value: c.id, label: localized(c.name) }))}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 4 }}>
             <Switch
