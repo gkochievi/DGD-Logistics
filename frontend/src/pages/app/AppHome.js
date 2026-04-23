@@ -355,13 +355,22 @@ export default function AppHome() {
                       pointerEvents: 'none',
                     }} />
                     <div style={{
-                      width: 64, height: 64, borderRadius: 16,
-                      background: `${color}12`,
+                      width: '100%', aspectRatio: '4 / 3',
+                      borderRadius: 14,
+                      background: cat.image_url ? 'var(--bg-secondary)' : `${color}12`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       color: color, overflow: 'hidden',
                       transition: 'transform 0.25s cubic-bezier(0.22,1,0.36,1)',
                     }}>
-                      <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={cat.image_url ? 64 : 44} />
+                      {cat.image_url ? (
+                        <img src={cat.image_url} alt="" style={{
+                          maxWidth: '100%', maxHeight: '100%',
+                          width: 'auto', height: 'auto',
+                          objectFit: 'contain', display: 'block',
+                        }} />
+                      ) : (
+                        <CategoryImage icon={cat.icon} size={44} />
+                      )}
                     </div>
                     <div style={{
                       fontSize: 12, fontWeight: 650, color: 'var(--text-primary)',

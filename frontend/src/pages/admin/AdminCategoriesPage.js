@@ -173,16 +173,24 @@ export default function AdminCategoriesPage() {
 
   const columns = [
     {
-      title: '', width: 60,
+      title: '', width: 84,
       render: (_, record) => (
         <div style={{
-          width: 44, height: 44, borderRadius: 12,
+          width: 68, height: 44, borderRadius: 10,
           background: `color-mix(in srgb, ${record.color || 'var(--accent)'} 12%, transparent)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 20, color: record.color || 'var(--accent)',
           overflow: 'hidden',
         }}>
-          <CategoryImage imageUrl={record.image_url} icon={record.icon} size={record.image_url ? 44 : 32} />
+          {record.image_url ? (
+            <img src={record.image_url} alt="" style={{
+              maxWidth: '100%', maxHeight: '100%',
+              width: 'auto', height: 'auto',
+              objectFit: 'contain', display: 'block',
+            }} />
+          ) : (
+            <CategoryImage icon={record.icon} size={28} />
+          )}
         </div>
       ),
     },
@@ -324,13 +332,21 @@ export default function AdminCategoriesPage() {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                 <div style={{
-                  width: 48, height: 48, borderRadius: 14,
+                  width: 72, height: 54, borderRadius: 12,
                   background: `color-mix(in srgb, ${cat.color || 'var(--accent)'} 12%, transparent)`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 22, color: cat.color || 'var(--accent)', flexShrink: 0,
                   overflow: 'hidden',
                 }}>
-                  <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={cat.image_url ? 48 : 36} />
+                  {cat.image_url ? (
+                    <img src={cat.image_url} alt="" style={{
+                      maxWidth: '100%', maxHeight: '100%',
+                      width: 'auto', height: 'auto',
+                      objectFit: 'contain', display: 'block',
+                    }} />
+                  ) : (
+                    <CategoryImage icon={cat.icon} size={32} />
+                  )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Text style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
@@ -460,6 +476,7 @@ export default function AdminCategoriesPage() {
           >
             <ImgCrop
               aspect={1}
+              aspectSlider
               rotationSlider
               showReset
               showGrid
@@ -490,19 +507,25 @@ export default function AdminCategoriesPage() {
               }}>
                 {imagePreview ? (
                   <div style={{
-                    width: 56, height: 56, borderRadius: 12,
+                    width: 84, height: 56, borderRadius: 12,
                     overflow: 'hidden', flexShrink: 0,
                     border: '1px solid var(--border-color)',
+                    background: 'var(--bg-primary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
                     <img
                       src={imagePreview}
                       alt=""
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      style={{
+                        maxWidth: '100%', maxHeight: '100%',
+                        width: 'auto', height: 'auto',
+                        objectFit: 'contain', display: 'block',
+                      }}
                     />
                   </div>
                 ) : (
                   <div style={{
-                    width: 56, height: 56, borderRadius: 12,
+                    width: 84, height: 56, borderRadius: 12,
                     background: `color-mix(in srgb, ${catColor} 12%, transparent)`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 22, color: catColor, flexShrink: 0,

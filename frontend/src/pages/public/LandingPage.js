@@ -398,15 +398,26 @@ export default function LandingPage() {
                     <div
                       className="lt-cat-icon"
                       style={{
-                        width: 88, height: 88, borderRadius: 20,
-                        background: 'var(--accent-bg)',
+                        width: '100%', aspectRatio: '4 / 3',
+                        borderRadius: 16,
+                        background: cat.image_url
+                          ? 'var(--bg-secondary)'
+                          : 'var(--accent-bg)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        margin: '0 auto 14px',
+                        marginBottom: 14,
                         color: 'var(--accent)', overflow: 'hidden',
                         transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1)',
                       }}
                     >
-                      <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={cat.image_url ? 88 : 56} />
+                      {cat.image_url ? (
+                        <img src={cat.image_url} alt="" style={{
+                          maxWidth: '100%', maxHeight: '100%',
+                          width: 'auto', height: 'auto', objectFit: 'contain',
+                          display: 'block',
+                        }} />
+                      ) : (
+                        <CategoryImage icon={cat.icon} size={56} />
+                      )}
                     </div>
                     <h4 style={{
                       fontSize: 15, fontWeight: 700, color: 'var(--text-primary)',
@@ -490,15 +501,26 @@ export default function LandingPage() {
                     <div
                       className="lt-cat-icon"
                       style={{
-                        width: 88, height: 88, borderRadius: 20,
-                        background: 'var(--accent-bg)',
+                        width: '100%', aspectRatio: '4 / 3',
+                        borderRadius: 16,
+                        background: cat.image_url
+                          ? 'var(--bg-secondary)'
+                          : 'var(--accent-bg)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        margin: '0 auto 14px',
+                        marginBottom: 14,
                         color: 'var(--accent)', overflow: 'hidden',
                         transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1)',
                       }}
                     >
-                      <CategoryImage imageUrl={cat.image_url} icon={cat.icon} size={cat.image_url ? 88 : 56} />
+                      {cat.image_url ? (
+                        <img src={cat.image_url} alt="" style={{
+                          maxWidth: '100%', maxHeight: '100%',
+                          width: 'auto', height: 'auto', objectFit: 'contain',
+                          display: 'block',
+                        }} />
+                      ) : (
+                        <CategoryImage icon={cat.icon} size={56} />
+                      )}
                     </div>
                     <h4 style={{
                       fontSize: 15, fontWeight: 700, color: 'var(--text-primary)',
@@ -595,7 +617,11 @@ export default function LandingPage() {
                         <img
                           src={photo}
                           alt={v.name}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          style={{
+                            maxWidth: '100%', maxHeight: '100%',
+                            width: 'auto', height: 'auto',
+                            objectFit: 'contain', display: 'block',
+                          }}
                         />
                       ) : (
                         <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>

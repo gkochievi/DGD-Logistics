@@ -1492,13 +1492,24 @@ function CategoryCard({ isActive, color, icon, imageUrl, name, badge, dashed, on
       }}
     >
       <div style={{
-        width: 44, height: 44, borderRadius: 12,
-        background: isActive ? `${color}18` : 'var(--bg-tertiary)',
+        width: '100%', aspectRatio: '4 / 3',
+        borderRadius: 10,
+        background: imageUrl
+          ? 'var(--bg-secondary)'
+          : (isActive ? `${color}18` : 'var(--bg-tertiary)'),
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: isActive ? color : 'var(--text-secondary)',
         transition: 'all 0.2s ease', overflow: 'hidden',
       }}>
-        <CategoryImage imageUrl={imageUrl} icon={icon} size={imageUrl ? 44 : 32} />
+        {imageUrl ? (
+          <img src={imageUrl} alt="" style={{
+            maxWidth: '100%', maxHeight: '100%',
+            width: 'auto', height: 'auto',
+            objectFit: 'contain', display: 'block',
+          }} />
+        ) : (
+          <CategoryImage icon={icon} size={32} />
+        )}
       </div>
       <div>
         <div style={{
