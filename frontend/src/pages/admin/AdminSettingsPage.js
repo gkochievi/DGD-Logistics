@@ -213,9 +213,11 @@ export default function AdminSettingsPage() {
                     <img
                       src={logoPreview} alt="Logo"
                       style={{
-                        width: 48, height: 48, objectFit: 'contain',
-                        borderRadius: 10, border: '1px solid var(--border-color)',
+                        height: 48, width: 'auto', maxWidth: 200,
+                        objectFit: 'contain',
+                        borderRadius: 6, border: '1px solid var(--border-color)',
                         background: 'var(--bg-secondary)',
+                        padding: 4,
                       }}
                     />
                   )}

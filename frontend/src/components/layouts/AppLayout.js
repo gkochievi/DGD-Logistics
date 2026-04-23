@@ -236,7 +236,8 @@ export default function AppLayout() {
           >
             {branding.siteIconUrl ? (
               <img src={branding.siteIconUrl} alt="Logo" style={{
-                width: 34, height: 34, borderRadius: 10, objectFit: 'contain',
+                height: 34, width: 'auto', maxWidth: 160,
+                borderRadius: 6, objectFit: 'contain',
               }} />
             ) : (
               <div style={{

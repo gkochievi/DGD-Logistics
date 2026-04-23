@@ -57,14 +57,16 @@ export default function PublicLayout() {
           }}>
             {branding.siteIconUrl ? (
               <img src={branding.siteIconUrl} alt="Logo" style={{
-                width: 32, height: 32, borderRadius: 10, objectFit: 'contain',
+                height: isMobile ? 40 : 48, width: 'auto',
+                maxWidth: isMobile ? 160 : 240,
+                borderRadius: 6, objectFit: 'contain',
               }} />
             ) : (
               <div style={{
-                width: 32, height: 32, borderRadius: 10,
+                width: isMobile ? 40 : 48, height: isMobile ? 40 : 48, borderRadius: 10,
                 background: 'var(--fab-gradient)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontSize: 13, fontWeight: 800,
+                color: '#fff', fontSize: isMobile ? 15 : 17, fontWeight: 800,
               }}>
                 HW
               </div>
