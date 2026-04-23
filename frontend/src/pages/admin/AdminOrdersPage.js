@@ -113,13 +113,38 @@ export default function AdminOrdersPage({ historyMode = false }) {
     return match ? match[1] : fallback;
   };
 
-  const handleExportOrders = async () => {
+  const buildActiveFilterParams = () => {
     const params = {};
+    const status = searchParams.get('status');
+    const urgency = searchParams.get('urgency');
+    const service = searchParams.get('service');
+    const userId = searchParams.get('user_id');
+    const requestedDateFrom = searchParams.get('requested_date_from');
+    const requestedDateTo = searchParams.get('requested_date_to');
+    const requestedTime = searchParams.get('requested_time');
+    const vehicleId = searchParams.get('vehicle');
+
+    if (status) params.status = status;
+    if (urgency) params.urgency = urgency;
+    if (service) params.selected_service = service;
+    if (userId) params.user_id = userId;
+    if (requestedDateFrom) params.requested_date_from = requestedDateFrom;
+    if (requestedDateTo) params.requested_date_to = requestedDateTo;
+    if (requestedTime) params.requested_time = requestedTime;
+    if (vehicleId) params.assigned_vehicle = vehicleId;
+    if (search) params.search = search;
+    if (historyMode && !status) params.status = 'completed';
+    return params;
+  };
+
+  const activeFilterCount = Object.keys(buildActiveFilterParams()).length;
+
+  const handleExportOrders = async () => {
+    const params = buildActiveFilterParams();
     if (exportRange && exportRange[0] && exportRange[1]) {
       params.date_from = exportRange[0].format('YYYY-MM-DD');
       params.date_to = exportRange[1].format('YYYY-MM-DD');
     }
-    if (historyMode) params.status = searchParams.get('status') || 'completed';
     setExporting(true);
     try {
       const resp = await api.get('/orders/admin/export/', { params, responseType: 'blob' });
@@ -240,6 +265,20 @@ export default function AdminOrdersPage({ historyMode = false }) {
             style={{ width: '100%' }}
             allowClear
           />
+          {activeFilterCount > 0 && (
+            <div style={{
+              background: 'var(--accent-bg, rgba(0, 184, 86, 0.08))',
+              border: '1px solid var(--accent)',
+              borderRadius: 10,
+              padding: '10px 12px',
+              display: 'flex', alignItems: 'flex-start', gap: 8,
+            }}>
+              <FilterOutlined style={{ color: 'var(--accent)', marginTop: 2 }} />
+              <Text style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+                {t('adminOrders.exportFiltersNotice', { count: activeFilterCount })}
+              </Text>
+            </div>
+          )}
         </div>
       </Modal>
 
