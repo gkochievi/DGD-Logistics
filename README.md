@@ -1,4 +1,4 @@
-# Special Transport Order Platform
+# DGD Logistics Platform
 
 A production-ready, mobile-first MVP platform for ordering special transport services. Users can register, create transport requests, track order history, and manage their profile. Admins manage orders, users, and transport categories through a dedicated dashboard.
 
@@ -18,7 +18,7 @@ A production-ready, mobile-first MVP platform for ordering special transport ser
 ### 1. Clone and configure
 
 ```bash
-cd Special-transport-order
+cd DGD-Logistics
 cp .env.example .env
 # Edit .env if needed (defaults work for development)
 ```

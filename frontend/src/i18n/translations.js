@@ -62,7 +62,7 @@ export const translations = {
       hasAccount: 'Already have an account?',
       signUp: 'Sign Up',
       createAccount: 'Create Account',
-      getStarted: 'Get started with SpecialTransport',
+      getStarted: 'Get started with DGD Logistics',
       tagline: 'Order specialized transport in minutes',
       welcome: 'Welcome!',
       welcomeBack: 'Welcome Back',
@@ -388,7 +388,7 @@ export const translations = {
 
     // ── Landing Page ──
     landing: {
-      heroTitle: 'Best Price for Special Transport',
+      heroTitle: 'Best Price with DGD Logistics',
       heroDesc: 'Order specialized transport for any job — from towing to construction. Compare offers and choose the best.',
       openApp: 'Open App',
       pickupPlaceholder: 'Pickup city or address',
@@ -931,7 +931,7 @@ export const translations = {
 
     // ── Footer ──
     footer: {
-      copyright: 'Special Transport',
+      copyright: 'DGD Logistics',
     },
   },
 
@@ -999,7 +999,7 @@ export const translations = {
       hasAccount: 'უკვე გაქვთ ანგარიში?',
       signUp: 'რეგისტრაცია',
       createAccount: 'ანგარიშის შექმნა',
-      getStarted: 'დაიწყეთ სპეცტრანსპორტით',
+      getStarted: 'დაიწყეთ DGD Logistics-ით',
       tagline: 'შეუკვეთეთ სპეციალიზებული ტრანსპორტი წუთებში',
       welcome: 'კეთილი იყოს თქვენი მობრძანება!',
       welcomeBack: 'კეთილი იყოს თქვენი დაბრუნება',
@@ -1316,7 +1316,7 @@ export const translations = {
     },
 
     landing: {
-      heroTitle: 'საუკეთესო ფასი სპეციალურ ტრანსპორტზე',
+      heroTitle: 'საუკეთესო ფასი DGD Logistics-ისგან',
       heroDesc: 'შეუკვეთეთ სპეციალიზებული ტრანსპორტი ნებისმიერი სამუშაოსთვის — ევაკუატორიდან მშენებლობამდე. შეადარეთ შეთავაზებები.',
       openApp: 'აპის გახსნა',
       pickupPlaceholder: 'აყვანის ქალაქი ან მისამართი',
@@ -1846,7 +1846,7 @@ export const translations = {
     },
 
     footer: {
-      copyright: 'სპეც ტრანსპორტი',
+      copyright: 'DGD Logistics',
     },
   },
 
@@ -1914,7 +1914,7 @@ export const translations = {
       hasAccount: 'Уже есть аккаунт?',
       signUp: 'Зарегистрироваться',
       createAccount: 'Создать аккаунт',
-      getStarted: 'Начните работу со СпецТранспортом',
+      getStarted: 'Начните работу с DGD Logistics',
       tagline: 'Закажите спецтранспорт за минуты',
       welcome: 'Добро пожаловать!',
       welcomeBack: 'С возвращением',
@@ -2231,7 +2231,7 @@ export const translations = {
     },
 
     landing: {
-      heroTitle: 'Лучшая цена на спецтранспорт',
+      heroTitle: 'Лучшая цена с DGD Logistics',
       heroDesc: 'Закажите специализированный транспорт для любой задачи — от эвакуации до строительства. Сравните предложения и выберите лучшее.',
       openApp: 'Открыть приложение',
       pickupPlaceholder: 'Город или адрес подачи',
@@ -2761,7 +2761,7 @@ export const translations = {
     },
 
     footer: {
-      copyright: 'Спец Транспорт',
+      copyright: 'DGD Logistics',
     },
   },
 };

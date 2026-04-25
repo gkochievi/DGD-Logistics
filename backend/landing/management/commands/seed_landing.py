@@ -9,9 +9,9 @@ class Command(BaseCommand):
         obj = LandingPageSettings.get_instance()
 
         obj.hero_title = {
-            'en': 'Best Price for Special Transport',
-            'ka': 'საუკეთესო ფასი სპეციალურ ტრანსპორტზე',
-            'ru': 'Лучшая цена на спецтранспорт',
+            'en': 'Best Price with DGD Logistics',
+            'ka': 'საუკეთესო ფასი DGD Logistics-ისგან',
+            'ru': 'Лучшая цена с DGD Logistics',
         }
         obj.hero_description = {
             'en': 'Order specialized transport for any job — from towing to construction. Compare offers and choose the best.',

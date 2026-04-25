@@ -83,7 +83,7 @@ export default function DashboardLayout() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {isMobile && (
               <span style={{ fontWeight: 800, fontSize: 17, color: 'var(--accent)', letterSpacing: -0.3 }}>
-                SpecialTransport
+                DGD Logistics
               </span>
             )}
             {!isMobile && <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Dashboard</span>}

@@ -1,4 +1,4 @@
-# Special Transport Order Platform
+# DGD Logistics Platform
 
 ## Project Overview
 A full-stack web platform for ordering special transport services (tow trucks, cranes, concrete mixers, etc.). Customers create transport orders, admins review/manage them and assign vehicles.
