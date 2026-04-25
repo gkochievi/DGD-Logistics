@@ -79,6 +79,15 @@ This creates:
 | `JWT_ACCESS_TOKEN_LIFETIME_MINUTES` | `60`                    | Access token TTL          |
 | `JWT_REFRESH_TOKEN_LIFETIME_DAYS` | `7`                       | Refresh token TTL         |
 | `REACT_APP_API_URL`               | `http://localhost/api`    | Frontend API base URL     |
+| `USE_SPACES`                      | `False`                   | Toggle DigitalOcean Spaces (S3) for media + static |
+| `AWS_ACCESS_KEY_ID`               | —                         | Spaces access key (when `USE_SPACES=True`) |
+| `AWS_SECRET_ACCESS_KEY`           | —                         | Spaces secret key |
+| `AWS_STORAGE_BUCKET_NAME`         | —                         | Spaces bucket name |
+| `AWS_S3_REGION_NAME`              | `nyc3`                    | Spaces region slug (e.g. `nyc3`, `ams3`, `fra1`) |
+| `AWS_S3_ENDPOINT_URL`             | `https://<region>.digitaloceanspaces.com` | Override only for non-DO S3 endpoints |
+| `AWS_S3_CUSTOM_DOMAIN`            | —                         | Optional CDN/CNAME host (e.g. `<bucket>.<region>.cdn.digitaloceanspaces.com`) |
+| `AWS_LOCATION_STATIC`             | `static`                  | Path prefix for static files in the bucket |
+| `AWS_LOCATION_MEDIA`              | `media`                   | Path prefix for uploaded media in the bucket |
 
 ## Project Structure
 
@@ -183,6 +192,28 @@ docker-compose down -v
 docker-compose up --build
 ```
 
+## DigitalOcean Spaces (Production Media + Static)
+
+For production on DigitalOcean, offload media and static files to a Space (S3-compatible object storage):
+
+1. **Create a Space** in the DO control panel and generate an access key + secret under **API → Spaces Keys**.
+2. **Configure env vars** in `.env`:
+   ```
+   USE_SPACES=True
+   AWS_ACCESS_KEY_ID=DO00...
+   AWS_SECRET_ACCESS_KEY=...
+   AWS_STORAGE_BUCKET_NAME=dgd-logistics
+   AWS_S3_REGION_NAME=fra1
+   # Optional: front the bucket with the DO CDN
+   AWS_S3_CUSTOM_DOMAIN=dgd-logistics.fra1.cdn.digitaloceanspaces.com
+   ```
+3. **Run collectstatic** on deploy (already wired into the backend container):
+   ```bash
+   docker compose exec backend python manage.py collectstatic --noinput
+   ```
+4. **Bucket file listing** must be set to **Restricted** while individual files are uploaded with `public-read` ACL — django-storages handles this automatically.
+5. When `USE_SPACES=True`, Nginx no longer needs to serve `/media/` or `/staticfiles/`; URLs point straight at the Space (or its CDN).
+
 ## User Roles
 
 | Role     | Access                                            |
@@ -211,7 +242,7 @@ Keywords are fully configurable through the admin category management interface.
 - **GPS tracking**: Live vehicle tracking with map integration
 - **Driver/operator app**: Separate interface for transport operators
 - **Rating system**: Post-completion reviews and ratings
-- **File management**: S3/cloud storage for production media
+- **File management**: DigitalOcean Spaces / S3 cloud storage is supported via `USE_SPACES=True` (see env vars above)
 - **Email notifications**: Order confirmations and status change alerts
 - **Advanced search**: Elasticsearch for full-text order search
 - **Multi-language**: i18n support for internationalization

@@ -93,11 +93,51 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = '/staticfiles/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+# Storage — local by default, DigitalOcean Spaces (S3-compatible) when USE_SPACES=True
+USE_SPACES = config('USE_SPACES', default=False, cast=bool)
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+if USE_SPACES:
+    INSTALLED_APPS += ['storages']
+
+    AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY')
+    AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='nyc3')
+    AWS_S3_ENDPOINT_URL = config(
+        'AWS_S3_ENDPOINT_URL',
+        default=f'https://{AWS_S3_REGION_NAME}.digitaloceanspaces.com',
+    )
+    # Optional CDN domain (e.g. <bucket>.<region>.cdn.digitaloceanspaces.com or a custom CNAME)
+    AWS_S3_CUSTOM_DOMAIN = config('AWS_S3_CUSTOM_DOMAIN', default='') or None
+    AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=86400'}
+    AWS_DEFAULT_ACL = 'public-read'
+    AWS_QUERYSTRING_AUTH = False
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_S3_ADDRESSING_STYLE = 'virtual'
+
+    AWS_LOCATION_STATIC = config('AWS_LOCATION_STATIC', default='static')
+    AWS_LOCATION_MEDIA = config('AWS_LOCATION_MEDIA', default='media')
+
+    _spaces_host = AWS_S3_CUSTOM_DOMAIN or f'{AWS_STORAGE_BUCKET_NAME}.{AWS_S3_REGION_NAME}.digitaloceanspaces.com'
+    STATIC_URL = f'https://{_spaces_host}/{AWS_LOCATION_STATIC}/'
+    MEDIA_URL = f'https://{_spaces_host}/{AWS_LOCATION_MEDIA}/'
+
+    STORAGES = {
+        'default': {
+            'BACKEND': 'storages.backends.s3.S3Storage',
+            'OPTIONS': {'location': AWS_LOCATION_MEDIA},
+        },
+        'staticfiles': {
+            'BACKEND': 'storages.backends.s3.S3Storage',
+            'OPTIONS': {'location': AWS_LOCATION_STATIC},
+        },
+    }
+else:
+    STATIC_URL = '/staticfiles/'
+    STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
