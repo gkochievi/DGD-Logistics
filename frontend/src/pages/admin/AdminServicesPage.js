@@ -50,6 +50,7 @@ export default function AdminServicesPage() {
   const [svcKeywords, setSvcKeywords] = useState('');
   const [svcCarCategoryIds, setSvcCarCategoryIds] = useState([]);
   const [svcIsActive, setSvcIsActive] = useState(true);
+  const [svcRequiresDest, setSvcRequiresDest] = useState(false);
 
   const localized = (field) => {
     if (!field) return '';
@@ -108,6 +109,7 @@ export default function AdminServicesPage() {
       setSvcKeywords(service.suggestion_keywords || '');
       setSvcCarCategoryIds(Array.isArray(service.car_categories) ? service.car_categories : []);
       setSvcIsActive(service.is_active !== false);
+      setSvcRequiresDest(!!service.requires_destination);
     } else {
       setSvcName({ en: '', ka: '', ru: '' });
       setSvcDesc({ en: '', ka: '', ru: '' });
@@ -116,6 +118,7 @@ export default function AdminServicesPage() {
       setSvcKeywords('');
       setSvcCarCategoryIds([]);
       setSvcIsActive(true);
+      setSvcRequiresDest(false);
     }
     setModalOpen(true);
   };
@@ -134,6 +137,7 @@ export default function AdminServicesPage() {
       formData.append('color', typeof svcColor === 'string' ? svcColor : svcColor?.toHexString?.() || '#00B856');
       formData.append('suggestion_keywords', svcKeywords);
       formData.append('is_active', svcIsActive ? 'true' : 'false');
+      formData.append('requires_destination', svcRequiresDest ? 'true' : 'false');
       formData.append('car_categories', JSON.stringify(svcCarCategoryIds));
       if (imageFile) {
         formData.append('image', imageFile);
@@ -778,6 +782,22 @@ export default function AdminServicesPage() {
               style={{ borderRadius: 10 }}
             />
           </Form.Item>
+
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 16, padding: '14px 16px', background: 'var(--bg-secondary)',
+            borderRadius: 12, marginBottom: 12,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'block' }}>
+                {t('adminServices.requiresDest')}
+              </Text>
+              <Text style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                {t('adminServices.requiresDestHelp')}
+              </Text>
+            </div>
+            <Switch checked={svcRequiresDest} onChange={setSvcRequiresDest} />
+          </div>
 
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',

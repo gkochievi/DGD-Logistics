@@ -215,8 +215,18 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         """Reject orders whose requested_time falls inside a restricted window
         for any matching pickup/destination/route stop. Mirrors the
         customer-side disable so a hand-crafted POST can't bypass the rule.
+        Also enforces that a destination is provided when the chosen service
+        requires it (transport-style services).
         """
         from site_settings.models import RestrictedTimeWindow
+
+        # Enforce destination requirement based on the selected Service.
+        selected_service = attrs.get('selected_service')
+        if selected_service is not None and getattr(selected_service, 'requires_destination', False):
+            if not (attrs.get('destination_location') or '').strip():
+                raise serializers.ValidationError({
+                    'destination_location': 'This service requires a destination address.'
+                })
 
         requested_time = attrs.get('requested_time')
         if requested_time is None:
