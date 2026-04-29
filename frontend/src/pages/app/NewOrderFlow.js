@@ -472,6 +472,31 @@ export default function NewOrderFlow() {
           initialValues={{ selected_category: selectedCategory?.id }}
           style={{ margin: '0 auto', padding: isDesktop ? '0 40px' : '0 20px' }}
         >
+          {/* Top "Review Order" CTA — mirrors the sticky bottom one so users
+              who fill out the form quickly don't have to scroll to submit. */}
+          <div style={{
+            display: 'flex',
+            justifyContent: isDesktop ? 'flex-end' : 'stretch',
+            paddingTop: isDesktop ? 18 : 14,
+            paddingBottom: 2,
+          }}>
+            <Button type="primary" onClick={goToConfirm}
+              style={{
+                height: 44,
+                borderRadius: 12,
+                fontSize: 14,
+                fontWeight: 700,
+                padding: '0 22px',
+                background: 'var(--fab-gradient)',
+                border: 'none',
+                boxShadow: 'var(--fab-shadow)',
+                letterSpacing: -0.2,
+                width: isDesktop ? 'auto' : '100%',
+              }}>
+              {t('newOrder.reviewOrder')} <RightOutlined style={{ fontSize: 12, marginLeft: 4 }} />
+            </Button>
+          </div>
+
           {/* ── SECTION: Service Type ── */}
           <SectionCard
             icon={<InboxOutlined />}
