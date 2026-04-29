@@ -19,7 +19,11 @@ class PublicVehicleListView(generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        qs = Vehicle.objects.filter(is_active=True, status='available').prefetch_related('categories', 'images')
+        # Show every vehicle the admin hasn't explicitly disabled (is_active=False).
+        # Operational statuses like 'in_use' or 'maintenance' should NOT hide a
+        # vehicle from the public fleet listing — admins control visibility via
+        # the disable toggle, not the day-to-day status field.
+        qs = Vehicle.objects.filter(is_active=True).prefetch_related('categories', 'images')
         category = self.request.query_params.get('category')
         if category:
             qs = qs.filter(categories__id=category).distinct()
