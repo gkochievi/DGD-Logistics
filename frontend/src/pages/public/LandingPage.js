@@ -596,7 +596,10 @@ export default function LandingPage() {
         ) : (
           <Row gutter={[16, 16]}>
             {vehicleModalList.map((v) => {
-              const photo = v.image || (v.images && v.images[0]?.image) || null;
+              const photo = v.image
+                || v.images?.find((i) => i.is_primary)?.image
+                || v.images?.[0]?.image
+                || null;
               return (
                 <Col xs={24} sm={12} key={v.id}>
                   <div style={{

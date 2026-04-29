@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import generics, permissions, status
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
@@ -89,9 +90,17 @@ class AdminVehicleImagesView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # If the vehicle currently has no primary photo, the first newly-uploaded
+        # image becomes the primary so the landing page always has one to show.
+        needs_primary = not vehicle.images.filter(is_primary=True).exists()
         created = []
         for idx, img in enumerate(files):
-            obj = VehicleImage.objects.create(vehicle=vehicle, image=img, order=existing + idx)
+            obj = VehicleImage.objects.create(
+                vehicle=vehicle,
+                image=img,
+                order=existing + idx,
+                is_primary=(needs_primary and idx == 0),
+            )
             created.append(VehicleImageSerializer(obj, context={'request': request}).data)
         return Response(created, status=status.HTTP_201_CREATED)
 
@@ -104,5 +113,26 @@ class AdminVehicleImageDeleteView(APIView):
             img = VehicleImage.objects.get(pk=image_id, vehicle_id=pk)
         except VehicleImage.DoesNotExist:
             return Response({'detail': 'Image not found.'}, status=status.HTTP_404_NOT_FOUND)
+        was_primary = img.is_primary
         img.delete()
+        # If we just deleted the primary photo, promote the new first image
+        # so the vehicle keeps a visible main photo on the landing page.
+        if was_primary:
+            new_primary = VehicleImage.objects.filter(vehicle_id=pk).first()
+            if new_primary is not None:
+                VehicleImage.objects.filter(pk=new_primary.pk).update(is_primary=True)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AdminVehicleImageSetPrimaryView(APIView):
+    """Mark one of a vehicle's gallery images as the primary (landing-page) photo.
+    Atomically clears any other primary on the same vehicle."""
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def post(self, request, pk, image_id):
+        if not VehicleImage.objects.filter(pk=image_id, vehicle_id=pk).exists():
+            return Response({'detail': 'Image not found.'}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            VehicleImage.objects.filter(vehicle_id=pk).exclude(pk=image_id).update(is_primary=False)
+            VehicleImage.objects.filter(pk=image_id, vehicle_id=pk).update(is_primary=True)
         return Response(status=status.HTTP_204_NO_CONTENT)

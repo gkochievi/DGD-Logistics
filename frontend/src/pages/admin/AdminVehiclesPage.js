@@ -6,7 +6,7 @@ import {
 import {
   PlusOutlined, EditOutlined, PictureOutlined, DeleteOutlined,
   StopOutlined, CheckCircleOutlined, DownOutlined, SearchOutlined, FilterOutlined,
-  FileTextOutlined, UserOutlined,
+  FileTextOutlined, UserOutlined, StarOutlined, StarFilled,
 } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -193,10 +193,34 @@ export default function AdminVehiclesPage() {
     if (!editingVehicle) return;
     try {
       await api.delete(`/vehicles/admin/${editingVehicle.id}/images/${imageId}/`);
-      setVehicleImages((prev) => prev.filter((i) => i.id !== imageId));
+      setVehicleImages((prev) => {
+        const next = prev.filter((i) => i.id !== imageId);
+        // If we deleted the primary, the backend promoted a new one;
+        // refresh to pick up the new is_primary flag in the local list.
+        const removed = prev.find((i) => i.id === imageId);
+        if (removed?.is_primary && next.length > 0) {
+          return next.map((img, idx) => ({ ...img, is_primary: idx === 0 }));
+        }
+        return next;
+      });
       fetchVehicles();
     } catch {
       message.error(t('adminVehicles.deleteFailed'));
+    }
+  };
+
+  const setPrimaryPhoto = async (imageId) => {
+    if (!editingVehicle) return;
+    try {
+      await api.post(`/vehicles/admin/${editingVehicle.id}/images/${imageId}/primary/`);
+      setVehicleImages((prev) => {
+        const next = prev.map((i) => ({ ...i, is_primary: i.id === imageId }));
+        // Re-sort so the primary lands first locally too (matches backend ordering).
+        return next.sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+      });
+      fetchVehicles();
+    } catch {
+      message.error(t('adminVehicles.setPrimaryFailed'));
     }
   };
 
@@ -763,32 +787,63 @@ export default function AdminVehiclesPage() {
               <>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                   {vehicleImages.map((img) => (
-                    <div
-                      key={img.id}
-                      style={{
-                        position: 'relative', width: 88, height: 88,
-                        borderRadius: 10, overflow: 'hidden',
-                        border: '1px solid var(--border-color)',
-                      }}
-                    >
-                      <img
-                        src={img.image}
-                        alt=""
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                      <Button
-                        size="small"
-                        danger
-                        type="primary"
-                        shape="circle"
-                        icon={<DeleteOutlined />}
-                        onClick={() => deletePhoto(img.id)}
+                    <div key={img.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                      <div
                         style={{
-                          position: 'absolute', top: 4, right: 4,
-                          width: 22, height: 22, minWidth: 22,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          position: 'relative', width: 88, height: 88,
+                          borderRadius: 10, overflow: 'hidden',
+                          border: img.is_primary
+                            ? '2px solid var(--accent)'
+                            : '1px solid var(--border-color)',
                         }}
-                      />
+                      >
+                        <img
+                          src={img.image}
+                          alt=""
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        {/* Star: filled = current main. Outline = "set as main" action. */}
+                        <Tooltip title={img.is_primary ? t('adminVehicles.mainPhoto') : t('adminVehicles.setAsMain')}>
+                          <Button
+                            size="small"
+                            type="primary"
+                            shape="circle"
+                            icon={img.is_primary
+                              ? <StarFilled style={{ color: '#fff' }} />
+                              : <StarOutlined />}
+                            onClick={() => { if (!img.is_primary) setPrimaryPhoto(img.id); }}
+                            style={{
+                              position: 'absolute', top: 4, left: 4,
+                              width: 22, height: 22, minWidth: 22,
+                              background: img.is_primary ? '#f59e0b' : 'rgba(0,0,0,0.55)',
+                              borderColor: 'transparent',
+                              cursor: img.is_primary ? 'default' : 'pointer',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                          />
+                        </Tooltip>
+                        <Button
+                          size="small"
+                          danger
+                          type="primary"
+                          shape="circle"
+                          icon={<DeleteOutlined />}
+                          onClick={() => deletePhoto(img.id)}
+                          style={{
+                            position: 'absolute', top: 4, right: 4,
+                            width: 22, height: 22, minWidth: 22,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}
+                        />
+                      </div>
+                      {img.is_primary && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, letterSpacing: 0.2,
+                          color: 'var(--accent)', textTransform: 'uppercase',
+                        }}>
+                          {t('adminVehicles.mainPhoto')}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>

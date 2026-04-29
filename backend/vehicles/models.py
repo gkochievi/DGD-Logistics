@@ -58,10 +58,15 @@ class VehicleImage(models.Model):
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to=vehicle_gallery_image_path)
     order = models.PositiveIntegerField(default=0)
+    # When true, this is the photo shown on the public landing page for the
+    # vehicle's category. Exactly one (or zero) primary per vehicle — enforced
+    # at the API layer.
+    is_primary = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['order', 'created_at']
+        # Primary photo first so `vehicle.images.all()[0]` is the one to show.
+        ordering = ['-is_primary', 'order', 'created_at']
 
     def __str__(self):
         return f'Image for Vehicle #{self.vehicle_id}'
