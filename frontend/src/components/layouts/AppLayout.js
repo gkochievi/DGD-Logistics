@@ -226,9 +226,9 @@ export default function AppLayout() {
           maxWidth: 1200,
           margin: '0 auto',
         }}>
-          {/* Logo */}
+          {/* Logo — clicking takes the customer back to the landing page */}
           <div
-            onClick={() => navigate('/app')}
+            onClick={() => navigate('/')}
             style={{
               display: 'flex', alignItems: 'center', gap: 10,
               cursor: 'pointer', flexShrink: 0,
