@@ -133,13 +133,11 @@ export default function NewOrderFlow() {
       if (state.pickup) {
         const text = state.pickup.text || state.pickup.address || '';
         const coords = (state.pickup.lat && state.pickup.lng) ? { lat: state.pickup.lat, lng: state.pickup.lng } : null;
-        form.setFieldsValue({ pickup_location: text });
         setPickupStops([{ text, coords }]);
       }
       if (state.destination) {
         const text = state.destination.text || state.destination.address || '';
         const coords = (state.destination.lat && state.destination.lng) ? { lat: state.destination.lat, lng: state.destination.lng } : null;
-        form.setFieldsValue({ destination_location: text });
         setDestStops([{ text, coords }]);
       }
     }
@@ -198,6 +196,15 @@ export default function NewOrderFlow() {
       message.warning(t('newOrder.pleaseSelectCategory'));
       return;
     }
+    // Location inputs are managed outside the Form (pickupStops/destStops).
+    if (!pickupStops[0]?.text?.trim()) {
+      message.warning(needsDest ? t('newOrder.enterPickup') : t('newOrder.enterWork'));
+      return;
+    }
+    if (needsDest && !destStops[0]?.text?.trim()) {
+      message.warning(t('newOrder.enterDestination'));
+      return;
+    }
     // Photo upload sits outside the Form, so validate its state manually
     // alongside the Form's own validateFields call.
     const photoMissing = fileList.length === 0;
@@ -229,12 +236,12 @@ export default function NewOrderFlow() {
       if (selectedCategory.id !== 'admin_decide') {
         fd.append('selected_service', selectedCategory.id);
       }
-      fd.append('pickup_location', pickupStops[0]?.text || values.pickup_location);
+      fd.append('pickup_location', pickupStops[0]?.text || '');
       if (pickupStops[0]?.coords) {
         fd.append('pickup_lat', pickupStops[0].coords.lat);
         fd.append('pickup_lng', pickupStops[0].coords.lng);
       }
-      fd.append('destination_location', destStops[0]?.text || values.destination_location || '');
+      fd.append('destination_location', destStops[0]?.text || '');
       if (destStops[0]?.coords) {
         fd.append('destination_lat', destStops[0].coords.lat);
         fd.append('destination_lng', destStops[0].coords.lng);
@@ -285,10 +292,6 @@ export default function NewOrderFlow() {
   const updateStop = (type, index, updates) => {
     const setter = type === 'pickup' ? setPickupStops : setDestStops;
     setter(prev => prev.map((s, i) => i === index ? { ...s, ...updates } : s));
-    if (index === 0 && updates.text !== undefined) {
-      const field = type === 'pickup' ? 'pickup_location' : 'destination_location';
-      form.setFieldsValue({ [field]: updates.text });
-    }
   };
 
   const addStop = (type) => {
@@ -308,12 +311,6 @@ export default function NewOrderFlow() {
       if (activeStop.index >= index && activeStop.index > 0) {
         setActiveStop({ type, index: activeStop.index - 1 });
       }
-    }
-    if (index === 0) {
-      const list = type === 'pickup' ? pickupStops : destStops;
-      const newFirst = list[1] || { text: '' };
-      const field = type === 'pickup' ? 'pickup_location' : 'destination_location';
-      form.setFieldsValue({ [field]: newFirst.text });
     }
   };
 
@@ -499,10 +496,8 @@ export default function NewOrderFlow() {
             {/* Category grid */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: showAllCategories
-                ? (isDesktop ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)')
-                : (isDesktop ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)'),
-              gap: isDesktop ? 10 : 8,
+              gridTemplateColumns: isDesktop ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)',
+              gap: isDesktop ? 8 : 6,
             }}>
               {/* "Not sure" option */}
               {!catSearch && (() => {
@@ -521,7 +516,7 @@ export default function NewOrderFlow() {
                   />
                 );
               })()}
-              {(showAllCategories ? filteredCategories : filteredCategories.slice(0, isDesktop ? 5 : 5)).map((cat) => {
+              {(showAllCategories ? filteredCategories : filteredCategories.slice(0, isDesktop ? 7 : 5)).map((cat) => {
                 const isActive = selectedCategory?.id === cat.id;
                 const color = cat.color || 'var(--accent)';
                 return (
@@ -538,7 +533,7 @@ export default function NewOrderFlow() {
                 );
               })}
             </div>
-            {filteredCategories.length > 5 && (
+            {filteredCategories.length > (isDesktop ? 7 : 5) && (
               <button
                 onClick={() => setShowAllCategories(!showAllCategories)}
                 style={{
@@ -593,36 +588,21 @@ export default function NewOrderFlow() {
                           boxShadow: '0 0 0 4px var(--accent-bg)',
                           transition: 'all 0.2s ease',
                         }} />
-                        {idx === 0 ? (
-                          <Form.Item name="pickup_location" style={{ flex: 1, marginBottom: 0 }}
-                            rules={[{ required: true, message: needsDest ? t('newOrder.enterPickup') : t('newOrder.enterWork') }]}>
-                            <LocationAutocomplete
-                              value={stop.text}
-                              onChange={(val) => updateStop('pickup', idx, { text: val })}
-                              onSelect={({ address, lat, lng }) => {
-                                updateStop('pickup', idx, { text: address, coords: { lat, lng } });
-                              }}
-                              placeholder={needsDest
+                        <LocationAutocomplete
+                          value={stop.text}
+                          onChange={(val) => updateStop('pickup', idx, { text: val })}
+                          onSelect={({ address, lat, lng }) => {
+                            updateStop('pickup', idx, { text: address, coords: { lat, lng } });
+                          }}
+                          placeholder={idx === 0
+                            ? (needsDest
                                 ? (pickupStops.length > 1 ? `${t('newOrder.pickupFrom')} #${idx + 1}` : t('newOrder.pickupFrom'))
-                                : t('newOrder.workSiteAddress')}
-                              prefix={null}
-                              countryCode="ge"
-                              style={{ flex: 1 }}
-                            />
-                          </Form.Item>
-                        ) : (
-                          <LocationAutocomplete
-                            value={stop.text}
-                            onChange={(val) => updateStop('pickup', idx, { text: val })}
-                            onSelect={({ address, lat, lng }) => {
-                              updateStop('pickup', idx, { text: address, coords: { lat, lng } });
-                            }}
-                            placeholder={`${t('newOrder.pickupFrom')} #${idx + 1}`}
-                            prefix={null}
-                            countryCode="ge"
-                            style={{ flex: 1 }}
-                          />
-                        )}
+                                : t('newOrder.workSiteAddress'))
+                            : `${t('newOrder.pickupFrom')} #${idx + 1}`}
+                          prefix={null}
+                          countryCode="ge"
+                          style={{ flex: 1 }}
+                        />
                         {pickupStops.length > 1 && (
                           <div
                             onClick={(e) => { e.stopPropagation(); removeStop('pickup', idx); }}
@@ -698,34 +678,19 @@ export default function NewOrderFlow() {
                           background: '#ef4444', flexShrink: 0,
                           boxShadow: '0 0 0 4px #ef444418',
                         }} />
-                        {idx === 0 ? (
-                          <Form.Item name="destination_location" style={{ flex: 1, marginBottom: 0 }}
-                            rules={[{ required: true, message: t('newOrder.enterDestination') }]}>
-                            <LocationAutocomplete
-                              value={stop.text}
-                              onChange={(val) => updateStop('dest', idx, { text: val })}
-                              onSelect={({ address, lat, lng }) => {
-                                updateStop('dest', idx, { text: address, coords: { lat, lng } });
-                              }}
-                              placeholder={destStops.length > 1 ? `${t('newOrder.destinationTo')} #${idx + 1}` : t('newOrder.destinationTo')}
-                              prefix={null}
-                              countryCode="ge"
-                              style={{ flex: 1 }}
-                            />
-                          </Form.Item>
-                        ) : (
-                          <LocationAutocomplete
-                            value={stop.text}
-                            onChange={(val) => updateStop('dest', idx, { text: val })}
-                            onSelect={({ address, lat, lng }) => {
-                              updateStop('dest', idx, { text: address, coords: { lat, lng } });
-                            }}
-                            placeholder={`${t('newOrder.destinationTo')} #${idx + 1}`}
-                            prefix={null}
-                            countryCode="ge"
-                            style={{ flex: 1 }}
-                          />
-                        )}
+                        <LocationAutocomplete
+                          value={stop.text}
+                          onChange={(val) => updateStop('dest', idx, { text: val })}
+                          onSelect={({ address, lat, lng }) => {
+                            updateStop('dest', idx, { text: address, coords: { lat, lng } });
+                          }}
+                          placeholder={destStops.length > 1
+                            ? `${t('newOrder.destinationTo')} #${idx + 1}`
+                            : t('newOrder.destinationTo')}
+                          prefix={null}
+                          countryCode="ge"
+                          style={{ flex: 1 }}
+                        />
                         {destStops.length > 1 && (
                           <div
                             onClick={(e) => { e.stopPropagation(); removeStop('dest', idx); }}
@@ -990,9 +955,6 @@ export default function NewOrderFlow() {
               <ExpandOutlined style={{ fontSize: 13, color: 'var(--text-tertiary)' }} />
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
                 {t('newOrder.cargoDetails')}
-              </span>
-              <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
-                {t('newOrder.requiredLabel')}
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -1477,23 +1439,23 @@ function CategoryCard({ isActive, color, icon, imageUrl, name, badge, dashed, on
       className="card-interactive"
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        gap: 8, padding: '14px 8px 12px', borderRadius: 14, cursor: 'pointer',
+        gap: 4, padding: '6px 4px 6px', borderRadius: 10, cursor: 'pointer',
         background: isActive ? `${color}10` : 'var(--bg-primary)',
         border: isActive
           ? `2px solid ${color}`
           : dashed
-          ? '2px dashed var(--border-color)'
+          ? '1.5px dashed var(--border-color)'
           : '1px solid var(--border-color)',
         boxShadow: isActive ? `0 0 0 3px ${color}0a` : 'var(--shadow-sm)',
         transition: 'all 0.2s ease',
         textAlign: 'center',
-        minHeight: 90,
+        minHeight: 60,
         justifyContent: 'center',
       }}
     >
       <div style={{
-        width: '100%', aspectRatio: '4 / 3',
-        borderRadius: 10,
+        width: '100%', aspectRatio: '16 / 9',
+        borderRadius: 6,
         background: imageUrl
           ? 'var(--bg-secondary)'
           : (isActive ? `${color}18` : 'var(--bg-tertiary)'),
@@ -1508,24 +1470,29 @@ function CategoryCard({ isActive, color, icon, imageUrl, name, badge, dashed, on
             objectFit: 'contain', display: 'block',
           }} />
         ) : (
-          <CategoryImage icon={icon} size={32} />
+          <CategoryImage icon={icon} size={22} />
         )}
       </div>
-      <div>
+      <div style={{ width: '100%' }}>
         <div style={{
-          fontSize: 12, fontWeight: isActive ? 700 : 600,
+          fontSize: 10.5, fontWeight: isActive ? 700 : 600,
           color: isActive ? color : 'var(--text-primary)',
-          lineHeight: 1.3,
+          lineHeight: 1.2,
+          overflow: 'hidden',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          wordBreak: 'break-word',
         }}>
           {name}
         </div>
         {badge && (
           <div style={{
-            fontSize: 10, color: 'var(--text-tertiary)',
+            fontSize: 9, color: 'var(--text-tertiary)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 2, marginTop: 3,
+            gap: 2, marginTop: 1,
           }}>
-            <SwapRightOutlined style={{ fontSize: 9 }} /> {badge}
+            <SwapRightOutlined style={{ fontSize: 8 }} /> {badge}
           </div>
         )}
       </div>

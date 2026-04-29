@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Input, Spin } from 'antd';
+import { Input } from 'antd';
 import { LoadingOutlined } from '@ant-design/icons';
 
 /**
@@ -74,7 +74,13 @@ export default function LocationAutocomplete({
     onChange(val);
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => searchLocations(val), 350);
+    if (!val) {
+      setSuggestions([]);
+      setOpen(false);
+      setLoading(false);
+      return;
+    }
+    debounceRef.current = setTimeout(() => searchLocations(val), 600);
   };
 
   const handleSelect = (suggestion) => {
@@ -115,7 +121,7 @@ export default function LocationAutocomplete({
         ref={inputRef}
         prefix={prefix}
         placeholder={placeholder}
-        value={value}
+        value={value ?? ''}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         onFocus={() => {
@@ -123,7 +129,20 @@ export default function LocationAutocomplete({
         }}
         size={size}
         style={{ height: 48, fontSize: 15 }}
-        suffix={loading ? <Spin indicator={<LoadingOutlined style={{ fontSize: 14 }} />} /> : null}
+        suffix={
+          // Always render a fixed-size suffix slot so Ant Design's affix
+          // wrapper stays mounted — toggling suffix between null and a node
+          // remounts the inner <input> element and kills focus mid-typing.
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 14,
+            height: 14,
+          }}>
+            {loading && <LoadingOutlined spin style={{ fontSize: 14, color: 'var(--text-tertiary)' }} />}
+          </span>
+        }
         autoComplete="off"
       />
       {open && suggestions.length > 0 && (
