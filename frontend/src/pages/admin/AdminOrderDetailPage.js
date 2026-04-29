@@ -423,6 +423,25 @@ export default function AdminOrderDetailPage() {
       </ol>
     ) : (stops[0]?.address || '—')
   );
+
+  // Route distance / duration computed by OSRM at order-creation time and
+  // stored alongside the stops in `route_stops`. We mirror the customer-side
+  // formatting from NewOrderFlow (km / m, h+m / m).
+  const routeDistanceMeters = order.route_stops?.distance ?? null;
+  const routeDurationSeconds = order.route_stops?.duration ?? null;
+  const formatDistance = (meters) => (
+    meters >= 1000
+      ? `${(meters / 1000).toFixed(1)} ${t('newOrder.km')}`
+      : `${Math.round(meters)} m`
+  );
+  const formatDuration = (seconds) => {
+    if (seconds >= 3600) {
+      const hrs = Math.floor(seconds / 3600);
+      const mins = Math.round((seconds % 3600) / 60);
+      return `${hrs} ${t('newOrder.hr')} ${mins} ${t('newOrder.min')}`;
+    }
+    return `${Math.round(seconds / 60)} ${t('newOrder.min')}`;
+  };
   const statusOptionsForOrder = STATUS_OPTIONS
     // Cancellation is customer-only.
     .filter((opt) => opt.value !== 'cancelled' || order.status === 'cancelled')
@@ -542,6 +561,16 @@ export default function AdminOrderDetailPage() {
             <Descriptions.Item label={t('orders.destination')} span={isMobile ? 1 : 2}>
               {destStops.length ? renderStopList(destStops) : '—'}
             </Descriptions.Item>
+            {routeDistanceMeters != null && (
+              <Descriptions.Item label={t('adminOrderDetail.routeDistance')} span={isMobile ? 1 : 2}>
+                <span style={{ fontWeight: 600 }}>{formatDistance(routeDistanceMeters)}</span>
+                {routeDurationSeconds != null && (
+                  <span style={{ color: 'var(--text-tertiary)', marginLeft: 8 }}>
+                    · ~ {formatDuration(routeDurationSeconds)}
+                  </span>
+                )}
+              </Descriptions.Item>
+            )}
             <Descriptions.Item label={t('adminOrderDetail.requestedDate')}>{order.requested_date}</Descriptions.Item>
             <Descriptions.Item label={t('orders.time')}>{order.requested_time || '—'}</Descriptions.Item>
             <Descriptions.Item label={t('orders.contact')}>{order.contact_name}</Descriptions.Item>
