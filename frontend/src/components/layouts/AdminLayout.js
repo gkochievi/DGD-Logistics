@@ -320,8 +320,15 @@ export default function AdminLayout() {
   // labels ("მომხმარებლები", "Пользователи") fit naturally because vertical
   // space is unbounded. Sidebar collapses to icon-only on demand; preference
   // persists in localStorage.
+  // `--admin-sidebar-width` is exposed so descendant pages can position
+  // fixed bottom bars to the right of the sidebar (mobile branch leaves it
+  // unset so the variable falls back to 0).
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-secondary)' }}>
+    <div style={{
+      minHeight: '100vh',
+      background: 'var(--bg-secondary)',
+      '--admin-sidebar-width': `${sidebarWidth}px`,
+    }}>
       <aside style={{
         position: 'fixed',
         top: 0, left: 0, bottom: 0,

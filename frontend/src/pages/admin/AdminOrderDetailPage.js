@@ -597,8 +597,20 @@ export default function AdminOrderDetailPage() {
     letterSpacing: '-0.02em', margin: 0,
   };
 
+  // Fixed-bottom CTA only shown while the offer hasn't been sent yet — see
+  // bar implementation just before the page closes. Reserve room for it so
+  // the last section doesn't hide behind the bar.
+  const showSendOfferBar = !isTerminal && (order.status === 'new' || order.status === 'under_review');
+
   return (
-    <div style={{ maxWidth: 920, margin: '0 auto' }} className="page-enter">
+    <div
+      style={{
+        maxWidth: 920,
+        margin: '0 auto',
+        paddingBottom: showSendOfferBar ? (isMobile ? 200 : 120) : 0,
+      }}
+      className="page-enter"
+    >
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12,
@@ -729,50 +741,10 @@ export default function AdminOrderDetailPage() {
             />
           )}
 
-          {/* Primary action: Send for Customer Approval — only when the offer
-              hasn't been sent yet. Once sent, the banner above covers it. */}
-          {!isTerminal && (order.status === 'new' || order.status === 'under_review') && (
-            <div style={{
-              background: readyToSendOffer
-                ? 'linear-gradient(135deg, var(--accent-bg) 0%, var(--accent-bg-strong) 100%)'
-                : 'var(--bg-tertiary)',
-              borderRadius: 14,
-              padding: isMobile ? '14px 16px' : '16px 20px',
-              border: `1px solid ${readyToSendOffer ? 'var(--accent-bg-strong)' : 'var(--border-color)'}`,
-              marginBottom: 20,
-              display: 'flex', alignItems: 'center',
-              gap: 12, flexWrap: 'wrap',
-            }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{
-                  fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
-                  letterSpacing: -0.1,
-                }}>
-                  {t('adminOrderDetail.sendForApproval')}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                  {readyToSendOffer
-                    ? t('adminOrderDetail.sendForApprovalContent')
-                    : t('adminOrderDetail.missingForOffer')}
-                </div>
-              </div>
-              <Button
-                type="primary"
-                size={isMobile ? 'large' : 'middle'}
-                icon={<SendOutlined />}
-                loading={updating}
-                disabled={!readyToSendOffer}
-                onClick={handleSendOffer}
-                style={{
-                  background: 'var(--accent)', borderColor: 'var(--accent)',
-                  borderRadius: 10, fontWeight: 700,
-                  ...(isMobile ? { width: '100%', height: 44 } : {}),
-                }}
-              >
-                {t('adminOrderDetail.sendForApproval')}
-              </Button>
-            </div>
-          )}
+          {/* The Send-for-Customer-Approval CTA used to live here, but burying
+              it at the top of Admin Actions meant admins had to scroll up
+              from the Price field every time. It's now rendered as a fixed
+              bottom bar at the end of the page so it's always reachable. */}
 
           {/* When customer has accepted, highlight the next logical step */}
           {order.status === 'approved' && (
@@ -1562,6 +1534,72 @@ export default function AdminOrderDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {/* ── Fixed-bottom Send-for-Customer-Approval CTA ──
+          Always reachable while reviewing/pricing the order, so admins can
+          set the price (further down the page) and submit without scrolling
+          back up. The CSS variable --admin-sidebar-width is exposed by
+          AdminLayout on desktop so the bar starts to the right of the
+          sidebar; mobile leaves the variable unset so it falls back to 0,
+          and we offset 62px for the mobile tab bar at the very bottom. */}
+      {showSendOfferBar && (
+        <div style={{
+          position: 'fixed',
+          bottom: isMobile ? 62 : 0,
+          left: 'var(--admin-sidebar-width, 0px)',
+          right: 0,
+          zIndex: 99,
+          background: 'var(--glass-bg)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          borderTop: '1px solid var(--glass-border)',
+        }}>
+          <div style={{
+            margin: '0 auto', maxWidth: 920,
+            padding: isMobile ? '14px 16px' : '18px 28px',
+            paddingBottom: isMobile
+              ? 'calc(14px + env(safe-area-inset-bottom, 0px))'
+              : 'calc(18px + env(safe-area-inset-bottom, 0px))',
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{
+                fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
+                letterSpacing: -0.1,
+              }}>
+                {t('adminOrderDetail.sendForApproval')}
+              </div>
+              <div style={{
+                fontSize: 12,
+                color: readyToSendOffer ? 'var(--text-tertiary)' : '#d97706',
+                marginTop: 2,
+              }}>
+                {readyToSendOffer
+                  ? t('adminOrderDetail.sendForApprovalContent')
+                  : t('adminOrderDetail.missingForOffer')}
+              </div>
+            </div>
+            <Button
+              type="primary"
+              size="large"
+              icon={<SendOutlined />}
+              loading={updating}
+              disabled={!readyToSendOffer}
+              onClick={handleSendOffer}
+              style={{
+                height: 48, borderRadius: 12, fontWeight: 700,
+                background: readyToSendOffer ? 'var(--accent)' : undefined,
+                borderColor: readyToSendOffer ? 'var(--accent)' : undefined,
+                minWidth: 220,
+                boxShadow: readyToSendOffer ? '0 4px 14px rgba(0, 184, 86, 0.28)' : undefined,
+                ...(isMobile ? { width: '100%' } : {}),
+              }}
+            >
+              {t('adminOrderDetail.sendForApproval')}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
