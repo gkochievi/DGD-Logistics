@@ -1126,7 +1126,7 @@ export default function NewOrderFlow() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: 40, maxWidth: 1200, margin: '0 auto' }} className="app-bg page-enter">
+    <div style={{ minHeight: '100vh', paddingBottom: 140, maxWidth: 1200, margin: '0 auto' }} className="app-bg page-enter">
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,
@@ -1357,23 +1357,45 @@ export default function NewOrderFlow() {
           </ConfirmSection>
         )}
 
-        {/* ── Action buttons ── */}
-        <div style={{ marginTop: 24 }}>
-          <Button type="primary" block onClick={handleSubmit} loading={loading} icon={<CheckCircleOutlined />}
+      </div>
+
+      {/* ── Sticky CTA ── matches step 0's bottom bar so the action is always
+          in the same place; "Order Details" goes back, "Submit Order" submits. */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 99,
+        background: 'var(--glass-bg)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderTop: '1px solid var(--glass-border)',
+      }}>
+        <div style={{
+          margin: '0 auto', maxWidth: 1200,
+          padding: isDesktop ? '20px 40px' : '18px 20px',
+          paddingBottom: isDesktop
+            ? 'calc(20px + env(safe-area-inset-bottom, 0px))'
+            : 'calc(18px + env(safe-area-inset-bottom, 0px))',
+          display: 'flex', gap: 10, alignItems: 'stretch',
+        }}>
+          <Button onClick={() => setStep(0)} disabled={loading}
             style={{
-              height: 54, borderRadius: 14, fontSize: 16, fontWeight: 700,
+              flex: '0 0 auto',
+              height: 52, borderRadius: 14, fontSize: 14, fontWeight: 600,
+              padding: '0 18px',
+              color: 'var(--text-secondary)',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
+            }}>
+            <ArrowLeftOutlined style={{ fontSize: 12, marginRight: 6 }} />
+            {t('newOrder.orderDetails')}
+          </Button>
+          <Button type="primary" onClick={handleSubmit} loading={loading} icon={<CheckCircleOutlined />}
+            style={{
+              flex: 1,
+              height: 52, borderRadius: 14, fontSize: 16, fontWeight: 700,
               background: 'var(--fab-gradient)', border: 'none',
               boxShadow: 'var(--fab-shadow)', letterSpacing: -0.2,
             }}>
             {t('newOrder.submitOrder')}
-          </Button>
-          <Button block onClick={() => setStep(0)}
-            style={{
-              marginTop: 10, height: 44, borderRadius: 12, fontSize: 14, fontWeight: 600,
-              color: 'var(--text-secondary)', border: 'none', background: 'transparent',
-            }}>
-            <ArrowLeftOutlined style={{ fontSize: 12, marginRight: 6 }} />
-            {t('newOrder.orderDetails')}
           </Button>
         </div>
       </div>
