@@ -46,13 +46,45 @@ function ClickHandler({ onClick }) {
 // Inner component that can use useMap() hook
 function MapController({ flyTo }) {
   const map = useMap();
+
+  // When the MapContainer mounts inside a host that is briefly 0×0 (e.g. an
+  // Ant Design Modal opening with an animation, a Drawer transitioning, an
+  // initially-collapsed accordion) Leaflet's internal pixel math is computed
+  // against a zero-size box and produces NaN/Infinity for getCenter()/getZoom().
+  // Any subsequent flyTo() then crashes on `Invalid LatLng (NaN, NaN)` while
+  // interpolating from that broken center. Forcing invalidateSize() after the
+  // container has real dimensions resets Leaflet's internal state correctly.
   useEffect(() => {
-    if (flyTo) {
-      map.flyTo(flyTo.center, flyTo.zoom, { duration: 1.2 });
+    const id = setTimeout(() => {
+      try { map.invalidateSize(); } catch { /* map already torn down */ }
+    }, 200);
+    return () => clearTimeout(id);
+  }, [map]);
+
+  useEffect(() => {
+    if (
+      flyTo
+      && Array.isArray(flyTo.center)
+      && Number.isFinite(flyTo.center[0])
+      && Number.isFinite(flyTo.center[1])
+      && Number.isFinite(flyTo.zoom)
+    ) {
+      try {
+        map.flyTo(flyTo.center, flyTo.zoom, { duration: 1.2 });
+      } catch { /* container not ready yet — next render will retry */ }
     }
   }, [flyTo, map]);
   return null;
 }
+
+// True only when [lat, lng] are both real, finite numbers. Treats `[null, null]`,
+// `[NaN, NaN]`, `undefined`, etc. as "no position" so we never hand Leaflet a
+// LatLng it can't parse.
+const isValidLatLng = (p) => (
+  Array.isArray(p)
+  && Number.isFinite(p[0])
+  && Number.isFinite(p[1])
+);
 
 export default function MapPicker({
   position,
@@ -62,8 +94,9 @@ export default function MapPicker({
   placeholder = 'Tap on the map to select location',
   extraMarkers = [],
 }) {
-  const [center] = useState(() => position || GEORGIA_CENTER);
-  const [initialZoom] = useState(() => position ? USER_LOCATION_ZOOM : GEORGIA_ZOOM);
+  const positionValid = isValidLatLng(position);
+  const [center] = useState(() => positionValid ? position : GEORGIA_CENTER);
+  const [initialZoom] = useState(() => positionValid ? USER_LOCATION_ZOOM : GEORGIA_ZOOM);
   const [userLocation, setUserLocation] = useState(null);
   const [locating, setLocating] = useState(false);
   const [flyTo, setFlyTo] = useState(null);
@@ -75,9 +108,10 @@ export default function MapPicker({
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const loc = [pos.coords.latitude, pos.coords.longitude];
+          if (!isValidLatLng(loc)) return;
           setUserLocation(loc);
           // If no position was pre-set, fly to user location
-          if (!position) {
+          if (!positionValid) {
             setFlyTo({ center: loc, zoom: 13 });
           }
         },
@@ -91,10 +125,10 @@ export default function MapPicker({
 
   // Fly to position when it changes externally
   useEffect(() => {
-    if (position) {
+    if (positionValid) {
       setFlyTo({ center: position, zoom: USER_LOCATION_ZOOM });
     }
-  }, [position]);
+  }, [position, positionValid]);
 
   const handleLocateMe = useCallback(() => {
     if (!navigator.geolocation) return;
@@ -102,9 +136,10 @@ export default function MapPicker({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const loc = [pos.coords.latitude, pos.coords.longitude];
+        setLocating(false);
+        if (!isValidLatLng(loc)) return;
         setUserLocation(loc);
         setFlyTo({ center: loc, zoom: USER_LOCATION_ZOOM });
-        setLocating(false);
       },
       () => {
         setLocating(false);
@@ -146,17 +181,19 @@ export default function MapPicker({
         <MapController flyTo={flyTo} />
 
         {/* Extra markers from multi-stop routes */}
-        {extraMarkers.map((m, i) => (
-          <Marker
-            key={`extra-${i}`}
-            position={m.position}
-            icon={m.color === 'red' ? redIcon : greenIcon}
-            opacity={0.5}
-          />
-        ))}
+        {extraMarkers
+          .filter((m) => isValidLatLng(m.position))
+          .map((m, i) => (
+            <Marker
+              key={`extra-${i}`}
+              position={m.position}
+              icon={m.color === 'red' ? redIcon : greenIcon}
+              opacity={0.5}
+            />
+          ))}
 
         {/* Selected location marker (active stop) */}
-        {position && <Marker position={position} icon={icon} />}
+        {positionValid && <Marker position={position} icon={icon} />}
 
         {/* User's current location — blue circle */}
         {userLocation && (
@@ -178,7 +215,7 @@ export default function MapPicker({
         onClick={handleLocateMe}
         disabled={locating}
         style={{
-          position: 'absolute', bottom: position ? 8 : 40, right: 8,
+          position: 'absolute', bottom: positionValid ? 8 : 40, right: 8,
           zIndex: 1000,
           width: 36, height: 36, borderRadius: 10,
           background: 'var(--card-bg, #fff)',
@@ -205,7 +242,7 @@ export default function MapPicker({
         )}
       </button>
 
-      {!position && (
+      {!positionValid && (
         <div style={{
           padding: '8px 12px', background: 'var(--bg-secondary, #fafafa)',
           fontSize: 12, color: 'var(--text-tertiary, #999)',
@@ -219,9 +256,10 @@ export default function MapPicker({
 }
 
 export function MapView({ markers = [], height = 200, zoom = 12 }) {
-  if (!markers.length) return null;
+  const validMarkers = markers.filter((m) => isValidLatLng(m.position));
+  if (!validMarkers.length) return null;
 
-  const center = markers[0].position;
+  const center = validMarkers[0].position;
 
   return (
     <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border-color, #f0f0f0)' }}>
@@ -236,7 +274,7 @@ export function MapView({ markers = [], height = 200, zoom = 12 }) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {markers.map((m, i) => (
+        {validMarkers.map((m, i) => (
           <Marker
             key={i}
             position={m.position}

@@ -18,14 +18,23 @@ def parse_categories(raw):
 
 
 def windows_overlap(a_from, a_to, b_from, b_to):
-    """Return True if two [from, to] windows overlap.
+    """Return True if two [from, to] windows definitely overlap.
 
-    Treats missing bounds as open-ended (None from = -inf, None to = +inf).
-    If both orders have no schedule at all, we consider them overlapping
-    (can't both be concurrently active on the same resource).
+    Schedules can be:
+      - both unscheduled (no from/to on either side) → treat as overlap, since
+        two open-ended bookings can't share a driver,
+      - exactly one unscheduled → NOT a conflict yet; admin hasn't committed
+        a time on the unscheduled side, so we defer the check until they do
+        (otherwise a brand-new offer collides with every scheduled order on
+        the same driver/vehicle and admin can never send the price),
+      - both scheduled → strict half-open interval check.
     """
-    if a_from is None and a_to is None and b_from is None and b_to is None:
+    a_unscheduled = a_from is None and a_to is None
+    b_unscheduled = b_from is None and b_to is None
+    if a_unscheduled and b_unscheduled:
         return True
+    if a_unscheduled or b_unscheduled:
+        return False
     if a_to is not None and b_from is not None and a_to <= b_from:
         return False
     if b_to is not None and a_from is not None and b_to <= a_from:

@@ -16,7 +16,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { StatusBadge, UrgencyBadge } from '../../components/common/StatusBadge';
 import { STATUS_OPTIONS, STATUS_CONFIG } from '../../utils/status';
-import { MapView } from '../../components/map/MapPicker';
+import MapPicker, { MapView } from '../../components/map/MapPicker';
 import LocationAutocomplete from '../../components/common/LocationAutocomplete';
 import { useLang } from '../../contexts/LanguageContext';
 import { useBranding } from '../../contexts/BrandingContext';
@@ -49,6 +49,16 @@ export default function AdminOrderDetailPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editPickupStops, setEditPickupStops] = useState([]);
   const [editDestStops, setEditDestStops] = useState([]);
+  // Which stop the in-modal map is currently pinning. Mirrors the customer's
+  // NewOrderFlow active-stop pattern so admins can switch between stops and
+  // tap the map to drop a marker.
+  const [editActiveStop, setEditActiveStop] = useState({ type: 'pickup', index: 0 });
+  // Defer mounting Leaflet until the modal's open animation has finished.
+  // If we render MapContainer while the modal slot is still animating from
+  // 0×0 to its final size, Leaflet's internal pixel math computes against
+  // bogus dimensions and getCenter()/getZoom() come back NaN — every later
+  // flyTo() then floods the console with "Invalid LatLng (NaN, NaN)".
+  const [editMapReady, setEditMapReady] = useState(false);
   const [editDate, setEditDate] = useState(null);
   const [editTime, setEditTime] = useState(null);
   const [editContactName, setEditContactName] = useState('');
@@ -133,7 +143,7 @@ export default function AdminOrderDetailPage() {
       setComment('');
       fetchOrder();
     } catch (err) {
-      message.error(err.response?.data?.detail || t('adminOrderDetail.statusUpdateFailed'));
+      message.error(extractApiError(err, t('adminOrderDetail.statusUpdateFailed')));
     } finally {
       setUpdating(false);
     }
@@ -240,6 +250,25 @@ export default function AdminOrderDetailPage() {
     }
   };
 
+  // Surface a usable message from a DRF error payload regardless of whether
+  // the backend returned `{detail: ...}`, `{field: "..."}`, `{field: [...]}`,
+  // or a plain string. Without this, field-level validation errors (e.g. an
+  // overlapping driver booking) collapse to the generic "Status update
+  // failed" toast and the admin has no way to see the real reason.
+  const extractApiError = (err, fallback) => {
+    const data = err?.response?.data;
+    if (!data) return fallback;
+    if (typeof data === 'string') return data;
+    if (data.detail) return data.detail;
+    if (typeof data === 'object') {
+      for (const v of Object.values(data)) {
+        if (Array.isArray(v) && v.length) return String(v[0]);
+        if (typeof v === 'string' && v) return v;
+      }
+    }
+    return fallback;
+  };
+
   const handleSendOffer = () => {
     const priceNum = priceDraft === null || priceDraft === undefined || priceDraft === ''
       ? null : Number(priceDraft);
@@ -271,7 +300,7 @@ export default function AdminOrderDetailPage() {
           message.success(t('adminOrderDetail.offerSentSuccess'));
           fetchOrder();
         } catch (err) {
-          message.error(err.response?.data?.detail || t('adminOrderDetail.statusUpdateFailed'));
+          message.error(extractApiError(err, t('adminOrderDetail.statusUpdateFailed')));
         } finally {
           setUpdating(false);
         }
@@ -309,6 +338,7 @@ export default function AdminOrderDetailPage() {
     setEditDescription(order.description || '');
     setEditCargoDetails(order.cargo_details || '');
     setEditUrgency(order.urgency || 'normal');
+    setEditActiveStop({ type: 'pickup', index: 0 });
     setEditModalOpen(true);
   };
 
@@ -323,6 +353,11 @@ export default function AdminOrderDetailPage() {
   const removeEditStop = (kind, idx) => {
     const setter = kind === 'pickup' ? setEditPickupStops : setEditDestStops;
     setter((prev) => prev.filter((_, i) => i !== idx));
+    // If the active map-target was the removed stop (or comes after it),
+    // fall back to pickup #0 so the map keeps a sensible focus.
+    if (editActiveStop.type === kind && editActiveStop.index >= idx) {
+      setEditActiveStop({ type: 'pickup', index: 0 });
+    }
   };
 
   const handleEditSave = async () => {
@@ -332,11 +367,55 @@ export default function AdminOrderDetailPage() {
       message.error(t('adminOrderDetail.editPickupRequired'));
       return;
     }
+
+    // Did the actual route geometry change? If admin only edited non-location
+    // fields (date, contact, etc.), keep the existing distance/duration so a
+    // transient OSRM outage doesn't wipe valid data. Otherwise recalculate.
+    const stopKey = (stops) => stops
+      .map((s) => `${s.lat ?? s.coords?.lat ?? ''},${s.lng ?? s.coords?.lng ?? ''}`)
+      .join('|');
+    const oldStops = [
+      ...(order.route_stops?.pickups || []),
+      ...(order.route_stops?.destinations || []),
+    ];
+    const newStops = [...pickupsCleaned, ...destsCleaned];
+    const coordsChanged = stopKey(oldStops) !== stopKey(newStops);
+
+    let distance = order.route_stops?.distance ?? null;
+    let duration = order.route_stops?.duration ?? null;
+
+    if (coordsChanged) {
+      // Default to null on a real geometry change so we don't ship stale data
+      // if OSRM fails or any stop is missing coordinates.
+      distance = null;
+      duration = null;
+      const allHaveCoords = newStops.length >= 2 && newStops.every(
+        (s) => Number.isFinite(s.coords?.lat) && Number.isFinite(s.coords?.lng),
+      );
+      if (allHaveCoords) {
+        try {
+          const coordsStr = newStops
+            .map((s) => `${s.coords.lng},${s.coords.lat}`)
+            .join(';');
+          const res = await fetch(
+            `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=false`,
+          );
+          const data = await res.json();
+          if (data.code === 'Ok' && data.routes?.[0]) {
+            distance = data.routes[0].distance;
+            duration = data.routes[0].duration;
+          }
+        } catch {
+          // Network/OSRM failure — leave distance null. Admin can re-save later.
+        }
+      }
+    }
+
     const routeStops = {
       pickups: pickupsCleaned.map(s => ({ address: s.text, lat: s.coords?.lat ?? null, lng: s.coords?.lng ?? null })),
       destinations: destsCleaned.map(s => ({ address: s.text, lat: s.coords?.lat ?? null, lng: s.coords?.lng ?? null })),
-      distance: order.route_stops?.distance ?? null,
-      duration: order.route_stops?.duration ?? null,
+      distance,
+      duration,
     };
     const firstPickup = pickupsCleaned[0];
     const firstDest = destsCleaned[0];
@@ -423,6 +502,31 @@ export default function AdminOrderDetailPage() {
       </ol>
     ) : (stops[0]?.address || '—')
   );
+
+  // ─── In-modal map state derived from the live edit form ───
+  const editActiveList = editActiveStop.type === 'pickup' ? editPickupStops : editDestStops;
+  const editActiveStopData = editActiveList[editActiveStop.index];
+  const editActiveLat = editActiveStopData?.coords?.lat;
+  const editActiveLng = editActiveStopData?.coords?.lng;
+  const editActivePosition = (Number.isFinite(editActiveLat) && Number.isFinite(editActiveLng))
+    ? [editActiveLat, editActiveLng]
+    : null;
+  const editExtraMarkers = [
+    ...editPickupStops.map((s, i) => ({ stop: s, type: 'pickup', index: i })),
+    ...editDestStops.map((s, i) => ({ stop: s, type: 'dest', index: i })),
+  ]
+    .filter((m) => Number.isFinite(m.stop.coords?.lat) && Number.isFinite(m.stop.coords?.lng)
+      && !(m.type === editActiveStop.type && m.index === editActiveStop.index))
+    .map((m) => ({
+      position: [m.stop.coords.lat, m.stop.coords.lng],
+      color: m.type === 'dest' ? 'red' : 'green',
+    }));
+  const handleMapPickEdit = ({ lat, lng, address }) => {
+    updateEditStop(editActiveStop.type, editActiveStop.index, {
+      text: address,
+      coords: { lat, lng },
+    });
+  };
 
   // Route distance / duration computed by OSRM at order-creation time and
   // stored alongside the stops in `route_stops`. We mirror the customer-side
@@ -1146,58 +1250,6 @@ export default function AdminOrderDetailPage() {
         </div>
       )}
 
-      {/* Edit History */}
-      {order.edit_history?.length > 0 && (
-        <div style={sectionStyle}>
-          <div style={sectionHeaderStyle}>
-            <EditOutlined style={{ color: '#d97706', fontSize: 15 }} />
-            <Text style={sectionTitleStyle}>{t('adminOrderDetail.editHistory')}</Text>
-          </div>
-          <div style={{ padding: isMobile ? 16 : 24 }}>
-            <Timeline
-              items={order.edit_history.map((h) => ({
-                color: '#d97706',
-                children: (
-                  <div>
-                    <div style={{ marginBottom: 4, fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
-                      {t(`adminOrderDetail.editField.${h.field_name}`) !== `adminOrderDetail.editField.${h.field_name}`
-                        ? t(`adminOrderDetail.editField.${h.field_name}`)
-                        : h.field_name}
-                    </div>
-                    <div style={{
-                      padding: '6px 10px', background: 'var(--bg-secondary)',
-                      borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)',
-                      wordBreak: 'break-word',
-                    }}>
-                      <div>
-                        <Text style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                          {t('adminOrderDetail.oldValue')}:
-                        </Text>{' '}
-                        <span style={{ textDecoration: 'line-through' }}>{h.old_value || '—'}</span>
-                      </div>
-                      <div>
-                        <Text style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>
-                          {t('adminOrderDetail.newValue')}:
-                        </Text>{' '}
-                        <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{h.new_value || '—'}</span>
-                      </div>
-                    </div>
-                    {h.changed_by_name && (
-                      <Text style={{ color: 'var(--text-secondary)', fontSize: 12, display: 'block', marginTop: 4 }}>
-                        {h.changed_by_name}
-                      </Text>
-                    )}
-                    <Text style={{ color: 'var(--text-tertiary)', fontSize: 11, marginTop: 2, display: 'block' }}>
-                      {new Date(h.changed_at).toLocaleString()}
-                    </Text>
-                  </div>
-                ),
-              }))}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Status History */}
       {order.status_history?.length > 0 && (
         <div style={sectionStyle}>
@@ -1251,11 +1303,17 @@ export default function AdminOrderDetailPage() {
         open={editModalOpen}
         onCancel={() => setEditModalOpen(false)}
         onOk={handleEditSave}
+        // Defer the map mount until the open animation finishes; tear it
+        // down again on close so it remounts fresh next time.
+        afterOpenChange={(open) => setEditMapReady(open)}
         title={t('adminOrderDetail.editDetails')}
         okText={t('adminOrderDetail.saveEdits')}
         cancelText={t('common.cancel')}
         confirmLoading={editSaving}
         width={isMobile ? '100%' : 680}
+        // Cap body height so the embedded map doesn't push the OK/Cancel
+        // footer below the fold. Title + footer stay anchored.
+        styles={{ body: { maxHeight: 'calc(85vh - 110px)', overflowY: 'auto', paddingRight: 8 } }}
         destroyOnClose
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -1264,25 +1322,37 @@ export default function AdminOrderDetailPage() {
             <Text strong style={{ display: 'block', marginBottom: 6 }}>
               {t('newOrder.pickupFrom')}
             </Text>
-            {editPickupStops.map((stop, idx) => (
-              <div key={`edit-pickup-${idx}`} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                <LocationAutocomplete
-                  value={stop.text}
-                  onChange={(val) => updateEditStop('pickup', idx, { text: val })}
-                  onSelect={({ address, lat, lng }) => updateEditStop('pickup', idx, { text: address, coords: { lat, lng } })}
-                  placeholder={editPickupStops.length > 1 ? `${t('newOrder.pickupFrom')} #${idx + 1}` : t('newOrder.pickupFrom')}
-                  countryCode="ge"
-                  style={{ flex: 1 }}
-                />
-                {editPickupStops.length > 1 && (
-                  <Button
-                    icon={<DeleteOutlined />}
-                    onClick={() => removeEditStop('pickup', idx)}
-                    danger
+            {editPickupStops.map((stop, idx) => {
+              const isActive = editActiveStop.type === 'pickup' && editActiveStop.index === idx;
+              return (
+                <div
+                  key={`edit-pickup-${idx}`}
+                  onClick={() => setEditActiveStop({ type: 'pickup', index: idx })}
+                  style={{
+                    display: 'flex', gap: 8, marginBottom: 8,
+                    padding: 4, borderRadius: 10,
+                    background: isActive ? 'var(--accent-bg)' : 'transparent',
+                    transition: 'background 0.15s ease',
+                  }}
+                >
+                  <LocationAutocomplete
+                    value={stop.text}
+                    onChange={(val) => updateEditStop('pickup', idx, { text: val })}
+                    onSelect={({ address, lat, lng }) => updateEditStop('pickup', idx, { text: address, coords: { lat, lng } })}
+                    placeholder={editPickupStops.length > 1 ? `${t('newOrder.pickupFrom')} #${idx + 1}` : t('newOrder.pickupFrom')}
+                    countryCode="ge"
+                    style={{ flex: 1 }}
                   />
-                )}
-              </div>
-            ))}
+                  {editPickupStops.length > 1 && (
+                    <Button
+                      icon={<DeleteOutlined />}
+                      onClick={(e) => { e.stopPropagation(); removeEditStop('pickup', idx); }}
+                      danger
+                    />
+                  )}
+                </div>
+              );
+            })}
             <Button
               size="small"
               icon={<PlusOutlined />}
@@ -1299,23 +1369,35 @@ export default function AdminOrderDetailPage() {
             <Text strong style={{ display: 'block', marginBottom: 6 }}>
               {t('orders.destination')}
             </Text>
-            {editDestStops.map((stop, idx) => (
-              <div key={`edit-dest-${idx}`} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                <LocationAutocomplete
-                  value={stop.text}
-                  onChange={(val) => updateEditStop('dest', idx, { text: val })}
-                  onSelect={({ address, lat, lng }) => updateEditStop('dest', idx, { text: address, coords: { lat, lng } })}
-                  placeholder={editDestStops.length > 1 ? `${t('orders.destination')} #${idx + 1}` : t('orders.destination')}
-                  countryCode="ge"
-                  style={{ flex: 1 }}
-                />
-                <Button
-                  icon={<DeleteOutlined />}
-                  onClick={() => removeEditStop('dest', idx)}
-                  danger
-                />
-              </div>
-            ))}
+            {editDestStops.map((stop, idx) => {
+              const isActive = editActiveStop.type === 'dest' && editActiveStop.index === idx;
+              return (
+                <div
+                  key={`edit-dest-${idx}`}
+                  onClick={() => setEditActiveStop({ type: 'dest', index: idx })}
+                  style={{
+                    display: 'flex', gap: 8, marginBottom: 8,
+                    padding: 4, borderRadius: 10,
+                    background: isActive ? '#ef44441a' : 'transparent',
+                    transition: 'background 0.15s ease',
+                  }}
+                >
+                  <LocationAutocomplete
+                    value={stop.text}
+                    onChange={(val) => updateEditStop('dest', idx, { text: val })}
+                    onSelect={({ address, lat, lng }) => updateEditStop('dest', idx, { text: address, coords: { lat, lng } })}
+                    placeholder={editDestStops.length > 1 ? `${t('orders.destination')} #${idx + 1}` : t('orders.destination')}
+                    countryCode="ge"
+                    style={{ flex: 1 }}
+                  />
+                  <Button
+                    icon={<DeleteOutlined />}
+                    onClick={(e) => { e.stopPropagation(); removeEditStop('dest', idx); }}
+                    danger
+                  />
+                </div>
+              );
+            })}
             <Button
               size="small"
               icon={<PlusOutlined />}
@@ -1326,6 +1408,82 @@ export default function AdminOrderDetailPage() {
               {t('newOrder.addDestStop')}
             </Button>
           </div>
+
+          {/* Map picker — admins can drop a pin on the map for the active stop.
+              Tabs above the map switch which stop the next click updates. */}
+          {(editPickupStops.length > 0 || editDestStops.length > 0) && (
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 6 }}>
+                {t('adminOrderDetail.locationMap')}
+              </Text>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {editPickupStops.map((_, idx) => {
+                  const isActive = editActiveStop.type === 'pickup' && editActiveStop.index === idx;
+                  return (
+                    <button
+                      key={`edit-pickup-tab-${idx}`}
+                      type="button"
+                      onClick={() => setEditActiveStop({ type: 'pickup', index: idx })}
+                      style={{
+                        padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        border: 'none', cursor: 'pointer',
+                        background: isActive ? 'var(--accent)' : 'var(--bg-tertiary)',
+                        color: isActive ? '#fff' : 'var(--text-secondary)',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <EnvironmentOutlined style={{ marginRight: 4, fontSize: 11 }} />
+                      {editPickupStops.length > 1
+                        ? `${t('newOrder.pickupMap')} ${idx + 1}`
+                        : t('newOrder.pickupMap')}
+                    </button>
+                  );
+                })}
+                {editDestStops.map((_, idx) => {
+                  const isActive = editActiveStop.type === 'dest' && editActiveStop.index === idx;
+                  return (
+                    <button
+                      key={`edit-dest-tab-${idx}`}
+                      type="button"
+                      onClick={() => setEditActiveStop({ type: 'dest', index: idx })}
+                      style={{
+                        padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        border: 'none', cursor: 'pointer',
+                        background: isActive ? '#ef4444' : 'var(--bg-tertiary)',
+                        color: isActive ? '#fff' : 'var(--text-secondary)',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <EnvironmentOutlined style={{ marginRight: 4, fontSize: 11 }} />
+                      {editDestStops.length > 1
+                        ? `${t('newOrder.destinationMap')} ${idx + 1}`
+                        : t('newOrder.destinationMap')}
+                    </button>
+                  );
+                })}
+              </div>
+              {editMapReady ? (
+                <MapPicker
+                  position={editActivePosition}
+                  onSelect={handleMapPickEdit}
+                  height={isMobile ? 240 : 320}
+                  markerColor={editActiveStop.type === 'dest' ? 'red' : 'green'}
+                  placeholder={editActiveStop.type === 'dest'
+                    ? t('newOrder.tapDestination')
+                    : t('newOrder.tapPickup')}
+                  extraMarkers={editExtraMarkers}
+                />
+              ) : (
+                // Map placeholder during the modal's open animation.
+                <div style={{
+                  height: isMobile ? 240 : 320,
+                  borderRadius: 12,
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--bg-secondary)',
+                }} />
+              )}
+            </div>
+          )}
 
           {/* Date + Time */}
           <div style={{ display: 'flex', gap: 8 }}>
