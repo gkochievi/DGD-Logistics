@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Table, Select, Button, Input, Typography, Space, Grid, Empty, Badge, DatePicker, TimePicker,
-  Modal, message,
+  Modal, message, Tag,
 } from 'antd';
 import {
   EyeOutlined, SearchOutlined, RightOutlined, FilterOutlined, UserOutlined,
@@ -86,6 +86,18 @@ export default function AdminOrdersPage({ historyMode = false }) {
 
   useEffect(() => { fetchOrders(); }, [searchParams, historyMode]); // eslint-disable-line
 
+  // Debounced search-as-you-type. Skip the first render so the searchParams
+  // effect above isn't followed by a duplicate fetch on initial load.
+  const firstSearchRef = useRef(true);
+  useEffect(() => {
+    if (firstSearchRef.current) {
+      firstSearchRef.current = false;
+      return;
+    }
+    const handler = setTimeout(() => fetchOrders(1), 350);
+    return () => clearTimeout(handler);
+  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useRealtimeRefresh(useCallback(() => {
     fetchOrders(pagination.current, { silent: true });
   }, [fetchOrders, pagination.current]));
@@ -113,7 +125,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
     return match ? match[1] : fallback;
   };
 
-  const buildActiveFilterParams = () => {
+  const buildActiveFilterParams = ({ includeHistoryDefault = true } = {}) => {
     const params = {};
     const status = searchParams.get('status');
     const urgency = searchParams.get('urgency');
@@ -133,11 +145,84 @@ export default function AdminOrdersPage({ historyMode = false }) {
     if (requestedTime) params.requested_time = requestedTime;
     if (vehicleId) params.assigned_vehicle = vehicleId;
     if (search) params.search = search;
-    if (historyMode && !status) params.status = 'completed';
+    if (historyMode && includeHistoryDefault && !status) params.status = 'completed';
     return params;
   };
 
-  const activeFilterCount = Object.keys(buildActiveFilterParams()).length;
+  // Count only user-selected filters; the implicit history-mode `completed`
+  // filter shouldn't show up in the "N filters will be applied" chip.
+  const activeFilterCount = Object.keys(buildActiveFilterParams({ includeHistoryDefault: false })).length;
+
+  const buildActiveFilterChips = () => {
+    const chips = [];
+    if (search) {
+      chips.push({
+        key: 'search',
+        icon: <SearchOutlined />,
+        label: search,
+        onClose: () => setSearch(''),
+      });
+    }
+    const statusVal = searchParams.get('status');
+    if (statusVal) {
+      chips.push({
+        key: 'status',
+        label: `${t('adminOrders.status')}: ${t('status.' + statusVal)}`,
+        onClose: () => updateFilter('status', null),
+      });
+    }
+    const urgencyVal = searchParams.get('urgency');
+    if (urgencyVal) {
+      chips.push({
+        key: 'urgency',
+        label: `${t('adminOrders.urgencyLabel')}: ${t('urgency.' + urgencyVal)}`,
+        onClose: () => updateFilter('urgency', null),
+      });
+    }
+    const serviceVal = searchParams.get('service');
+    if (serviceVal) {
+      const cat = categories.find((c) => String(c.id) === serviceVal);
+      chips.push({
+        key: 'service',
+        label: `${t('adminOrders.service')}: ${localized(cat?.name) || `#${serviceVal}`}`,
+        onClose: () => updateFilter('service', null),
+      });
+    }
+    const vehicleVal = searchParams.get('vehicle');
+    if (vehicleVal) {
+      const v = vehicles.find((vv) => String(vv.id) === vehicleVal);
+      chips.push({
+        key: 'vehicle',
+        label: `${t('adminOrders.vehicle')}: ${v ? `${v.name} (${v.plate_number})` : `#${vehicleVal}`}`,
+        onClose: () => updateFilter('vehicle', null),
+      });
+    }
+    const dateFrom = searchParams.get('requested_date_from');
+    const dateTo = searchParams.get('requested_date_to');
+    if (dateFrom && dateTo) {
+      chips.push({
+        key: 'date_range',
+        label: `${t('orders.date')}: ${dateFrom} → ${dateTo}`,
+        onClose: () => {
+          const params = Object.fromEntries(searchParams.entries());
+          delete params.requested_date_from;
+          delete params.requested_date_to;
+          setSearchParams(params);
+        },
+      });
+    }
+    const timeVal = searchParams.get('requested_time');
+    if (timeVal) {
+      chips.push({
+        key: 'time',
+        label: `${t('orders.time')}: ${timeVal}`,
+        onClose: () => updateFilter('requested_time', null),
+      });
+    }
+    return chips;
+  };
+
+  const activeFilterChips = buildActiveFilterChips();
 
   const handleExportOrders = async () => {
     const params = buildActiveFilterParams();
@@ -374,27 +459,27 @@ export default function AdminOrdersPage({ historyMode = false }) {
         }}>
           <FilterOutlined style={{ fontSize: 13 }} />
           <Text style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Filters
+            {t('common.filters')}
           </Text>
         </div>
-        <Space wrap size={isMobile ? 'small' : 'middle'} style={{ width: '100%' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: isMobile ? 8 : 12,
+        }}>
           <Input
             placeholder={t('adminOrders.searchUsers')}
             prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
             allowClear
-            style={{
-              width: isMobile ? '100%' : 220,
-              borderRadius: 10,
-            }}
+            style={{ width: '100%', borderRadius: 10 }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onPressEnter={() => fetchOrders()}
             size={isMobile ? 'large' : 'middle'}
           />
           <Select
             placeholder={t('adminOrders.status')}
             allowClear
-            style={{ width: isMobile ? 120 : 150, borderRadius: 10 }}
+            style={{ width: '100%', borderRadius: 10 }}
             value={searchParams.get('status') || undefined}
             onChange={(val) => updateFilter('status', val)}
             options={STATUS_OPTIONS}
@@ -402,7 +487,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
           <Select
             placeholder={t('adminOrders.urgencyLabel')}
             allowClear
-            style={{ width: isMobile ? 110 : 130 }}
+            style={{ width: '100%' }}
             value={searchParams.get('urgency') || undefined}
             onChange={(val) => updateFilter('urgency', val)}
             options={URGENCY_OPTIONS}
@@ -410,7 +495,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
           <Select
             placeholder={t('adminOrders.service')}
             allowClear
-            style={{ width: isMobile ? 140 : 170 }}
+            style={{ width: '100%' }}
             value={searchParams.get('service') || undefined}
             onChange={(val) => updateFilter('service', val)}
             showSearch
@@ -420,7 +505,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
           <Select
             placeholder={t('adminOrders.vehicle')}
             allowClear
-            style={{ width: isMobile ? 160 : 200 }}
+            style={{ width: '100%' }}
             value={searchParams.get('vehicle') || undefined}
             onChange={(val) => updateFilter('vehicle', val)}
             showSearch
@@ -447,7 +532,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
               setSearchParams(params);
             }}
             placeholder={[t('orders.date'), t('orders.date')]}
-            style={{ borderRadius: 10 }}
+            style={{ width: '100%', borderRadius: 10 }}
           />
           <TimePicker
             format="HH:mm"
@@ -458,10 +543,59 @@ export default function AdminOrdersPage({ historyMode = false }) {
               updateFilter('requested_time', val ? val.format('HH:mm') : null);
             }}
             placeholder={t('orders.time')}
-            style={{ borderRadius: 10, width: isMobile ? 120 : 140 }}
+            style={{ width: '100%', borderRadius: 10 }}
           />
-        </Space>
+        </div>
       </div>
+
+      {activeFilterChips.length > 0 && (
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          marginBottom: 20,
+        }}>
+          {activeFilterChips.map((chip) => (
+            <Tag
+              key={chip.key}
+              closable
+              icon={chip.icon}
+              onClose={(e) => { e.preventDefault(); chip.onClose(); }}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 8,
+                fontSize: 13,
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-primary)',
+                margin: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              {chip.label}
+            </Tag>
+          ))}
+          <Button
+            type="link"
+            size="small"
+            icon={<CloseOutlined />}
+            onClick={() => {
+              setSearch('');
+              const params = Object.fromEntries(searchParams.entries());
+              [
+                'status', 'urgency', 'service', 'vehicle',
+                'requested_date_from', 'requested_date_to', 'requested_time',
+              ].forEach((k) => delete params[k]);
+              setSearchParams(params);
+            }}
+            style={{ padding: '0 8px', height: 28, fontWeight: 500 }}
+          >
+            {t('common.clearFilters')}
+          </Button>
+        </div>
+      )}
 
       {/* Content */}
       {isMobile ? (
