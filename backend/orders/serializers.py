@@ -66,6 +66,12 @@ class OrderListSerializer(serializers.ModelSerializer):
     urgency_display = serializers.CharField(source='get_urgency_display', read_only=True)
     image_count = serializers.IntegerField(source='images.count', read_only=True)
     is_unread = serializers.SerializerMethodField()
+    # Light-weight customer summary fields. Avoid embedding the full
+    # UserSerializer here — the admin orders list only needs name + email +
+    # phone for the Customer column, and this keeps the payload small.
+    user_full_name = serializers.CharField(source='user.full_name', read_only=True, default='')
+    user_email = serializers.CharField(source='user.email', read_only=True, default='')
+    user_phone = serializers.CharField(source='user.phone_number', read_only=True, default='')
 
     def _primary_selected(self, obj):
         return obj.selected_service or obj.selected_category
@@ -112,7 +118,9 @@ class OrderListSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'pickup_location', 'destination_location', 'requested_date',
-            'requested_time', 'contact_name', 'status', 'status_display',
+            'requested_time', 'contact_name', 'contact_phone',
+            'user_full_name', 'user_email', 'user_phone',
+            'status', 'status_display',
             'urgency', 'urgency_display', 'selected_category_name',
             'selected_category_icon', 'selected_category_image', 'selected_category_color',
             'final_category_name', 'is_cancellable', 'image_count', 'created_at',

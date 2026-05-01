@@ -182,7 +182,9 @@ class AdminOrderListView(generics.ListAPIView):
     ordering_fields = ['created_at', 'requested_date', 'status', 'urgency']
 
     def get_queryset(self):
-        qs = Order.objects.all()
+        # `user` is needed for every row of the admin orders list (Customer
+        # column). select_related avoids one User query per visible order.
+        qs = Order.objects.select_related('user').all()
         user_id = self.request.query_params.get('user_id')
         if user_id:
             qs = qs.filter(user_id=user_id)

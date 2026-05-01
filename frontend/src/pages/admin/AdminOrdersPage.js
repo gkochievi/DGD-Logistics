@@ -193,11 +193,54 @@ export default function AdminOrdersPage({ historyMode = false }) {
       ),
     },
     {
-      title: t('orders.pickup'), dataIndex: 'pickup_location', ellipsis: true,
-      render: (text) => <span style={{ fontWeight: 500 }}>{text}</span>,
+      title: t('adminOrders.customer'),
+      key: 'customer',
+      width: 240,
+      render: (_, r) => {
+        // Show the customer's account name when present, fall back to the
+        // contact_name typed on the order. Secondary line lists email +
+        // phone (account first, contact second), separated by · and trimmed
+        // to one line so the row stays compact.
+        const primaryName = r.user_full_name || r.contact_name || '—';
+        const phone = r.user_phone || r.contact_phone;
+        const meta = [r.user_email, phone].filter(Boolean).join(' · ');
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, lineHeight: 1.3 }}>
+            <span style={{
+              fontWeight: 600, color: 'var(--text-primary)',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {primaryName}
+            </span>
+            {meta && (
+              <span style={{
+                fontSize: 11, color: 'var(--text-tertiary)',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {meta}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     { title: t('adminOrders.service'), dataIndex: 'selected_category_name', width: 140, ellipsis: true, render: (v) => localized(v) },
-    { title: t('orders.date'), dataIndex: 'requested_date', width: 110 },
+    {
+      title: t('orders.date'),
+      key: 'date_time',
+      width: 140,
+      render: (_, r) => (
+        <span>
+          {r.requested_date || '—'}
+          {r.requested_time && (
+            <span style={{ color: 'var(--text-tertiary)', marginLeft: 6 }}>
+              {/* DB ships HH:MM:SS — strip seconds for display. */}
+              {String(r.requested_time).slice(0, 5)}
+            </span>
+          )}
+        </span>
+      ),
+    },
     { title: t('adminOrders.status'), dataIndex: 'status', width: 130, render: (s) => <StatusBadge status={s} /> },
     { title: t('adminOrders.urgencyLabel'), dataIndex: 'urgency', width: 100, render: (u) => <UrgencyBadge urgency={u} /> },
     {
@@ -461,6 +504,23 @@ export default function AdminOrdersPage({ historyMode = false }) {
                     </Text>
                     <StatusBadge status={order.status} />
                   </div>
+                  {(order.user_full_name || order.contact_name) && (
+                    <div style={{
+                      fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}>
+                      <UserOutlined style={{ fontSize: 11, color: 'var(--text-tertiary)' }} />
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {order.user_full_name || order.contact_name}
+                      </span>
+                      {(order.user_phone || order.contact_phone) && (
+                        <span style={{ color: 'var(--text-tertiary)' }}>
+                          · {order.user_phone || order.contact_phone}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div style={{
                     fontSize: 14, fontWeight: 500,
                     color: 'var(--text-primary)', marginBottom: 6,
@@ -473,7 +533,9 @@ export default function AdminOrdersPage({ historyMode = false }) {
                     alignItems: 'center',
                   }}>
                     <Text style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                      {order.requested_date} · {localized(order.selected_category_name) || '—'} · <UrgencyBadge urgency={order.urgency} />
+                      {order.requested_date}
+                      {order.requested_time && ` ${String(order.requested_time).slice(0, 5)}`}
+                      {' · '}{localized(order.selected_category_name) || '—'} · <UrgencyBadge urgency={order.urgency} />
                     </Text>
                     <Space size={0}>
                       <Button
@@ -520,6 +582,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
             rowKey="id"
             loading={loading}
             size="middle"
+            scroll={{ x: 'max-content' }}
             pagination={{
               ...pagination,
               onChange: fetchOrders,
