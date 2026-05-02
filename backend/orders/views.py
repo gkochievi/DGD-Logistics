@@ -179,7 +179,7 @@ class AdminOrderListView(generics.ListAPIView):
         'user__email', 'user__phone_number', 'user__company_name',
         'contact_name', 'contact_phone',
     ]
-    ordering_fields = ['created_at', 'requested_date', 'status', 'urgency']
+    ordering_fields = ['id', 'created_at', 'requested_date', 'status', 'urgency']
 
     def get_queryset(self):
         # `user` is needed for every row of the admin orders list (Customer

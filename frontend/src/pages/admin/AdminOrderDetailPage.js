@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Typography, Spin, Button, Timeline, Image, Space,
-  Select, Input, InputNumber, message, Empty, Grid, Divider, DatePicker, TimePicker, Tag, Alert, Modal,
+  Select, Input, InputNumber, message, Empty, Grid, Divider, DatePicker, TimePicker, Tag, Alert, Modal, Tooltip,
 } from 'antd';
 import dayjs from 'dayjs';
 import { useRealtimeRefresh, useNotifications } from '../../contexts/NotificationContext';
@@ -12,6 +12,8 @@ import {
   PhoneOutlined, SendOutlined, CheckCircleOutlined,
   EditOutlined, PlusOutlined, DeleteOutlined,
   InfoCircleOutlined, SettingOutlined,
+  CopyOutlined, MailOutlined, DownloadOutlined, TeamOutlined,
+  ExclamationCircleFilled, RightOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
@@ -44,7 +46,10 @@ export default function AdminOrderDetailPage() {
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [newStatus, setNewStatus] = useState('');
-  const [comment, setComment] = useState('');
+  // Use `null` as the "user hasn't touched the textarea" sentinel — mirrors
+  // the priceDraft pattern. `''` is a real user state (a deliberate clear),
+  // so silent refreshes must not overwrite it back to admin_comment.
+  const [comment, setComment] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [priceDraft, setPriceDraft] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -119,7 +124,10 @@ export default function AdminOrderDetailPage() {
     return api.get(`/orders/admin/${id}/`).then(({ data }) => {
       setOrder(data);
       setNewStatus((prev) => prev || data.status);
-      setComment((prev) => (prev ? prev : data.admin_comment || ''));
+      // Don't fill comment from server — `comment === null` means
+      // "untouched" and the textarea falls back to data.admin_comment via
+      // its render expression. Setting the string here would clobber a
+      // user-cleared textarea on every silent refresh.
       setPriceDraft((prev) => (prev !== null ? prev : (data.price !== null && data.price !== undefined ? Math.round(Number(data.price)) : null)));
       // backend auto-marks this order as read; refresh the bell badge quickly
       refreshNotifications();
@@ -141,7 +149,8 @@ export default function AdminOrderDetailPage() {
         comment: effectiveComment,
       });
       message.success(t('adminOrderDetail.statusUpdated'));
-      setComment('');
+      // Reset to "untouched" so the next fetch's admin_comment shows through.
+      setComment(null);
       fetchOrder();
     } catch (err) {
       message.error(extractApiError(err, t('adminOrderDetail.statusUpdateFailed')));
@@ -155,7 +164,9 @@ export default function AdminOrderDetailPage() {
       message.warning(t('adminOrderDetail.selectDifferent'));
       return;
     }
-    const effectiveComment = (comment || order.admin_comment || '').trim();
+    // Falsy-||-fallback would re-inherit admin_comment when the user has
+    // intentionally cleared the textarea; check explicitly against null.
+    const effectiveComment = (comment !== null ? comment : (order.admin_comment || '')).trim();
     if (newStatus === 'rejected' && !effectiveComment) {
       message.error(t('adminOrderDetail.rejectCommentRequired'));
       return;
@@ -296,7 +307,7 @@ export default function AdminOrderDetailPage() {
           }
           await api.post(`/orders/admin/${id}/status/`, {
             status: 'offer_sent',
-            comment: (comment || order.admin_comment || '').trim(),
+            comment: (comment !== null ? comment : (order.admin_comment || '')).trim(),
           });
           message.success(t('adminOrderDetail.offerSentSuccess'));
           fetchOrder();
@@ -311,7 +322,8 @@ export default function AdminOrderDetailPage() {
 
   const handleCommentSave = async () => {
     try {
-      await api.patch(`/orders/admin/${id}/`, { admin_comment: comment || order.admin_comment });
+      const value = comment !== null ? comment : (order.admin_comment || '');
+      await api.patch(`/orders/admin/${id}/`, { admin_comment: value });
       message.success(t('adminOrderDetail.commentSaved'));
       fetchOrder();
     } catch {
@@ -498,6 +510,107 @@ export default function AdminOrderDetailPage() {
     ...destStops.filter(s => s.lat && s.lng).map(s => ({ position: [s.lat, s.lng], color: 'red' })),
   ];
 
+  // ─── Quick-actions helpers ────────────────────────────────────────────
+  const customerEmail = order.user_detail?.email || '';
+  const customerPhone = order.contact_phone || order.user_detail?.phone_number || '';
+  const pickupAddress = pickupStops[0]?.address || '';
+  const formatStopForMaps = (s) => {
+    if (!s) return null;
+    if (Number.isFinite(s.lat) && Number.isFinite(s.lng)) return `${s.lat},${s.lng}`;
+    return s.address ? encodeURIComponent(s.address) : null;
+  };
+  const mapsUrl = (() => {
+    const origin = formatStopForMaps(pickupStops[0]);
+    if (!origin) return null;
+    const dest = formatStopForMaps(destStops[0]);
+    if (!dest) return `https://www.google.com/maps/search/?api=1&query=${origin}`;
+    return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`;
+  })();
+  const handleCopyPickup = async () => {
+    if (!pickupAddress) return;
+    try {
+      await navigator.clipboard.writeText(pickupAddress);
+      message.success(t('adminOrderDetail.pickupCopied'));
+    } catch {
+      message.error(t('adminOrderDetail.copyFailed'));
+    }
+  };
+  const handleDownloadCsv = async () => {
+    try {
+      const resp = await api.get(`/orders/admin/${id}/export/`, { responseType: 'blob' });
+      const disposition = resp.headers?.['content-disposition'] || '';
+      const match = /filename="?([^";]+)"?/.exec(disposition);
+      const filename = match ? match[1] : `order_${id}.csv`;
+      const url = window.URL.createObjectURL(resp.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      message.error(t('adminOrders.exportFailed'));
+    }
+  };
+  const goToCustomerOrders = () => {
+    if (!order.user) return;
+    const params = new URLSearchParams({ user_id: String(order.user) });
+    const userName = order.user_detail?.full_name || order.contact_name || '';
+    if (userName) params.set('user_name', userName);
+    navigate(`/admin/orders?${params.toString()}`);
+  };
+
+  // ─── Next-step checklist ──────────────────────────────────────────────
+  // Smooth-scroll a panel anchor into view; matches the IDs we set on the
+  // assignment fields below so each unmet item is one click away.
+  const scrollToAnchor = (anchorId) => {
+    const el = document.getElementById(anchorId);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  const finalServiceAssigned = Boolean(order.final_service);
+  const checklistItems = [
+    {
+      key: 'service',
+      done: finalServiceAssigned,
+      label: t(finalServiceAssigned ? 'adminOrderDetail.checklistServiceDone' : 'adminOrderDetail.checklistServiceTodo'),
+      anchor: 'admin-final-service',
+    },
+    {
+      key: 'vehicle',
+      done: Boolean(order.assigned_vehicle),
+      label: t(order.assigned_vehicle ? 'adminOrderDetail.checklistVehicleDone' : 'adminOrderDetail.checklistVehicleTodo'),
+      anchor: 'admin-assign-vehicle',
+    },
+    {
+      key: 'driver',
+      done: Boolean(order.assigned_driver),
+      label: t(order.assigned_driver ? 'adminOrderDetail.checklistDriverDone' : 'adminOrderDetail.checklistDriverTodo'),
+      anchor: 'admin-assign-driver',
+    },
+    {
+      key: 'price',
+      done: priceIsSet,
+      label: t(priceIsSet ? 'adminOrderDetail.checklistPriceDone' : 'adminOrderDetail.checklistPriceTodo'),
+      anchor: 'admin-set-price',
+    },
+  ];
+  const NEXT_STEP_BY_STATUS = {
+    new: 'adminOrderDetail.nextStepNew',
+    under_review: 'adminOrderDetail.nextStepUnderReview',
+    offer_sent: 'adminOrderDetail.nextStepOfferSent',
+    approved: 'adminOrderDetail.nextStepApproved',
+    in_progress: 'adminOrderDetail.nextStepInProgress',
+    completed: 'adminOrderDetail.nextStepCompleted',
+  };
+  const nextStepLabel = NEXT_STEP_BY_STATUS[order.status]
+    ? t(NEXT_STEP_BY_STATUS[order.status])
+    : null;
+  // Show checklist only while preparing the offer; once the offer is sent
+  // (or the order is terminal), the right-column alerts already convey
+  // the next admin action.
+  const showChecklist = !isTerminal && (order.status === 'new' || order.status === 'under_review');
+
   // ─── In-modal map state derived from the live edit form ───
   const editActiveList = editActiveStop.type === 'pickup' ? editPickupStops : editDestStops;
   const editActiveStopData = editActiveList[editActiveStop.index];
@@ -655,7 +768,7 @@ export default function AdminOrderDetailPage() {
         )}
 
         {/* Assign Service */}
-        <div style={{ marginBottom: 24 }}>
+        <div id="admin-final-service" style={{ marginBottom: 24, scrollMarginTop: 80 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <TagOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
             <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
@@ -676,7 +789,7 @@ export default function AdminOrderDetailPage() {
         <Divider style={{ borderColor: 'var(--border-color)' }} />
 
         {/* Assign Vehicle */}
-        <div style={{ marginBottom: 24 }}>
+        <div id="admin-assign-vehicle" style={{ marginBottom: 24, scrollMarginTop: 80 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <CarOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
             <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
@@ -777,7 +890,7 @@ export default function AdminOrderDetailPage() {
         <Divider style={{ borderColor: 'var(--border-color)' }} />
 
         {/* Assign Driver */}
-        <div style={{ marginBottom: 24 }}>
+        <div id="admin-assign-driver" style={{ marginBottom: 24, scrollMarginTop: 80 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <UserOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
             <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
@@ -904,7 +1017,7 @@ export default function AdminOrderDetailPage() {
         <Divider style={{ borderColor: 'var(--border-color)' }} />
 
         {/* Set Price */}
-        <div style={{ marginBottom: 24 }}>
+        <div id="admin-set-price" style={{ marginBottom: 24, scrollMarginTop: 80 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <DollarOutlined style={{ color: '#10b981', fontSize: 14 }} />
             <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
@@ -1042,10 +1155,10 @@ export default function AdminOrderDetailPage() {
           )}
           <TextArea
             rows={3}
-            value={comment || order.admin_comment || ''}
+            value={comment !== null ? comment : (order.admin_comment || '')}
             onChange={(e) => setComment(e.target.value)}
             placeholder={t('adminOrderDetail.addComment')}
-            status={newStatus === 'rejected' && !(comment || order.admin_comment || '').trim() ? 'error' : undefined}
+            status={newStatus === 'rejected' && !(comment !== null ? comment : (order.admin_comment || '')).trim() ? 'error' : undefined}
             disabled={isTerminal}
             style={{ borderRadius: 10 }}
           />
@@ -1095,12 +1208,14 @@ export default function AdminOrderDetailPage() {
         <StatusBadge status={order.status} />
       </div>
 
-      {/* Summary strip — surfaces the most-glanced facts so admin doesn't
-          need to scroll into Descriptions on every visit. */}
+      {/* Summary strip — surfaces the most-glanced facts (left) and the
+          quick-action shortcuts (right). Wraps to two rows on narrow
+          viewports so the actions stay tappable. */}
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'center',
+        justifyContent: 'space-between',
         gap: isMobile ? 8 : 12,
         marginBottom: isMobile ? 16 : 24,
         padding: isMobile ? '10px 14px' : '12px 18px',
@@ -1109,40 +1224,190 @@ export default function AdminOrderDetailPage() {
         borderRadius: 12,
         fontSize: 13,
       }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <UserOutlined style={{ color: 'var(--text-tertiary)' }} />
-          <span style={{
-            fontWeight: 600, color: 'var(--text-primary)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {order.user_detail?.full_name || order.contact_name || '—'}
-          </span>
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center',
+          gap: isMobile ? 8 : 12, minWidth: 0,
+        }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <UserOutlined style={{ color: 'var(--text-tertiary)' }} />
+            <span style={{
+              fontWeight: 600, color: 'var(--text-primary)',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {order.user_detail?.full_name || order.contact_name || '—'}
+            </span>
+          </div>
+          <span style={{ color: 'var(--text-tertiary)' }}>·</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <ClockCircleOutlined style={{ color: 'var(--text-tertiary)' }} />
+            <span style={{ color: 'var(--text-primary)' }}>
+              {order.requested_date || '—'}
+              {order.requested_time && (
+                <span style={{ color: 'var(--text-tertiary)', marginLeft: 6 }}>
+                  {String(order.requested_time).slice(0, 5)}
+                </span>
+              )}
+            </span>
+          </div>
+          <span style={{ color: 'var(--text-tertiary)' }}>·</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <DollarOutlined style={{ color: 'var(--text-tertiary)' }} />
+            <span style={{
+              fontWeight: 600,
+              color: priceIsSet ? 'var(--accent)' : 'var(--text-tertiary)',
+            }}>
+              {priceIsSet
+                ? `${currency.symbol}${Number(order.price).toLocaleString()}`
+                : '—'}
+            </span>
+          </div>
         </div>
-        <span style={{ color: 'var(--text-tertiary)' }}>·</span>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <ClockCircleOutlined style={{ color: 'var(--text-tertiary)' }} />
-          <span style={{ color: 'var(--text-primary)' }}>
-            {order.requested_date || '—'}
-            {order.requested_time && (
-              <span style={{ color: 'var(--text-tertiary)', marginLeft: 6 }}>
-                {String(order.requested_time).slice(0, 5)}
-              </span>
-            )}
-          </span>
-        </div>
-        <span style={{ color: 'var(--text-tertiary)' }}>·</span>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <DollarOutlined style={{ color: 'var(--text-tertiary)' }} />
-          <span style={{
-            fontWeight: 600,
-            color: priceIsSet ? 'var(--accent)' : 'var(--text-tertiary)',
-          }}>
-            {priceIsSet
-              ? `${currency.symbol}${Number(order.price).toLocaleString()}`
-              : '—'}
-          </span>
-        </div>
+        <Space size={2} wrap>
+          {customerPhone && (
+            <Tooltip title={t('adminOrderDetail.callCustomer')}>
+              <Button
+                type="text"
+                size="small"
+                icon={<PhoneOutlined />}
+                href={`tel:${customerPhone}`}
+                style={{ color: 'var(--text-secondary)' }}
+              />
+            </Tooltip>
+          )}
+          {pickupAddress && (
+            <Tooltip title={t('adminOrderDetail.copyPickup')}>
+              <Button
+                type="text"
+                size="small"
+                icon={<CopyOutlined />}
+                onClick={handleCopyPickup}
+                style={{ color: 'var(--text-secondary)' }}
+              />
+            </Tooltip>
+          )}
+          {mapsUrl && (
+            <Tooltip title={t('adminOrderDetail.openInMaps')}>
+              <Button
+                type="text"
+                size="small"
+                icon={<EnvironmentOutlined />}
+                href={mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--text-secondary)' }}
+              />
+            </Tooltip>
+          )}
+          {customerEmail && (
+            <Tooltip title={t('adminOrderDetail.emailCustomer')}>
+              <Button
+                type="text"
+                size="small"
+                icon={<MailOutlined />}
+                href={`mailto:${customerEmail}`}
+                style={{ color: 'var(--text-secondary)' }}
+              />
+            </Tooltip>
+          )}
+          {order.user && (
+            <Tooltip title={t('adminOrderDetail.viewCustomerOrders')}>
+              <Button
+                type="text"
+                size="small"
+                icon={<TeamOutlined />}
+                onClick={goToCustomerOrders}
+                style={{ color: 'var(--text-secondary)' }}
+              />
+            </Tooltip>
+          )}
+          <Tooltip title={t('adminOrderDetail.downloadCsv')}>
+            <Button
+              type="text"
+              size="small"
+              icon={<DownloadOutlined />}
+              onClick={handleDownloadCsv}
+              style={{ color: 'var(--text-secondary)' }}
+            />
+          </Tooltip>
+        </Space>
       </div>
+
+      {/* Next-step checklist — replaces "scroll-and-hunt" with a single
+          glance: what's the next action, and which fields still block it.
+          Each missing item is clickable and scrolls to the matching input
+          in the admin actions panel. Hidden once the offer is sent (the
+          right-column alerts take over from there) and on terminal states. */}
+      {showChecklist && nextStepLabel && (
+        <div style={{
+          marginBottom: isMobile ? 16 : 24,
+          padding: isMobile ? '14px 16px' : '16px 20px',
+          background: 'var(--card-bg)',
+          border: '1px solid var(--border-color)',
+          borderLeft: `4px solid ${readyToSendOffer ? 'var(--accent)' : '#f59e0b'}`,
+          borderRadius: 12,
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+          }}>
+            <span style={{
+              fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
+              textTransform: 'uppercase', letterSpacing: '0.06em',
+            }}>
+              {t('adminOrderDetail.nextStep')}
+            </span>
+            <span style={{ color: 'var(--text-tertiary)' }}>·</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {nextStepLabel}
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {checklistItems.map((item) => {
+              const Wrapper = item.done ? 'div' : 'button';
+              const wrapperProps = item.done
+                ? {}
+                : {
+                  type: 'button',
+                  onClick: () => scrollToAnchor(item.anchor),
+                };
+              return (
+                <Wrapper
+                  key={item.key}
+                  {...wrapperProps}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '6px 8px',
+                    borderRadius: 8,
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: item.done ? 'default' : 'pointer',
+                    textAlign: 'left',
+                    color: 'inherit',
+                    fontSize: 13,
+                    transition: 'background 0.15s ease',
+                  }}
+                  onMouseEnter={item.done ? undefined : (e) => { e.currentTarget.style.background = 'var(--bg-secondary)'; }}
+                  onMouseLeave={item.done ? undefined : (e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  {item.done
+                    ? <CheckCircleOutlined style={{ color: '#10b981', fontSize: 15 }} />
+                    : <ExclamationCircleFilled style={{ color: '#f59e0b', fontSize: 15 }} />}
+                  <span style={{
+                    flex: 1,
+                    color: item.done ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                    textDecoration: item.done ? 'line-through' : 'none',
+                    fontWeight: item.done ? 400 : 600,
+                  }}>
+                    {item.label}
+                  </span>
+                  {!item.done && <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 11 }} />}
+                </Wrapper>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Two-column section layout on wide screens. Outer flex stacks the
           left column (Order Info + Map + Images + History) next to the right
@@ -1840,17 +2105,17 @@ export default function AdminOrderDetailPage() {
           {/* Urgency */}
           <div>
             <Text style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'var(--text-tertiary)' }}>
-              {t('orders.assigned')}
+              {t('adminOrders.urgencyLabel')}
             </Text>
             <Select
               value={editUrgency}
               onChange={setEditUrgency}
               style={{ width: '100%' }}
               options={[
-                { value: 'low', label: t('status.low') },
-                { value: 'normal', label: t('status.normal') },
-                { value: 'high', label: t('status.high') },
-                { value: 'urgent', label: t('status.urgent') },
+                { value: 'low', label: t('urgency.low') },
+                { value: 'normal', label: t('urgency.normal') },
+                { value: 'high', label: t('urgency.high') },
+                { value: 'urgent', label: t('urgency.urgent') },
               ]}
             />
           </div>

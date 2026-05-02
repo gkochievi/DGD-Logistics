@@ -34,6 +34,10 @@ export default function AdminOrdersPage({ historyMode = false }) {
   const [categories, setCategories] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [search, setSearch] = useState('');
+  // Server-side sort. Stored as a DRF-style `ordering` string: e.g.
+  // `requested_date` (ascending) or `-status` (descending). Backend
+  // whitelist lives in OrdersAdminListView.ordering_fields.
+  const [ordering, setOrdering] = useState(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportRange, setExportRange] = useState(null);
   const [exporting, setExporting] = useState(false);
@@ -71,6 +75,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
     if (requestedTime) params.requested_time = requestedTime;
     if (vehicleId) params.assigned_vehicle = vehicleId;
     if (search) params.search = search;
+    if (ordering) params.ordering = ordering;
 
     if (historyMode) {
       if (!status) params.status = 'completed';
@@ -82,9 +87,9 @@ export default function AdminOrdersPage({ historyMode = false }) {
       setPagination((p) => ({ ...p, current: page, total: data.count || results.length }));
     }).catch(() => {})
       .finally(() => { if (!silent) setLoading(false); });
-  }, [searchParams, search, historyMode]);
+  }, [searchParams, search, historyMode, ordering]);
 
-  useEffect(() => { fetchOrders(); }, [searchParams, historyMode]); // eslint-disable-line
+  useEffect(() => { fetchOrders(); }, [searchParams, historyMode, ordering]); // eslint-disable-line
 
   // Debounced search-as-you-type. Skip the first render so the searchParams
   // effect above isn't followed by a duplicate fetch on initial load.
@@ -259,9 +264,41 @@ export default function AdminOrdersPage({ historyMode = false }) {
 
   const isMobile = !screens.md;
 
+  // Map AntD column identifiers to DRF ordering field names. The date column
+  // uses key='date_time' for React reconciliation but ships back as
+  // `requested_date` to match the backend whitelist.
+  const SORT_FIELD_MAP = {
+    id: 'id',
+    requested_date: 'requested_date',
+    date_time: 'requested_date',
+    status: 'status',
+    urgency: 'urgency',
+  };
+  const sortOrderFor = (backendField) => {
+    if (!ordering) return null;
+    const fieldName = ordering.startsWith('-') ? ordering.slice(1) : ordering;
+    if (fieldName !== backendField) return null;
+    return ordering.startsWith('-') ? 'descend' : 'ascend';
+  };
+  const handleTableChange = (paginationCfg, _filters, sorter, extra) => {
+    if (extra?.action === 'sort') {
+      const key = sorter?.field || sorter?.columnKey;
+      const backendField = SORT_FIELD_MAP[key];
+      if (sorter?.order && backendField) {
+        setOrdering(sorter.order === 'descend' ? `-${backendField}` : backendField);
+      } else {
+        setOrdering(null);
+      }
+      return;
+    }
+    if (paginationCfg?.current) fetchOrders(paginationCfg.current);
+  };
+
   const columns = [
     {
       title: 'ID', dataIndex: 'id', width: 90,
+      sorter: true,
+      sortOrder: sortOrderFor('id'),
       render: (id, record) => (
         <span style={{ fontWeight: 600, color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           {record.is_unread && (
@@ -313,6 +350,9 @@ export default function AdminOrdersPage({ historyMode = false }) {
     {
       title: t('orders.date'),
       key: 'date_time',
+      dataIndex: 'requested_date',
+      sorter: true,
+      sortOrder: sortOrderFor('requested_date'),
       width: 140,
       render: (_, r) => (
         <span>
@@ -326,8 +366,8 @@ export default function AdminOrdersPage({ historyMode = false }) {
         </span>
       ),
     },
-    { title: t('adminOrders.status'), dataIndex: 'status', width: 130, render: (s) => <StatusBadge status={s} /> },
-    { title: t('adminOrders.urgencyLabel'), dataIndex: 'urgency', width: 100, render: (u) => <UrgencyBadge urgency={u} /> },
+    { title: t('adminOrders.status'), dataIndex: 'status', width: 130, sorter: true, sortOrder: sortOrderFor('status'), render: (s) => <StatusBadge status={s} /> },
+    { title: t('adminOrders.urgencyLabel'), dataIndex: 'urgency', width: 100, sorter: true, sortOrder: sortOrderFor('urgency'), render: (u) => <UrgencyBadge urgency={u} /> },
     {
       title: '', width: 90,
       render: (_, r) => (
@@ -636,7 +676,10 @@ export default function AdminOrdersPage({ historyMode = false }) {
                       )}
                       #{order.id}
                     </Text>
-                    <StatusBadge status={order.status} />
+                    <Space size={6} wrap={false}>
+                      <UrgencyBadge urgency={order.urgency} />
+                      <StatusBadge status={order.status} />
+                    </Space>
                   </div>
                   {(order.user_full_name || order.contact_name) && (
                     <div style={{
@@ -669,7 +712,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
                     <Text style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                       {order.requested_date}
                       {order.requested_time && ` ${String(order.requested_time).slice(0, 5)}`}
-                      {' · '}{localized(order.selected_category_name) || '—'} · <UrgencyBadge urgency={order.urgency} />
+                      {' · '}{localized(order.selected_category_name) || '—'}
                     </Text>
                     <Space size={0}>
                       <Button
@@ -719,10 +762,10 @@ export default function AdminOrdersPage({ historyMode = false }) {
             scroll={{ x: 'max-content' }}
             pagination={{
               ...pagination,
-              onChange: fetchOrders,
               showSizeChanger: false,
               style: { padding: '0 16px' },
             }}
+            onChange={handleTableChange}
             onRow={(record) => ({
               onClick: () => navigate(`/admin/orders/${record.id}`),
               style: { cursor: 'pointer' },
