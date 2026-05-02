@@ -16,21 +16,9 @@ import { useRealtimeRefresh, useNotifications } from '../../contexts/Notificatio
 import { MapView } from '../../components/map/MapPicker';
 import { CategoryImage } from '../../utils/categoryIcons';
 import { getStatusLabel } from '../../utils/status';
+import StatusStepper, { STATUS_BADGE_COLORS } from '../../components/common/StatusStepper';
 
 const { useBreakpoint } = Grid;
-
-const STATUS_BADGE_COLORS = {
-  new: '#00B856',
-  under_review: '#f59e0b',
-  offer_sent: '#d97706',
-  approved: '#06b6d4',
-  in_progress: '#3b82f6',
-  completed: '#10b981',
-  rejected: '#ef4444',
-  cancelled: '#8e93ab',
-};
-
-const STATUS_STEPS = ['new', 'under_review', 'offer_sent', 'approved', 'in_progress', 'completed'];
 
 // Statuses where a price has been offered and should be visible to the customer.
 const PRICE_VISIBLE_STATUSES = ['offer_sent', 'approved', 'in_progress', 'completed'];
@@ -117,7 +105,6 @@ export default function AppOrderDetailPage() {
 
   if (!order) return null;
 
-  const statusIdx = STATUS_STEPS.indexOf(order.status);
   const isCancelled = order.status === 'cancelled';
   const isRejected = order.status === 'rejected';
   const isTerminal = isCancelled || isRejected;
@@ -259,83 +246,7 @@ export default function AppOrderDetailPage() {
         {/* ── Status Progress Tracker ── */}
         {!isTerminal && (
           <ConfirmSection delay={0.05} icon={<HistoryOutlined />} title={t('orders.orderProgress')}>
-            {/* Equal-width step columns. The connector line is absolutely
-                positioned UNDER the circles (left/right of column center),
-                so a long Georgian label like "ელოდება თქვენს დადასტურებას"
-                can wrap without bowing the line through adjacent circles. */}
-            <div style={{
-              display: 'flex', alignItems: 'flex-start',
-              paddingTop: 4,
-            }}>
-              {STATUS_STEPS.map((s, i) => {
-                const done = i <= statusIdx;
-                const isCurrent = i === statusIdx;
-                const stepColor = done ? (STATUS_BADGE_COLORS[s] || 'var(--accent)') : 'var(--border-color)';
-                const CIRCLE = 26;
-                const HALF = CIRCLE / 2;
-                const leftLineColor = i > 0
-                  ? (i <= statusIdx ? (STATUS_BADGE_COLORS[s] || 'var(--accent)') : 'var(--bg-tertiary)')
-                  : null;
-                const rightLineColor = i < STATUS_STEPS.length - 1
-                  ? (i < statusIdx ? (STATUS_BADGE_COLORS[STATUS_STEPS[i + 1]] || 'var(--accent)') : 'var(--bg-tertiary)')
-                  : null;
-                return (
-                  <div key={s} style={{
-                    flex: 1, minWidth: 0, position: 'relative',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    padding: '0 4px',
-                  }}>
-                    {/* Connector line halves — z-index 0 so circles cover them */}
-                    {leftLineColor && (
-                      <div style={{
-                        position: 'absolute',
-                        top: HALF - 1.5, left: 0, right: '50%',
-                        height: 3, background: leftLineColor,
-                        transition: 'background 0.35s ease',
-                        zIndex: 0,
-                      }} />
-                    )}
-                    {rightLineColor && (
-                      <div style={{
-                        position: 'absolute',
-                        top: HALF - 1.5, left: '50%', right: 0,
-                        height: 3, background: rightLineColor,
-                        transition: 'background 0.35s ease',
-                        zIndex: 0,
-                      }} />
-                    )}
-
-                    {/* Circle — fixed size; active state uses a glow ring
-                        instead of a larger circle so all circles share a
-                        single vertical centerline. */}
-                    <div style={{
-                      width: CIRCLE, height: CIRCLE, borderRadius: '50%',
-                      background: done ? stepColor : 'var(--bg-tertiary)',
-                      border: done ? 'none' : '2px solid var(--border-color)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: isCurrent ? `0 0 0 5px ${stepColor}22` : 'none',
-                      transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
-                      position: 'relative', zIndex: 1,
-                      flexShrink: 0,
-                    }}>
-                      {done && <CheckCircleOutlined style={{ color: '#fff', fontSize: 13 }} />}
-                    </div>
-
-                    <div style={{
-                      fontSize: 10, marginTop: 10, textAlign: 'center',
-                      fontWeight: isCurrent ? 700 : done ? 500 : 400,
-                      color: isCurrent ? stepColor : done ? 'var(--text-primary)' : 'var(--text-placeholder)',
-                      lineHeight: 1.25,
-                      wordBreak: 'break-word',
-                      hyphens: 'auto',
-                      width: '100%',
-                    }}>
-                      {getStatusLabel(t, s, { isCustomer: true })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <StatusStepper status={order.status} isCustomer />
           </ConfirmSection>
         )}
 

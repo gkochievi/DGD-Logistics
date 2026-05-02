@@ -21,6 +21,7 @@ import { StatusBadge, UrgencyBadge } from '../../components/common/StatusBadge';
 import { STATUS_OPTIONS, STATUS_CONFIG } from '../../utils/status';
 import MapPicker, { MapView } from '../../components/map/MapPicker';
 import LocationAutocomplete from '../../components/common/LocationAutocomplete';
+import StatusStepper, { STATUS_STEPS } from '../../components/common/StatusStepper';
 import { useLang } from '../../contexts/LanguageContext';
 import { useBranding } from '../../contexts/BrandingContext';
 import { DEFAULT_CURRENCY } from '../../utils/currency';
@@ -73,6 +74,12 @@ export default function AdminOrderDetailPage() {
   const [editCargoDetails, setEditCargoDetails] = useState('');
   const [editUrgency, setEditUrgency] = useState('normal');
   const [editSaving, setEditSaving] = useState(false);
+  // B6: track the auto-promotion banner. `undoCountdown` doubles as both
+  // visibility flag (null = hidden) and remaining seconds. `dismissed`
+  // stores the OrderStatusHistory id we've already cleared so silent
+  // refreshes don't re-mount the banner once the user dealt with it.
+  const [undoCountdown, setUndoCountdown] = useState(null);
+  const [dismissedPromotionId, setDismissedPromotionId] = useState(null);
   const { refresh: refreshNotifications } = useNotifications();
 
   useEffect(() => {
@@ -100,24 +107,55 @@ export default function AdminOrderDetailPage() {
 
   // Vehicles — show all but flag busy ones with active-order counts.
   const assignedVehicleId = order?.assigned_vehicle;
+  // Pick the most-specific category the admin wants this order routed to —
+  // final_category overrides selected_category overrides the suggestion.
+  // We use it to mark vehicles whose category list covers this order so
+  // they sort to the top of the dropdown.
+  const orderCategoryId = order?.final_category
+    || order?.selected_category
+    || order?.suggested_category;
   const vehicleOptions = useMemo(() => {
-    return vehicles.map((v) => {
+    const list = vehicles.map((v) => {
       const isCurrent = v.id === assignedVehicleId;
       const busy = (v.active_orders_count || 0) > 0 && !isCurrent;
-      const catName = (v.categories_detail || [])
+      const matchesService = orderCategoryId
+        ? (v.categories_detail || []).some((c) => c.id === orderCategoryId)
+        : false;
+      const categoriesText = (v.categories_detail || [])
         .map((c) => (typeof c.name === 'string' ? c.name : (c.name?.[lang] || c.name?.en || '')))
         .filter(Boolean)
         .join(', ');
-      const statusBadge = v.status !== 'available' && !isCurrent
-        ? ` · ${v.status_display || v.status}`
-        : '';
+      const statusText = v.status !== 'available' && !isCurrent
+        ? (v.status_display || v.status)
+        : null;
+      const disabled = !isCurrent && (v.status === 'maintenance' || v.status === 'retired' || !v.is_active);
       return {
         value: v.id,
-        label: `${v.name} (${v.plate_number}) — ${catName}${statusBadge}${busy ? ' · busy' : ''}`,
-        disabled: !isCurrent && (v.status === 'maintenance' || v.status === 'retired' || !v.is_active),
+        // Plain string used by the closed Select header AND by filterOption.
+        // The dropdown rows render via optionRender below.
+        label: `${v.name} (${v.plate_number})`,
+        vehicle: v,
+        isCurrent,
+        busy,
+        matchesService,
+        categoriesText,
+        statusText,
+        disabled,
       };
     });
-  }, [vehicles, assignedVehicleId, lang]);
+    // Sort: currently-assigned first, then service-matching available,
+    // then other available, then busy/disabled (still selectable so admins
+    // can see the full fleet, but pushed to the bottom).
+    list.sort((a, b) => {
+      if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1;
+      if (a.matchesService !== b.matchesService) return a.matchesService ? -1 : 1;
+      const aPenalty = a.disabled || a.busy ? 1 : 0;
+      const bPenalty = b.disabled || b.busy ? 1 : 0;
+      if (aPenalty !== bPenalty) return aPenalty - bPenalty;
+      return 0;
+    });
+    return list;
+  }, [vehicles, assignedVehicleId, lang, orderCategoryId]);
 
   const fetchOrder = useCallback(({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -140,6 +178,57 @@ export default function AdminOrderDetailPage() {
   }, [fetchOrder]));
 
   useEffect(() => { fetchOrder(); }, [id]); // eslint-disable-line
+
+  // B6: detect a fresh auto-promotion and arm the undo countdown. We
+  // check the most-recent status_history entry against a 60s window so
+  // a stale auto-flip from yesterday never re-arms the banner.
+  const latestHistory = order?.status_history?.[0];
+  useEffect(() => {
+    if (!latestHistory?.is_auto_promotion) return;
+    if (latestHistory.id === dismissedPromotionId) return;
+    if (order?.status !== 'under_review') return;
+    const ageSeconds = (Date.now() - new Date(latestHistory.created_at).getTime()) / 1000;
+    const remaining = Math.floor(60 - ageSeconds);
+    if (remaining <= 0) return;
+    // Cap at 30s for the visible countdown — the backend tolerates 60s
+    // but we want the admin to act quickly. They can still trigger the
+    // backend undo within those extra 30s if they refresh and re-arm.
+    setUndoCountdown(Math.min(remaining, 30));
+  }, [latestHistory?.id, dismissedPromotionId, order?.status]);
+
+  // Tick the countdown down every second; clears itself at 0.
+  useEffect(() => {
+    if (undoCountdown === null) return undefined;
+    if (undoCountdown <= 0) {
+      setUndoCountdown(null);
+      return undefined;
+    }
+    const handle = setTimeout(() => {
+      setUndoCountdown((prev) => (prev === null ? null : prev - 1));
+    }, 1000);
+    return () => clearTimeout(handle);
+  }, [undoCountdown]);
+
+  const handleUndoAutoPromotion = async () => {
+    setUpdating(true);
+    try {
+      await api.post(`/orders/admin/${id}/undo-auto-promotion/`);
+      // Mark this promotion event "handled" so the detection effect
+      // doesn't re-arm the banner on the next silent refresh.
+      if (latestHistory?.id) setDismissedPromotionId(latestHistory.id);
+      setUndoCountdown(null);
+      message.success(t('adminOrderDetail.undoAutoPromotionSuccess'));
+      fetchOrder();
+    } catch (err) {
+      message.error(extractApiError(err, t('adminOrderDetail.undoAutoPromotionFailed')));
+    } finally {
+      setUpdating(false);
+    }
+  };
+  const dismissAutoPromotionBanner = () => {
+    if (latestHistory?.id) setDismissedPromotionId(latestHistory.id);
+    setUndoCountdown(null);
+  };
 
   const applyStatusChange = async (effectiveComment) => {
     setUpdating(true);
@@ -213,11 +302,17 @@ export default function AdminOrderDetailPage() {
 
   const handleVehicleAssign = async (vehicleId) => {
     // Changing vehicle invalidates the driver link; clear driver in the same patch.
+    const willClearDriver = Boolean(order.assigned_driver) && vehicleId !== order.assigned_vehicle;
     const payload = { assigned_vehicle: vehicleId || null };
-    if (order.assigned_driver && vehicleId !== order.assigned_vehicle) {
-      payload.assigned_driver = null;
+    if (willClearDriver) payload.assigned_driver = null;
+    const ok = await patchOrder(
+      payload,
+      t('adminOrderDetail.vehicleAssigned'),
+      t('adminOrderDetail.vehicleAssignFailed'),
+    );
+    if (ok && willClearDriver) {
+      message.info(t('adminOrderDetail.driverClearedByVehicleChange'));
     }
-    await patchOrder(payload, t('adminOrderDetail.vehicleAssigned'), t('adminOrderDetail.vehicleAssignFailed'));
   };
 
   const handleDriverAssign = async (driverId) => {
@@ -494,7 +589,8 @@ export default function AdminOrderDetailPage() {
     && Boolean(order.assigned_driver)
   );
   // Forward-only lifecycle — mirrors Order.STATUS_PROGRESSION on the backend.
-  const STATUS_PROGRESSION = ['new', 'under_review', 'offer_sent', 'approved', 'in_progress', 'completed'];
+  // Reuses the same source-of-truth as the shared StatusStepper.
+  const STATUS_PROGRESSION = STATUS_STEPS;
   const currentProgressionIdx = STATUS_PROGRESSION.indexOf(order.status);
 
   // Multi-stop orders keep their full route in `route_stops`; the flat
@@ -654,6 +750,23 @@ export default function AdminOrderDetailPage() {
     }
     return `${Math.round(seconds / 60)} ${t('newOrder.min')}`;
   };
+
+  // Suggested-price hint — driven by the OSRM-computed route duration on
+  // the order and the assigned vehicle's per-hour rate. We bill at least
+  // 1 hour so very short trips still come out to a reasonable number.
+  // Only shown while the admin can still adjust the price (pre-terminal,
+  // not yet sent), and only when both inputs are present.
+  const suggestedPrice = (() => {
+    if (isTerminal) return null;
+    if (!routeDurationSeconds) return null;
+    const ratePerHour = order.assigned_vehicle_detail?.price_per_hour;
+    if (!ratePerHour) return null;
+    const hours = Math.max(routeDurationSeconds / 3600, 1);
+    const price = Math.round(hours * Number(ratePerHour));
+    if (!Number.isFinite(price) || price <= 0) return null;
+    return { price, rate: Number(ratePerHour) };
+  })();
+
   const statusOptionsForOrder = STATUS_OPTIONS
     // Cancellation is customer-only.
     .filter((opt) => opt.value !== 'cancelled' || order.status === 'cancelled')
@@ -803,10 +916,56 @@ export default function AdminOrderDetailPage() {
             placeholder={t('adminOrderDetail.selectVehicle')}
             allowClear
             showSearch
-            filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+            // Search across name + plate + categories so admins can type
+            // either "tow" or "AB-123-CD" and find what they expect.
+            filterOption={(input, option) => {
+              const needle = input.toLowerCase();
+              return [option?.label, option?.categoriesText]
+                .filter(Boolean)
+                .some((s) => String(s).toLowerCase().includes(needle));
+            }}
             onChange={handleVehicleAssign}
             disabled={isTerminal}
             options={vehicleOptions}
+            optionRender={(option) => {
+              const o = option.data || option;
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '2px 0' }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    fontWeight: 600, color: 'var(--text-primary)',
+                  }}>
+                    <span>{o.vehicle?.name}</span>
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 12, fontFamily: 'monospace' }}>
+                      ({o.vehicle?.plate_number})
+                    </span>
+                    {o.matchesService && (
+                      <CheckCircleOutlined style={{ color: '#10b981', fontSize: 12 }} />
+                    )}
+                  </div>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+                    fontSize: 11,
+                  }}>
+                    {o.categoriesText && (
+                      <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>
+                        {o.categoriesText}
+                      </Tag>
+                    )}
+                    {o.statusText && (
+                      <Tag color="orange" style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>
+                        {o.statusText}
+                      </Tag>
+                    )}
+                    {o.busy && (
+                      <Tag color="red" style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>
+                        {t('adminOrderDetail.vehicleBusy')}
+                      </Tag>
+                    )}
+                  </div>
+                </div>
+              );
+            }}
           />
           {order.assigned_vehicle_detail && (
             <div style={{
@@ -918,7 +1077,11 @@ export default function AdminOrderDetailPage() {
                 disabled={isTerminal}
                 options={eligibleDrivers.map((d) => ({
                   value: d.id,
-                  label: `${d.full_name} — ${d.license_number}${d.is_busy ? ' · busy' : ''}`,
+                  label: `${d.full_name} — ${d.license_number}${d.is_busy ? ` · ${t('adminOrderDetail.driverBusy')}` : ''}`,
+                  // Disable busy drivers (except the one already assigned)
+                  // so admins can't pick a doomed assignment and only learn
+                  // about the conflict at submit time.
+                  disabled: d.is_busy && d.id !== order.assigned_driver,
                 }))}
                 notFoundContent={t('adminOrderDetail.noEligibleDrivers')}
               />
@@ -1060,6 +1223,50 @@ export default function AdminOrderDetailPage() {
           <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
             {showSavePriceButton ? t('adminOrderDetail.priceHint') : t('adminOrderDetail.priceHintPreOffer')}
           </div>
+          {suggestedPrice && (
+            <button
+              type="button"
+              onClick={() => setPriceDraft(suggestedPrice.price)}
+              style={{
+                marginTop: 8,
+                padding: '6px 10px',
+                background: 'var(--bg-secondary)',
+                border: '1px dashed var(--border-color)',
+                borderRadius: 8,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--accent-bg)';
+                e.currentTarget.style.borderColor = 'var(--accent)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'var(--bg-secondary)';
+                e.currentTarget.style.borderColor = 'var(--border-color)';
+              }}
+            >
+              <ThunderboltOutlined style={{ color: '#f59e0b' }} />
+              <span>
+                {t('adminOrderDetail.suggestedPrice')}:{' '}
+                <strong style={{ color: 'var(--text-primary)' }}>
+                  {currency.symbol}{suggestedPrice.price.toLocaleString()}
+                </strong>
+              </span>
+              <span style={{ color: 'var(--text-tertiary)' }}>
+                {routeDistanceMeters != null && `· ${formatDistance(routeDistanceMeters)} `}
+                {routeDurationSeconds != null && `· ${formatDuration(routeDurationSeconds)} `}
+                · {currency.symbol}{suggestedPrice.rate}/{t('adminOrderDetail.perHourShort')}
+              </span>
+              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                {t('adminOrderDetail.applySuggestion')}
+              </span>
+            </button>
+          )}
         </div>
 
         <Divider style={{ borderColor: 'var(--border-color)' }} />
@@ -1207,6 +1414,72 @@ export default function AdminOrderDetailPage() {
         </Title>
         <StatusBadge status={order.status} />
       </div>
+
+      {/* Auto-promotion banner — fires for ~30s right after the admin's
+          first GET silently flipped this order from new → under_review.
+          The customer was notified by realtime push; clicking Undo
+          reverts the status (deletes the auto history entry on the
+          backend) so an accidental row-click doesn't permanently mark
+          the order as in-review. */}
+      {undoCountdown !== null && undoCountdown > 0 && (
+        <div style={{
+          marginBottom: isMobile ? 16 : 24,
+          padding: isMobile ? '12px 14px' : '14px 18px',
+          background: '#fffbeb',
+          border: '1px solid #fcd34d',
+          borderRadius: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}>
+          <ExclamationCircleFilled style={{ color: '#f59e0b', fontSize: 18, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{
+              fontWeight: 700, fontSize: 13, color: '#78350f',
+            }}>
+              {t('adminOrderDetail.autoPromotionTitle')}
+            </div>
+            <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>
+              {t('adminOrderDetail.autoPromotionDescription')}
+            </div>
+          </div>
+          <Button
+            type="primary"
+            size="small"
+            danger
+            loading={updating}
+            onClick={handleUndoAutoPromotion}
+            style={{ borderRadius: 8, fontWeight: 700 }}
+          >
+            {t('adminOrderDetail.undoAutoPromotion', { seconds: undoCountdown })}
+          </Button>
+          <Button
+            type="text"
+            size="small"
+            onClick={dismissAutoPromotionBanner}
+            style={{ color: '#92400e', borderRadius: 8 }}
+          >
+            {t('common.close')}
+          </Button>
+        </div>
+      )}
+
+      {/* Progression stepper — shows the same shape the customer sees,
+          so admins can match the customer's mental model at a glance.
+          Hidden on terminal states; rejected/cancelled don't fit the
+          forward-only progression. */}
+      {!isTerminal && STATUS_STEPS.includes(order.status) && (
+        <div style={{
+          marginBottom: isMobile ? 16 : 24,
+          padding: isMobile ? '14px 16px' : '14px 20px',
+          background: 'var(--card-bg)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 12,
+        }}>
+          <StatusStepper status={order.status} compact />
+        </div>
+      )}
 
       {/* Summary strip — surfaces the most-glanced facts (left) and the
           quick-action shortcuts (right). Wraps to two rows on narrow
@@ -1443,8 +1716,15 @@ export default function AdminOrderDetailPage() {
             <InfoCircleOutlined style={{ color: '#3b82f6', fontSize: 15 }} />
             <Text style={sectionTitleStyle}>{t('adminOrderDetail.orderInfo')}</Text>
             {order.admin_edited_at && (
-              <Tag color="gold" style={{ margin: 0, fontSize: 11 }}>
+              <Tag
+                color="gold"
+                onClick={() => scrollToAnchor('order-edit-history')}
+                style={{ margin: 0, fontSize: 11, cursor: 'pointer' }}
+              >
                 {t('adminOrderDetail.editedByAdminTag')}
+                {order.edit_history?.length > 0 && (
+                  <span style={{ marginLeft: 4 }}>· {order.edit_history.length}</span>
+                )}
               </Tag>
             )}
           </div>
@@ -1807,6 +2087,88 @@ export default function AdminOrderDetailPage() {
                 ))}
               </Space>
             </Image.PreviewGroup>
+          </div>
+        </div>
+      )}
+
+      {/* Edit History — per-field log of admin edits to customer-supplied
+          fields. Scrolled-to from the "Edited by admin" tag in the Order
+          Info header so admins can audit what changed without diffing the
+          status history. Hidden when nothing has been edited yet. */}
+      {order.edit_history?.length > 0 && (
+        <div
+          id="order-edit-history"
+          style={{
+            ...sectionStyle,
+            marginBottom: 0,
+            scrollMarginTop: 80,
+            ...(isWide ? { gridColumn: 1 } : {}),
+          }}
+        >
+          <div style={sectionHeaderStyle}>
+            <EditOutlined style={{ color: '#f59e0b', fontSize: 15 }} />
+            <Text style={sectionTitleStyle}>{t('adminOrderDetail.editHistory')}</Text>
+            <Tag style={{ margin: 0, fontSize: 11 }}>{order.edit_history.length}</Tag>
+          </div>
+          <div style={{ padding: isMobile ? 16 : 24 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {order.edit_history.map((h) => {
+                const fieldLabel = t(`adminOrderDetail.editField.${h.field_name}`);
+                // t() returns the dotted key when missing — fall back to
+                // the raw field name in that case so we don't display
+                // "adminOrderDetail.editField.foo" verbatim.
+                const niceField = (fieldLabel && !fieldLabel.startsWith('adminOrderDetail.editField'))
+                  ? fieldLabel
+                  : h.field_name;
+                return (
+                  <div
+                    key={h.id}
+                    style={{
+                      padding: '10px 12px',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: 10,
+                      border: '1px solid var(--border-color)',
+                    }}
+                  >
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'center', flexWrap: 'wrap', gap: 8,
+                      marginBottom: 6,
+                    }}>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>
+                        {niceField}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                        {h.changed_by_name && <>{h.changed_by_name} · </>}
+                        {new Date(h.changed_at).toLocaleString()}
+                      </span>
+                    </div>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      flexWrap: 'wrap', fontSize: 12,
+                    }}>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 6,
+                        background: '#ef444414', color: '#dc2626',
+                        textDecoration: 'line-through',
+                        maxWidth: '100%', overflowWrap: 'anywhere',
+                      }}>
+                        {h.old_value || <em style={{ opacity: 0.6 }}>{t('common.empty')}</em>}
+                      </span>
+                      <RightOutlined style={{ color: 'var(--text-tertiary)', fontSize: 10 }} />
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 6,
+                        background: '#10b98114', color: '#059669',
+                        fontWeight: 600,
+                        maxWidth: '100%', overflowWrap: 'anywhere',
+                      }}>
+                        {h.new_value || <em style={{ opacity: 0.6 }}>{t('common.empty')}</em>}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

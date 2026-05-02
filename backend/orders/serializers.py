@@ -41,7 +41,10 @@ class OrderStatusHistorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderStatusHistory
-        fields = ['id', 'old_status', 'new_status', 'changed_by', 'changed_by_name', 'comment', 'created_at']
+        fields = [
+            'id', 'old_status', 'new_status', 'changed_by', 'changed_by_name',
+            'comment', 'created_at', 'is_auto_promotion',
+        ]
 
 
 class OrderEditHistorySerializer(serializers.ModelSerializer):

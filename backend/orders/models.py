@@ -173,6 +173,11 @@ class OrderStatusHistory(models.Model):
     )
     comment = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # True when this entry was created by the new→under_review auto-flip
+    # that fires on the admin's first GET of a fresh order. Lets the
+    # frontend offer a short-lived "Undo" so accidentally-clicked rows
+    # don't notify the customer permanently.
+    is_auto_promotion = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-created_at']

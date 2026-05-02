@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Table, Select, Button, Input, Typography, Space, Grid, Empty, Badge, DatePicker, TimePicker,
-  Modal, message, Tag,
+  Modal, message, Tag, Tabs,
 } from 'antd';
 import {
   EyeOutlined, SearchOutlined, RightOutlined, FilterOutlined, UserOutlined,
@@ -13,7 +13,7 @@ import api from '../../api/client';
 import { StatusBadge, UrgencyBadge } from '../../components/common/StatusBadge';
 import { STATUS_OPTIONS, URGENCY_OPTIONS } from '../../utils/status';
 import { useLang } from '../../contexts/LanguageContext';
-import { useRealtimeRefresh } from '../../contexts/NotificationContext';
+import { useRealtimeRefresh, useNotifications } from '../../contexts/NotificationContext';
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -28,6 +28,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
     return v[lang] || v['en'] || '';
   };
   const [searchParams, setSearchParams] = useSearchParams();
+  const { viewCounts } = useNotifications();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
@@ -76,6 +77,8 @@ export default function AdminOrdersPage({ historyMode = false }) {
     if (vehicleId) params.assigned_vehicle = vehicleId;
     if (search) params.search = search;
     if (ordering) params.ordering = ordering;
+    const view = searchParams.get('view');
+    if (view) params.view = view;
 
     if (historyMode) {
       if (!status) params.status = 'completed';
@@ -483,6 +486,69 @@ export default function AdminOrdersPage({ historyMode = false }) {
           />
         </div>
       )}
+
+      {/* Saved-view tabs — replace the binary Active/History toggle with
+          the dispatcher's mental model. Counts come from the admin
+          notifications endpoint and stay live via the realtime poll. */}
+      {(() => {
+        const view = searchParams.get('view') || 'all';
+        const activeKey = historyMode ? 'history' : view;
+        const tabSpecs = [
+          { key: 'all', label: t('adminOrders.tabAll'), countKey: 'all' },
+          { key: 'unread', label: t('adminOrders.tabUnread'), countKey: 'unread' },
+          { key: 'awaiting_price', label: t('adminOrders.tabAwaitingPrice'), countKey: 'awaiting_price' },
+          { key: 'pending_customer', label: t('adminOrders.tabPendingCustomer'), countKey: 'pending_customer' },
+          { key: 'today', label: t('adminOrders.tabToday'), countKey: 'today' },
+          { key: 'in_progress', label: t('adminOrders.tabInProgress'), countKey: 'in_progress' },
+          { key: 'history', label: t('adminOrders.tabHistory'), countKey: 'history' },
+        ];
+        const renderLabel = (spec) => {
+          const count = viewCounts?.[spec.countKey] ?? 0;
+          return (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {spec.label}
+              {count > 0 && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  minWidth: 20, height: 18, padding: '0 6px',
+                  fontSize: 11, fontWeight: 700, lineHeight: 1,
+                  borderRadius: 9,
+                  background: spec.key === activeKey ? 'var(--accent)' : 'var(--bg-tertiary)',
+                  color: spec.key === activeKey ? '#fff' : 'var(--text-secondary)',
+                }}>
+                  {count}
+                </span>
+              )}
+            </span>
+          );
+        };
+        const handleTabChange = (key) => {
+          if (key === 'history') {
+            navigate('/admin/history');
+            return;
+          }
+          if (historyMode) {
+            // Leaving history → land on the active list with the picked view.
+            const params = key === 'all' ? '' : `?view=${key}`;
+            navigate(`/admin/orders${params}`);
+            return;
+          }
+          // Replace just the `view` param; keep the rest of the filters.
+          const params = Object.fromEntries(searchParams.entries());
+          if (key === 'all') delete params.view;
+          else params.view = key;
+          setSearchParams(params);
+        };
+        return (
+          <Tabs
+            activeKey={activeKey}
+            onChange={handleTabChange}
+            items={tabSpecs.map((s) => ({ key: s.key, label: renderLabel(s) }))}
+            style={{ marginBottom: 12 }}
+            tabBarStyle={{ marginBottom: 0 }}
+          />
+        );
+      })()}
 
       {/* Filter bar */}
       <div style={{

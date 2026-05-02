@@ -21,4 +21,9 @@ urlpatterns = [
     path('admin/<int:pk>/', views.AdminOrderDetailView.as_view(), name='admin_order_detail'),
     path('admin/<int:pk>/export/', views.AdminOrderExportDetailView.as_view(), name='admin_order_export'),
     path('admin/<int:pk>/status/', views.AdminOrderStatusChangeView.as_view(), name='admin_order_status'),
+    path(
+        'admin/<int:pk>/undo-auto-promotion/',
+        views.AdminOrderUndoAutoPromotionView.as_view(),
+        name='admin_order_undo_auto_promotion',
+    ),
 ]

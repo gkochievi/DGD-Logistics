@@ -37,6 +37,11 @@ export function NotificationProvider({ children }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [newOrdersCount, setNewOrdersCount] = useState(0);
   const [activeOrdersCount, setActiveOrdersCount] = useState(0);
+  // Per-saved-view counters, keyed by view name
+  // ('all'/'unread'/'awaiting_price'/'pending_customer'/'today'/'in_progress'/'history').
+  // Backed by the same admin notifications endpoint so the tabs on
+  // AdminOrdersPage stay in lockstep with the bell badge.
+  const [viewCounts, setViewCounts] = useState({});
   const [recent, setRecent] = useState([]);
   const [latestEventAt, setLatestEventAt] = useState(null);
   const [tick, setTick] = useState(0);
@@ -60,6 +65,7 @@ export function NotificationProvider({ children }) {
     setUnreadCount(0);
     setNewOrdersCount(0);
     setActiveOrdersCount(0);
+    setViewCounts({});
     setRecent([]);
     setLatestEventAt(null);
     lastSeenEventRef.current = null;
@@ -75,6 +81,7 @@ export function NotificationProvider({ children }) {
       setUnreadCount(data.unread_count || 0);
       setNewOrdersCount(data.new_orders_count || 0);
       setActiveOrdersCount(data.active_orders_count || 0);
+      setViewCounts(data.view_counts || {});
       setRecent(Array.isArray(data.recent_unread) ? data.recent_unread : []);
       setLatestEventAt(data.latest_event_at || null);
 
@@ -165,6 +172,7 @@ export function NotificationProvider({ children }) {
     unreadCount,
     newOrdersCount,
     activeOrdersCount,
+    viewCounts,
     recent,
     latestEventAt,
     tick,
@@ -189,6 +197,7 @@ export function useNotifications() {
       unreadCount: 0,
       newOrdersCount: 0,
       activeOrdersCount: 0,
+      viewCounts: {},
       recent: [],
       latestEventAt: null,
       tick: 0,

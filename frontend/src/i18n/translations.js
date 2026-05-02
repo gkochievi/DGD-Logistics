@@ -36,6 +36,7 @@ export const translations = {
       showArchived: 'Show archived',
       collapseSidebar: 'Collapse sidebar',
       expandSidebar: 'Expand sidebar',
+      empty: 'empty',
     },
 
     // ── Auth ──
@@ -472,6 +473,14 @@ export const translations = {
       downloadCsv: 'Download CSV',
       downloadOrder: 'Download order CSV',
       exportFailed: 'Failed to export orders',
+      // Saved-view tabs (W4)
+      tabAll: 'All',
+      tabUnread: 'Unread',
+      tabAwaitingPrice: 'Awaiting price',
+      tabPendingCustomer: 'Pending customer',
+      tabToday: 'Today',
+      tabInProgress: 'In progress',
+      tabHistory: 'History',
     },
 
     // ── Admin Order Detail ──
@@ -611,6 +620,20 @@ export const translations = {
       checklistDriverTodo: 'Driver not assigned',
       checklistPriceDone: 'Price set',
       checklistPriceTodo: 'Price not set',
+      // Vehicle / driver dropdown polish
+      vehicleBusy: 'Busy',
+      driverBusy: 'busy',
+      driverClearedByVehicleChange: 'Driver cleared because the vehicle changed.',
+      // Suggested-price hint
+      suggestedPrice: 'Suggested',
+      perHourShort: 'hr',
+      applySuggestion: 'Apply',
+      // Auto-promotion banner (B6)
+      autoPromotionTitle: 'Customer notified you are reviewing this order',
+      autoPromotionDescription: 'Opening this order moved it to "Under review" automatically. Click Undo to revert and avoid the notification.',
+      undoAutoPromotion: 'Undo ({seconds}s)',
+      undoAutoPromotionSuccess: 'Reverted to new — customer will see the original status.',
+      undoAutoPromotionFailed: 'Could not undo — too late, or the status already changed.',
     },
 
     // ── Admin Users ──
@@ -1006,6 +1029,7 @@ export const translations = {
       showArchived: 'არქივის ჩვენება',
       collapseSidebar: 'მენიუს დაკეცვა',
       expandSidebar: 'მენიუს გაშლა',
+      empty: 'ცარიელი',
     },
 
     auth: {
@@ -1430,6 +1454,14 @@ export const translations = {
       downloadCsv: 'CSV-ის ჩამოტვირთვა',
       downloadOrder: 'შეკვეთის CSV-ის ჩამოტვირთვა',
       exportFailed: 'შეკვეთების ექსპორტი ვერ მოხერხდა',
+      // Save-view ჩანართები (W4)
+      tabAll: 'ყველა',
+      tabUnread: 'წაუკითხავი',
+      tabAwaitingPrice: 'ფასის მოლოდინში',
+      tabPendingCustomer: 'მომხმარებლის პასუხი',
+      tabToday: 'დღეს',
+      tabInProgress: 'მიმდინარე',
+      tabHistory: 'ისტორია',
     },
 
     adminOrderDetail: {
@@ -1568,6 +1600,20 @@ export const translations = {
       checklistDriverTodo: 'მძღოლი არ არის მინიჭებული',
       checklistPriceDone: 'ფასი დაყენებულია',
       checklistPriceTodo: 'ფასი არ არის დაყენებული',
+      // მანქანის / მძღოლის ჩამოსაშლელი
+      vehicleBusy: 'დაკავებული',
+      driverBusy: 'დაკავებული',
+      driverClearedByVehicleChange: 'მძღოლი გასუფთავდა, რადგან მანქანა შეიცვალა.',
+      // შემოთავაზებული ფასი
+      suggestedPrice: 'შემოთავაზებული',
+      perHourShort: 'სთ',
+      applySuggestion: 'გამოყენება',
+      // ავტო-გადაყვანის ბანერი (B6)
+      autoPromotionTitle: 'მომხმარებელი ხედავს, რომ შეკვეთა გადახედვაშია',
+      autoPromotionDescription: 'შეკვეთის გახსნით სტატუსი ავტომატურად შეიცვალა "გადახედვაშია". დააჭირე Undo, რომ შეცვლა გააუქმო.',
+      undoAutoPromotion: 'გაუქმება ({seconds} წმ)',
+      undoAutoPromotionSuccess: 'სტატუსი დაბრუნდა — მომხმარებელი დაინახავს თავდაპირველს.',
+      undoAutoPromotionFailed: 'გაუქმება ვერ მოხერხდა — დრო ამოიწურა ან სტატუსი უკვე შეიცვალა.',
     },
 
     adminUsers: {
@@ -1953,6 +1999,7 @@ export const translations = {
       showArchived: 'Показать архив',
       collapseSidebar: 'Свернуть меню',
       expandSidebar: 'Развернуть меню',
+      empty: 'пусто',
     },
 
     auth: {
@@ -2377,6 +2424,14 @@ export const translations = {
       downloadCsv: 'Скачать CSV',
       downloadOrder: 'Скачать CSV заказа',
       exportFailed: 'Не удалось экспортировать заказы',
+      // Вкладки сохранённых видов (W4)
+      tabAll: 'Все',
+      tabUnread: 'Новые',
+      tabAwaitingPrice: 'Ждёт цену',
+      tabPendingCustomer: 'Ждёт клиента',
+      tabToday: 'Сегодня',
+      tabInProgress: 'В работе',
+      tabHistory: 'История',
     },
 
     adminOrderDetail: {
@@ -2515,6 +2570,20 @@ export const translations = {
       checklistDriverTodo: 'Водитель не назначен',
       checklistPriceDone: 'Цена установлена',
       checklistPriceTodo: 'Цена не установлена',
+      // Полировка выпадающих списков транспорта/водителей
+      vehicleBusy: 'Занят',
+      driverBusy: 'занят',
+      driverClearedByVehicleChange: 'Водитель снят: транспорт изменён.',
+      // Подсказка цены
+      suggestedPrice: 'Рекомендация',
+      perHourShort: 'ч',
+      applySuggestion: 'Применить',
+      // Баннер авто-перевода (B6)
+      autoPromotionTitle: 'Клиент видит, что вы рассматриваете заказ',
+      autoPromotionDescription: 'Открытие заказа автоматически перевело его в «На рассмотрении». Нажмите Отменить, чтобы вернуть статус.',
+      undoAutoPromotion: 'Отменить ({seconds} с)',
+      undoAutoPromotionSuccess: 'Статус возвращён — клиент увидит исходный.',
+      undoAutoPromotionFailed: 'Не удалось отменить — слишком поздно или статус уже изменён.',
     },
 
     adminUsers: {

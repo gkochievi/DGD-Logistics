@@ -206,6 +206,22 @@ class AdminOrderListView(generics.ListAPIView):
         requested_time = self.request.query_params.get('requested_time')
         if requested_time:
             qs = qs.filter(requested_time=requested_time)
+        # Saved-view shortcuts powering the admin tabs. Each value resolves
+        # to a single canned filter so the URL stays human-readable
+        # (?view=awaiting_price) and the frontend doesn't need to know
+        # the underlying status sets.
+        view = self.request.query_params.get('view')
+        if view == 'unread':
+            qs = qs.filter(is_read_by_admin=False)
+        elif view == 'awaiting_price':
+            qs = qs.filter(status__in=['new', 'under_review'])
+        elif view == 'pending_customer':
+            qs = qs.filter(status='offer_sent')
+        elif view == 'today':
+            qs = qs.filter(requested_date=timezone.localdate()) \
+                   .exclude(status__in=Order.RELEASED_STATUSES)
+        elif view == 'in_progress':
+            qs = qs.filter(status='in_progress')
         return qs
 
 
@@ -235,6 +251,7 @@ class AdminOrderDetailView(generics.RetrieveUpdateAPIView):
                 new_status=Order.STATUS_UNDER_REVIEW,
                 changed_by=request.user,
                 comment='Opened by admin',
+                is_auto_promotion=True,
             )
             _stamp_event(order, f'status:{Order.STATUS_UNDER_REVIEW}', customer_unread=True)
         serializer = self.get_serializer(order)
@@ -361,6 +378,56 @@ class AdminOrderStatusChangeView(APIView):
 
         # Re-sync vehicle availability after status change.
         sync_vehicle_status(order.assigned_vehicle)
+
+        return Response(OrderDetailSerializer(order).data)
+
+
+class AdminOrderUndoAutoPromotionView(APIView):
+    """Roll back the auto new→under_review flip that fires on the admin's
+    first GET of a fresh order. Only valid for ~60 seconds and only when
+    the most recent status_history entry is flagged as auto-promotion —
+    so deliberate transitions (or stale ones the customer has already
+    seen) can't be undone through this path.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    UNDO_WINDOW_SECONDS = 60
+
+    def post(self, request, pk):
+        try:
+            order = Order.objects.get(pk=pk)
+        except Order.DoesNotExist:
+            return Response({'detail': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if order.status != Order.STATUS_UNDER_REVIEW:
+            return Response(
+                {'detail': 'Only orders currently under review can be undone.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        latest = order.status_history.order_by('-created_at').first()
+        if not latest or not latest.is_auto_promotion:
+            return Response(
+                {'detail': 'No auto-promotion to undo.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from django.utils import timezone
+        elapsed = (timezone.now() - latest.created_at).total_seconds()
+        if elapsed > self.UNDO_WINDOW_SECONDS:
+            return Response(
+                {'detail': 'Undo window has expired.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Revert: drop the history entry and reset status. We deliberately
+        # leave `customer_unread` alone — the realtime push has already
+        # gone out so the customer may have seen "Under review" by now.
+        # If they refetch they'll see "New" again, which is the desired
+        # outcome.
+        latest.delete()
+        order.status = Order.STATUS_NEW
+        order.save(update_fields=['status'])
 
         return Response(OrderDetailSerializer(order).data)
 
@@ -552,6 +619,21 @@ class AdminNotificationsView(APIView):
 
         latest_event = qs.order_by('-last_event_at').values_list('last_event_at', flat=True).first()
 
+        # Per-view counters powering the saved-view tabs on the admin
+        # orders list. Same query each poll — keeps the contract simple
+        # and matches what AdminOrderListView's `view` param resolves to.
+        today = timezone.localdate()
+        view_counts = {
+            'all': qs.exclude(status__in=Order.RELEASED_STATUSES).count(),
+            'unread': unread_qs.count(),
+            'awaiting_price': qs.filter(status__in=['new', 'under_review']).count(),
+            'pending_customer': qs.filter(status='offer_sent').count(),
+            'today': qs.filter(requested_date=today)
+                       .exclude(status__in=Order.RELEASED_STATUSES).count(),
+            'in_progress': qs.filter(status='in_progress').count(),
+            'history': qs.filter(status='completed').count(),
+        }
+
         return Response({
             'unread_count': unread_qs.count(),
             'new_orders_count': qs.filter(status='new').count(),
@@ -559,6 +641,7 @@ class AdminNotificationsView(APIView):
             'recent_unread': recent_data,
             'latest_event_at': latest_event.isoformat() if latest_event else None,
             'server_time': timezone.now().isoformat(),
+            'view_counts': view_counts,
         })
 
 
