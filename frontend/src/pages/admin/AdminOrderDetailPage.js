@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Descriptions, Typography, Spin, Button, Timeline, Image, Space,
+  Typography, Spin, Button, Timeline, Image, Space,
   Select, Input, InputNumber, message, Empty, Grid, Divider, DatePicker, TimePicker, Tag, Alert, Modal,
 } from 'antd';
 import dayjs from 'dayjs';
@@ -11,6 +11,7 @@ import {
   ThunderboltOutlined, UserOutlined, ClockCircleOutlined, DollarOutlined,
   PhoneOutlined, SendOutlined, CheckCircleOutlined,
   EditOutlined, PlusOutlined, DeleteOutlined,
+  InfoCircleOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
@@ -459,6 +460,9 @@ export default function AdminOrderDetailPage() {
   if (!order) return <Empty description={t('adminOrderDetail.orderNotFound')} />;
 
   const isMobile = !screens.md;
+  // Two-column layout kicks in once we have ≥ 1200 px window width
+  // (AntD's `xl` breakpoint, the closest to the requested ~1100 px).
+  const isWide = screens.xl;
   const TERMINAL_STATUSES = ['completed', 'rejected', 'cancelled'];
   const isTerminal = TERMINAL_STATUSES.includes(order.status);
   // With the new flow, `approved` means the customer has already accepted.
@@ -493,15 +497,6 @@ export default function AdminOrderDetailPage() {
     ...pickupStops.filter(s => s.lat && s.lng).map(s => ({ position: [s.lat, s.lng], color: 'green' })),
     ...destStops.filter(s => s.lat && s.lng).map(s => ({ position: [s.lat, s.lng], color: 'red' })),
   ];
-  const renderStopList = (stops) => (
-    stops.length > 1 ? (
-      <ol style={{ margin: 0, paddingLeft: 20 }}>
-        {stops.map((s, i) => (
-          <li key={i}>{s.address || '—'}</li>
-        ))}
-      </ol>
-    ) : (stops[0]?.address || '—')
-  );
 
   // ─── In-modal map state derived from the live edit form ───
   const editActiveList = editActiveStop.type === 'pickup' ? editPickupStops : editDestStops;
@@ -602,10 +597,477 @@ export default function AdminOrderDetailPage() {
   // the last section doesn't hide behind the bar.
   const showSendOfferBar = !isTerminal && (order.status === 'new' || order.status === 'under_review');
 
+  // Extracted so the same JSX can render in either column of the flex layout
+  // (between Order Info and Map on narrow viewports, or in the right column
+  // on wide viewports) without duplicating ~470 lines of markup.
+  const adminActionsSection = (
+    <div style={{ ...sectionStyle, marginBottom: 0 }}>
+      <div style={sectionHeaderStyle}>
+        <SettingOutlined style={{ color: '#8b5cf6', fontSize: 15 }} />
+        <Text style={sectionTitleStyle}>{t('adminOrderDetail.adminActions')}</Text>
+      </div>
+      <div style={{ padding: isMobile ? 16 : 24 }}>
+        {isTerminal && (
+          <Alert
+            type="info"
+            showIcon
+            message={t('adminOrderDetail.lockedTitle')}
+            description={t('adminOrderDetail.lockedDescription', {
+              status: t(`status.${order.status}`),
+            })}
+            style={{ borderRadius: 10, marginBottom: 20 }}
+          />
+        )}
+        {awaitingAcceptance && (
+          <Alert
+            type="warning"
+            showIcon
+            message={t('adminOrderDetail.offerSentTitle')}
+            description={t('adminOrderDetail.offerSentDescription')}
+            style={{ borderRadius: 10, marginBottom: 20 }}
+          />
+        )}
+
+        {/* When customer has accepted, highlight the next logical step */}
+        {order.status === 'approved' && (
+          <div style={{
+            background: 'linear-gradient(135deg, #10b98114 0%, #10b98120 100%)',
+            borderRadius: 14, padding: isMobile ? '14px 16px' : '16px 20px',
+            border: '1px solid #10b98140',
+            marginBottom: 20,
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          }}>
+            <CheckCircleOutlined style={{ color: '#10b981', fontSize: 22, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{
+                fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
+                letterSpacing: -0.1,
+              }}>
+                {t('adminOrderDetail.customerAccepted')}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                {order.customer_accepted_at && t('adminOrderDetail.customerAcceptedAt', {
+                  date: new Date(order.customer_accepted_at).toLocaleString(),
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Assign Service */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <TagOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
+            <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+              {t('adminOrderDetail.assignService')}
+            </Text>
+          </div>
+          <Select
+            style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
+            size={isMobile ? 'large' : 'middle'}
+            value={order.final_service || undefined}
+            placeholder={t('adminOrderDetail.selectFinalService')}
+            onChange={handleCategoryChange}
+            disabled={isTerminal}
+            options={categories.map((c) => ({ value: c.id, label: localized(c.name) }))}
+          />
+        </div>
+
+        <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+        {/* Assign Vehicle */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <CarOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
+            <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+              {t('adminOrderDetail.assignVehicle')}
+            </Text>
+          </div>
+          <Select
+            style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
+            size={isMobile ? 'large' : 'middle'}
+            value={order.assigned_vehicle || undefined}
+            placeholder={t('adminOrderDetail.selectVehicle')}
+            allowClear
+            showSearch
+            filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+            onChange={handleVehicleAssign}
+            disabled={isTerminal}
+            options={vehicleOptions}
+          />
+          {order.assigned_vehicle_detail && (
+            <div style={{
+              marginTop: 10, padding: '12px 14px',
+              background: 'var(--accent-bg)', borderRadius: 12,
+              border: '1px solid var(--accent-bg-strong)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 12,
+                  background: 'var(--accent-bg-strong)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'var(--accent)', fontSize: 18, flexShrink: 0,
+                }}>
+                  <CarOutlined />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {order.assigned_vehicle_detail.name}
+                  </div>
+                  <div style={{
+                    fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2,
+                    display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                  }}>
+                    {order.assigned_vehicle_detail.plate_number && (
+                      <span>
+                        {t('orders.plate')}:{' '}
+                        <span style={{
+                          fontFamily: 'monospace', fontWeight: 700,
+                          color: 'var(--text-secondary)', letterSpacing: 0.5,
+                        }}>
+                          {order.assigned_vehicle_detail.plate_number}
+                        </span>
+                      </span>
+                    )}
+                    {order.assigned_vehicle_detail.price_per_hour && (
+                      <span>{currency.symbol}{order.assigned_vehicle_detail.price_per_hour}/hr</span>
+                    )}
+                    {order.assigned_vehicle_detail.status_display && (
+                      <Tag style={{ margin: 0 }}>{order.assigned_vehicle_detail.status_display}</Tag>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {(() => {
+                const seen = new Set();
+                const imgs = [];
+                if (order.assigned_vehicle_detail.image) {
+                  imgs.push(order.assigned_vehicle_detail.image);
+                  seen.add(order.assigned_vehicle_detail.image);
+                }
+                if (Array.isArray(order.assigned_vehicle_detail.images)) {
+                  order.assigned_vehicle_detail.images.forEach((img) => {
+                    if (img?.image && !seen.has(img.image)) {
+                      imgs.push(img.image);
+                      seen.add(img.image);
+                    }
+                  });
+                }
+                if (!imgs.length) return null;
+                return (
+                  <div style={{ marginTop: 10 }}>
+                    <Image.PreviewGroup>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {imgs.map((src, i) => (
+                          <Image
+                            key={i} width={72} height={72} src={src}
+                            style={{ objectFit: 'cover', borderRadius: 10 }}
+                          />
+                        ))}
+                      </div>
+                    </Image.PreviewGroup>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+
+        <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+        {/* Assign Driver */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <UserOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
+            <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+              {t('adminOrderDetail.assignDriver')}
+            </Text>
+          </div>
+          {!order.assigned_vehicle ? (
+            <Alert
+              type="info"
+              showIcon
+              message={t('adminOrderDetail.assignVehicleFirst')}
+              style={{ borderRadius: 10 }}
+            />
+          ) : (
+            <>
+              <Select
+                style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
+                size={isMobile ? 'large' : 'middle'}
+                value={order.assigned_driver || undefined}
+                placeholder={t('adminOrderDetail.selectDriver')}
+                allowClear
+                showSearch
+                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                onChange={handleDriverAssign}
+                disabled={isTerminal}
+                options={eligibleDrivers.map((d) => ({
+                  value: d.id,
+                  label: `${d.full_name} — ${d.license_number}${d.is_busy ? ' · busy' : ''}`,
+                }))}
+                notFoundContent={t('adminOrderDetail.noEligibleDrivers')}
+              />
+              {order.assigned_driver_detail && (
+                <div style={{
+                  marginTop: 10, padding: '12px 14px',
+                  background: 'var(--accent-bg)', borderRadius: 12,
+                  border: '1px solid var(--accent-bg-strong)',
+                  display: 'flex', alignItems: 'center', gap: 14,
+                }}>
+                  {order.assigned_driver_detail.photo ? (
+                    <img
+                      src={order.assigned_driver_detail.photo}
+                      alt={order.assigned_driver_detail.full_name}
+                      style={{
+                        width: 52, height: 52, borderRadius: '50%',
+                        objectFit: 'cover', flexShrink: 0,
+                        border: '2px solid var(--card-bg)',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                      }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: 52, height: 52, borderRadius: '50%',
+                      background: 'var(--accent-bg-strong)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'var(--accent)', fontSize: 20, flexShrink: 0,
+                    }}>
+                      <UserOutlined />
+                    </div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {order.assigned_driver_detail.full_name}
+                    </div>
+                    <div style={{
+                      fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4,
+                      display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                    }}>
+                      {order.assigned_driver_detail.phone && (
+                        <a
+                          href={`tel:${order.assigned_driver_detail.phone}`}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            color: 'var(--accent)', fontWeight: 600, textDecoration: 'none',
+                          }}
+                        >
+                          <PhoneOutlined style={{ fontSize: 11 }} />
+                          {order.assigned_driver_detail.phone}
+                        </a>
+                      )}
+                      {order.assigned_driver_detail.license_number && (
+                        <span>· {order.assigned_driver_detail.license_number}</span>
+                      )}
+                      {order.assigned_driver_detail.license_categories && (
+                        <Tag style={{ margin: 0 }}>{order.assigned_driver_detail.license_categories}</Tag>
+                      )}
+                      {order.assigned_driver_detail.status_display && (
+                        <Tag style={{ margin: 0 }}>{order.assigned_driver_detail.status_display}</Tag>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+        {/* Scheduled Window */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <ClockCircleOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
+            <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+              {t('adminOrderDetail.scheduledWindow')}
+            </Text>
+          </div>
+          <DatePicker.RangePicker
+            style={{ width: '100%', maxWidth: isMobile ? '100%' : 420, borderRadius: 10 }}
+            size={isMobile ? 'large' : 'middle'}
+            showTime={{ format: 'HH:mm' }}
+            format="YYYY-MM-DD HH:mm"
+            value={[
+              order.scheduled_from ? dayjs(order.scheduled_from) : null,
+              order.scheduled_to ? dayjs(order.scheduled_to) : null,
+            ]}
+            onChange={handleScheduleChange}
+            disabled={isTerminal}
+          />
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
+            {t('adminOrderDetail.scheduleHint')}
+          </div>
+        </div>
+
+        <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+        {/* Set Price */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <DollarOutlined style={{ color: '#10b981', fontSize: 14 }} />
+            <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+              {t('adminOrderDetail.setPrice')}
+            </Text>
+            {order.status === 'new' || order.status === 'under_review' ? (
+              <Tag color="orange" style={{ margin: 0, borderRadius: 6 }}>
+                {t('adminOrderDetail.priceRequiredTag')}
+              </Tag>
+            ) : null}
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <InputNumber
+              style={{ width: isMobile ? '100%' : 200 }}
+              size={isMobile ? 'large' : 'middle'}
+              value={priceDraft ?? undefined}
+              onChange={(val) => setPriceDraft(val === null || val === undefined ? null : Math.round(Number(val)))}
+              min={0}
+              step={10}
+              precision={0}
+              disabled={isTerminal}
+              placeholder={t('adminOrderDetail.priceInputPlaceholder')}
+              prefix={<span style={{ color: 'var(--text-tertiary)' }}>{currency.symbol}</span>}
+            />
+            {showSavePriceButton && (
+              <Button
+                onClick={handlePriceSave}
+                disabled={isTerminal}
+                size={isMobile ? 'large' : 'middle'}
+                style={{
+                  borderRadius: 10, fontWeight: 600,
+                  border: '1px solid var(--border-color)',
+                  ...(isMobile ? { width: '100%', height: 44 } : {}),
+                }}
+              >
+                {t('adminOrderDetail.savePrice')}
+              </Button>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
+            {showSavePriceButton ? t('adminOrderDetail.priceHint') : t('adminOrderDetail.priceHintPreOffer')}
+          </div>
+        </div>
+
+        <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+        {/* Set Priority */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <ThunderboltOutlined style={{ color: '#f59e0b', fontSize: 14 }} />
+            <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+              {t('adminOrderDetail.setPriority')}
+            </Text>
+          </div>
+          <Select
+            style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
+            size={isMobile ? 'large' : 'middle'}
+            value={order.urgency}
+            onChange={handleUrgencyChange}
+            disabled={isTerminal}
+            options={[
+              { value: 'low', label: t('urgency.low') },
+              { value: 'normal', label: t('urgency.normal') },
+              { value: 'high', label: t('urgency.high') },
+              { value: 'urgent', label: t('urgency.urgent') },
+            ]}
+          />
+        </div>
+
+        <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+        {/* Change Status */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <SyncOutlined style={{ color: '#06b6d4', fontSize: 14 }} />
+            <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+              {t('adminOrderDetail.changeStatus')}
+            </Text>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Select
+              style={{ width: isMobile ? '100%' : 200 }}
+              size={isMobile ? 'large' : 'middle'}
+              value={newStatus}
+              onChange={setNewStatus}
+              disabled={isTerminal}
+              options={statusOptionsForOrder}
+            />
+            <Button
+              type="primary"
+              loading={updating}
+              onClick={handleStatusChange}
+              disabled={isTerminal}
+              size={isMobile ? 'large' : 'middle'}
+              style={{
+                background: 'var(--accent)',
+                borderColor: 'var(--accent)',
+                borderRadius: 10,
+                fontWeight: 600,
+                ...(isMobile ? { width: '100%', height: 44 } : {}),
+              }}
+            >
+              {t('adminOrderDetail.updateStatus')}
+            </Button>
+          </div>
+          {awaitingAcceptance && (
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 8 }}>
+              {t('adminOrderDetail.inProgressLockedHint')}
+            </div>
+          )}
+        </div>
+
+        <Divider style={{ borderColor: 'var(--border-color)' }} />
+
+        {/* Admin Comment */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <CommentOutlined style={{ color: '#f59e0b', fontSize: 14 }} />
+            <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+              {t('adminOrderDetail.adminCommentLabel')}
+            </Text>
+            {newStatus === 'rejected' && (
+              <Tag color="red" style={{ margin: 0, borderRadius: 6 }}>
+                {t('adminOrderDetail.required')}
+              </Tag>
+            )}
+          </div>
+          {newStatus === 'rejected' && (
+            <Alert
+              type="warning"
+              showIcon
+              message={t('adminOrderDetail.rejectCommentRequired')}
+              style={{ borderRadius: 10, marginBottom: 10 }}
+            />
+          )}
+          <TextArea
+            rows={3}
+            value={comment || order.admin_comment || ''}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder={t('adminOrderDetail.addComment')}
+            status={newStatus === 'rejected' && !(comment || order.admin_comment || '').trim() ? 'error' : undefined}
+            disabled={isTerminal}
+            style={{ borderRadius: 10 }}
+          />
+          <Button
+            onClick={handleCommentSave}
+            disabled={isTerminal}
+            style={{
+              marginTop: 10, borderRadius: 10,
+              fontWeight: 600, border: '1px solid var(--border-color)',
+            }}
+          >
+            {t('adminOrderDetail.saveComment')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div
       style={{
-        maxWidth: 920,
+        maxWidth: isWide ? 1280 : 920,
         margin: '0 auto',
         paddingBottom: showSendOfferBar ? (isMobile ? 200 : 120) : 0,
       }}
@@ -633,10 +1095,87 @@ export default function AdminOrderDetailPage() {
         <StatusBadge status={order.status} />
       </div>
 
+      {/* Summary strip — surfaces the most-glanced facts so admin doesn't
+          need to scroll into Descriptions on every visit. */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: isMobile ? 8 : 12,
+        marginBottom: isMobile ? 16 : 24,
+        padding: isMobile ? '10px 14px' : '12px 18px',
+        background: 'var(--bg-secondary)',
+        border: '1px solid var(--border-color)',
+        borderRadius: 12,
+        fontSize: 13,
+      }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <UserOutlined style={{ color: 'var(--text-tertiary)' }} />
+          <span style={{
+            fontWeight: 600, color: 'var(--text-primary)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {order.user_detail?.full_name || order.contact_name || '—'}
+          </span>
+        </div>
+        <span style={{ color: 'var(--text-tertiary)' }}>·</span>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <ClockCircleOutlined style={{ color: 'var(--text-tertiary)' }} />
+          <span style={{ color: 'var(--text-primary)' }}>
+            {order.requested_date || '—'}
+            {order.requested_time && (
+              <span style={{ color: 'var(--text-tertiary)', marginLeft: 6 }}>
+                {String(order.requested_time).slice(0, 5)}
+              </span>
+            )}
+          </span>
+        </div>
+        <span style={{ color: 'var(--text-tertiary)' }}>·</span>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <DollarOutlined style={{ color: 'var(--text-tertiary)' }} />
+          <span style={{
+            fontWeight: 600,
+            color: priceIsSet ? 'var(--accent)' : 'var(--text-tertiary)',
+          }}>
+            {priceIsSet
+              ? `${currency.symbol}${Number(order.price).toLocaleString()}`
+              : '—'}
+          </span>
+        </div>
+      </div>
+
+      {/* Two-column section layout on wide screens. Outer flex stacks the
+          left column (Order Info + Map + Images + History) next to the right
+          column (Admin Actions). Each column sizes to its own content so the
+          page scroll matches `max(left, right)` — no extra empty scroll past
+          content. On narrow viewports the layout collapses to a single
+          column and Admin Actions renders in JSX order via the `!isWide`
+          guard inside the left column. */}
+      <div style={{
+        display: 'flex',
+        flexDirection: isWide ? 'row' : 'column',
+        alignItems: 'flex-start',
+        gap: 20,
+      }}>
+      {/* Left column */}
+      <div style={{
+        flex: 1,
+        minWidth: 0,
+        width: isWide ? undefined : '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 20,
+      }}>
+
       {/* Order Info */}
-      <div style={sectionStyle}>
+      <div style={{
+        ...sectionStyle,
+        marginBottom: 0,
+        ...(isWide ? { gridColumn: 1 } : {}),
+      }}>
         <div style={{ ...sectionHeaderStyle, justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <InfoCircleOutlined style={{ color: '#3b82f6', fontSize: 15 }} />
             <Text style={sectionTitleStyle}>{t('adminOrderDetail.orderInfo')}</Text>
             {order.admin_edited_at && (
               <Tag color="gold" style={{ margin: 0, fontSize: 11 }}>
@@ -656,534 +1195,315 @@ export default function AdminOrderDetailPage() {
           )}
         </div>
         <div style={{ padding: isMobile ? 16 : 24 }}>
-          <Descriptions column={isMobile ? 1 : 2} size="small" labelStyle={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>
-            <Descriptions.Item label={t('adminOrderDetail.customer')}>
-              <span style={{ fontWeight: 600 }}>{order.user_detail?.full_name || '—'}</span>
-              <span style={{ color: 'var(--text-tertiary)' }}> ({order.user_detail?.email})</span>
-            </Descriptions.Item>
-            <Descriptions.Item label={t('orders.assigned')}><UrgencyBadge urgency={order.urgency} /></Descriptions.Item>
-            <Descriptions.Item label={t('adminOrderDetail.selectedService')}>
-              {localized(order.selected_service_detail?.name || order.selected_category_detail?.name) || '—'}
-            </Descriptions.Item>
-            <Descriptions.Item label={t('adminOrderDetail.finalService')}>
-              {localized(order.final_service_detail?.name || order.final_category_detail?.name) || '—'}
-            </Descriptions.Item>
-            <Descriptions.Item label={t('adminOrderDetail.suggestedService')}>
-              {localized(order.suggested_service_detail?.name || order.suggested_category_detail?.name) || '—'}
-            </Descriptions.Item>
-            <Descriptions.Item label={t('orders.pickup')} span={isMobile ? 1 : 2}>
-              {renderStopList(pickupStops)}
-            </Descriptions.Item>
-            <Descriptions.Item label={t('orders.destination')} span={isMobile ? 1 : 2}>
-              {destStops.length ? renderStopList(destStops) : '—'}
-            </Descriptions.Item>
+
+          {/* Customer */}
+          <div style={{ paddingBottom: 18, borderBottom: '1px solid var(--border-color)' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
+              textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12,
+            }}>
+              <UserOutlined style={{ color: '#3b82f6', fontSize: 13 }} />
+              {t('adminOrderDetail.customer')}
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontWeight: 700, fontSize: 16, flexShrink: 0,
+              }}>
+                {(order.user_detail?.full_name || '?').slice(0, 1).toUpperCase()}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
+                  {order.user_detail?.full_name || '—'}
+                </div>
+                {order.user_detail?.email && (
+                  <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                    {order.user_detail.email}
+                  </div>
+                )}
+                {((order.contact_name && order.contact_name !== order.user_detail?.full_name) || order.contact_phone) && (
+                  <div style={{
+                    marginTop: 10, paddingTop: 10,
+                    borderTop: '1px dashed var(--border-color)',
+                    display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13,
+                  }}>
+                    {order.contact_name && order.contact_name !== order.user_detail?.full_name && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <UserOutlined style={{ color: 'var(--text-tertiary)', fontSize: 12 }} />
+                        <span style={{ color: 'var(--text-tertiary)' }}>{t('orders.contact')}:</span>
+                        <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{order.contact_name}</span>
+                      </div>
+                    )}
+                    {order.contact_phone && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <PhoneOutlined style={{ color: 'var(--text-tertiary)', fontSize: 12 }} />
+                        <a href={`tel:${order.contact_phone}`} style={{ color: 'var(--accent)', fontWeight: 500 }}>
+                          {order.contact_phone}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Service */}
+          <div style={{ padding: '18px 0', borderBottom: '1px solid var(--border-color)' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
+              textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10,
+            }}>
+              <TagOutlined style={{ color: 'var(--accent)', fontSize: 13 }} />
+              {t('adminOrders.service')}
+            </div>
+            <div style={{ fontSize: 15 }}>
+              {(() => {
+                const finalName = localized(order.final_service_detail?.name || order.final_category_detail?.name);
+                const selectedName = localized(order.selected_service_detail?.name || order.selected_category_detail?.name);
+                const suggestedName = localized(order.suggested_service_detail?.name || order.suggested_category_detail?.name);
+                const primary = finalName || selectedName;
+                if (!primary) return '—';
+                const showOverride = finalName && selectedName && finalName !== selectedName;
+                const showSuggested = suggestedName
+                  && suggestedName !== finalName
+                  && suggestedName !== selectedName;
+                return (
+                  <>
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{primary}</span>
+                    {showOverride && (
+                      <span style={{ color: 'var(--text-tertiary)' }}>{' → '}{selectedName}</span>
+                    )}
+                    {showSuggested && (
+                      <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-tertiary)' }}>
+                        {t('newOrder.suggested')} {suggestedName}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Route */}
+          <div style={{ padding: '18px 0', borderBottom: '1px solid var(--border-color)' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
+              textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14,
+            }}>
+              <EnvironmentOutlined style={{ color: '#10b981', fontSize: 13 }} />
+              {t('newOrder.route')}
+            </div>
+
+            <div style={{
+              position: 'relative', paddingLeft: 22,
+              marginBottom: destStops.length ? 16 : 0,
+            }}>
+              <div style={{
+                position: 'absolute', left: 0, top: 5, width: 12, height: 12,
+                borderRadius: '50%', background: '#10b981',
+                boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.18)',
+              }} />
+              {destStops.length > 0 && (
+                <div style={{
+                  position: 'absolute', left: 5, top: 19, bottom: -16,
+                  width: 2, background: 'var(--border-color)',
+                }} />
+              )}
+              <div style={{
+                fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)',
+                marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em',
+              }}>
+                {t('orders.pickup')}
+              </div>
+              <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>
+                {pickupStops.length > 1 ? (
+                  <ol style={{ margin: 0, paddingLeft: 20 }}>
+                    {pickupStops.map((s, i) => <li key={i}>{s.address || '—'}</li>)}
+                  </ol>
+                ) : (pickupStops[0]?.address || '—')}
+              </div>
+            </div>
+
+            {destStops.length > 0 && (
+              <div style={{ position: 'relative', paddingLeft: 22 }}>
+                <div style={{
+                  position: 'absolute', left: 0, top: 5, width: 12, height: 12,
+                  borderRadius: '50%', background: '#ef4444',
+                  boxShadow: '0 0 0 3px rgba(239, 68, 68, 0.18)',
+                }} />
+                <div style={{
+                  fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)',
+                  marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em',
+                }}>
+                  {t('orders.destination')}
+                </div>
+                <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>
+                  {destStops.length > 1 ? (
+                    <ol style={{ margin: 0, paddingLeft: 20 }}>
+                      {destStops.map((s, i) => <li key={i}>{s.address || '—'}</li>)}
+                    </ol>
+                  ) : (destStops[0]?.address)}
+                </div>
+              </div>
+            )}
+
             {routeDistanceMeters != null && (
-              <Descriptions.Item label={t('adminOrderDetail.routeDistance')} span={isMobile ? 1 : 2}>
-                <span style={{ fontWeight: 600 }}>{formatDistance(routeDistanceMeters)}</span>
+              <div style={{
+                marginTop: 14, padding: '10px 14px',
+                background: 'var(--bg-secondary)', borderRadius: 10,
+                display: 'inline-flex', alignItems: 'center', gap: 10,
+                fontSize: 13,
+              }}>
+                <span style={{
+                  color: 'var(--text-tertiary)', fontSize: 11, fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}>
+                  {t('newOrder.routeDistance')}
+                </span>
+                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {formatDistance(routeDistanceMeters)}
+                </span>
                 {routeDurationSeconds != null && (
-                  <span style={{ color: 'var(--text-tertiary)', marginLeft: 8 }}>
+                  <span style={{ color: 'var(--text-tertiary)' }}>
                     · ~ {formatDuration(routeDurationSeconds)}
                   </span>
                 )}
-              </Descriptions.Item>
+              </div>
             )}
-            <Descriptions.Item label={t('adminOrderDetail.requestedDate')}>{order.requested_date}</Descriptions.Item>
-            <Descriptions.Item label={t('orders.time')}>{order.requested_time || '—'}</Descriptions.Item>
-            <Descriptions.Item label={t('orders.contact')}>{order.contact_name}</Descriptions.Item>
-            <Descriptions.Item label={t('auth.phone')}>{order.contact_phone}</Descriptions.Item>
-            <Descriptions.Item label={t('orders.description')} span={isMobile ? 1 : 2}>
-              {order.description}
-            </Descriptions.Item>
-            {order.cargo_details && (
-              <Descriptions.Item label={t('newOrder.cargoDetails')} span={isMobile ? 1 : 2}>
-                {order.cargo_details}
-              </Descriptions.Item>
-            )}
-            {order.user_note && (
-              <Descriptions.Item label={t('newOrder.notes')} span={isMobile ? 1 : 2}>
-                {order.user_note}
-              </Descriptions.Item>
-            )}
-            <Descriptions.Item label={t('adminOrderDetail.created')}>
-              {new Date(order.created_at).toLocaleString()}
-            </Descriptions.Item>
-            <Descriptions.Item label={t('adminOrderDetail.updated')}>
-              {new Date(order.updated_at).toLocaleString()}
-            </Descriptions.Item>
-          </Descriptions>
-        </div>
-      </div>
+          </div>
 
-      {/* Admin Actions */}
-      <div style={sectionStyle}>
-        <div style={sectionHeaderStyle}>
-          <Text style={sectionTitleStyle}>{t('adminOrderDetail.adminActions')}</Text>
-        </div>
-        <div style={{ padding: isMobile ? 16 : 24 }}>
-          {isTerminal && (
-            <Alert
-              type="info"
-              showIcon
-              message={t('adminOrderDetail.lockedTitle')}
-              description={t('adminOrderDetail.lockedDescription', {
-                status: t(`status.${order.status}`),
-              })}
-              style={{ borderRadius: 10, marginBottom: 20 }}
-            />
-          )}
-          {awaitingAcceptance && (
-            <Alert
-              type="warning"
-              showIcon
-              message={t('adminOrderDetail.offerSentTitle')}
-              description={t('adminOrderDetail.offerSentDescription')}
-              style={{ borderRadius: 10, marginBottom: 20 }}
-            />
-          )}
-
-          {/* The Send-for-Customer-Approval CTA used to live here, but burying
-              it at the top of Admin Actions meant admins had to scroll up
-              from the Price field every time. It's now rendered as a fixed
-              bottom bar at the end of the page so it's always reachable. */}
-
-          {/* When customer has accepted, highlight the next logical step */}
-          {order.status === 'approved' && (
+          {/* Schedule */}
+          <div style={{ padding: '18px 0', borderBottom: '1px solid var(--border-color)' }}>
             <div style={{
-              background: 'linear-gradient(135deg, #10b98114 0%, #10b98120 100%)',
-              borderRadius: 14, padding: isMobile ? '14px 16px' : '16px 20px',
-              border: '1px solid #10b98140',
-              marginBottom: 20,
-              display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
+              textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12,
             }}>
-              <CheckCircleOutlined style={{ color: '#10b981', fontSize: 22, flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 200 }}>
+              <ClockCircleOutlined style={{ color: '#f59e0b', fontSize: 13 }} />
+              {t('adminOrderDetail.schedule')}
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              gap: 10,
+            }}>
+              <div style={{ padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 10 }}>
                 <div style={{
-                  fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
-                  letterSpacing: -0.1,
+                  fontSize: 11, color: 'var(--text-tertiary)',
+                  textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4,
                 }}>
-                  {t('adminOrderDetail.customerAccepted')}
+                  {t('orders.date')}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                  {order.customer_accepted_at && t('adminOrderDetail.customerAcceptedAt', {
-                    date: new Date(order.customer_accepted_at).toLocaleString(),
-                  })}
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {order.requested_date || '—'}
                 </div>
               </div>
+              <div style={{ padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 10 }}>
+                <div style={{
+                  fontSize: 11, color: 'var(--text-tertiary)',
+                  textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4,
+                }}>
+                  {t('orders.time')}
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {order.requested_time ? String(order.requested_time).slice(0, 5) : '—'}
+                </div>
+              </div>
+              <div style={{ padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 10 }}>
+                <div style={{
+                  fontSize: 11, color: 'var(--text-tertiary)',
+                  textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6,
+                }}>
+                  {t('adminOrders.urgencyLabel')}
+                </div>
+                <UrgencyBadge urgency={order.urgency} />
+              </div>
             </div>
-          )}
-
-          {/* Assign Service */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <TagOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
-              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                {t('adminOrderDetail.assignService')}
-              </Text>
-            </div>
-            <Select
-              style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
-              size={isMobile ? 'large' : 'middle'}
-              value={order.final_service || undefined}
-              placeholder={t('adminOrderDetail.selectFinalService')}
-              onChange={handleCategoryChange}
-              disabled={isTerminal}
-              options={categories.map((c) => ({ value: c.id, label: localized(c.name) }))}
-            />
           </div>
 
-          <Divider style={{ borderColor: 'var(--border-color)' }} />
-
-          {/* Assign Vehicle */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <CarOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
-              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                {t('adminOrderDetail.assignVehicle')}
-              </Text>
-            </div>
-            <Select
-              style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
-              size={isMobile ? 'large' : 'middle'}
-              value={order.assigned_vehicle || undefined}
-              placeholder={t('adminOrderDetail.selectVehicle')}
-              allowClear
-              showSearch
-              filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-              onChange={handleVehicleAssign}
-              disabled={isTerminal}
-              options={vehicleOptions}
-            />
-            {order.assigned_vehicle_detail && (
+          {/* Details (description / cargo / user note) */}
+          {(order.description || order.cargo_details || order.user_note) && (
+            <div style={{ padding: '18px 0', borderBottom: '1px solid var(--border-color)' }}>
               <div style={{
-                marginTop: 10, padding: '12px 14px',
-                background: 'var(--accent-bg)', borderRadius: 12,
-                border: '1px solid var(--accent-bg-strong)',
+                display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
+                textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12,
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{
-                    width: 40, height: 40, borderRadius: 12,
-                    background: 'var(--accent-bg-strong)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: 'var(--accent)', fontSize: 18, flexShrink: 0,
-                  }}>
-                    <CarOutlined />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {order.assigned_vehicle_detail.name}
-                    </div>
-                    <div style={{
-                      fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2,
-                      display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-                    }}>
-                      {order.assigned_vehicle_detail.plate_number && (
-                        <span>
-                          {t('orders.plate')}:{' '}
-                          <span style={{
-                            fontFamily: 'monospace', fontWeight: 700,
-                            color: 'var(--text-secondary)', letterSpacing: 0.5,
-                          }}>
-                            {order.assigned_vehicle_detail.plate_number}
-                          </span>
-                        </span>
-                      )}
-                      {order.assigned_vehicle_detail.price_per_hour && (
-                        <span>{currency.symbol}{order.assigned_vehicle_detail.price_per_hour}/hr</span>
-                      )}
-                      {order.assigned_vehicle_detail.status_display && (
-                        <Tag style={{ margin: 0 }}>{order.assigned_vehicle_detail.status_display}</Tag>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {(() => {
-                  const seen = new Set();
-                  const imgs = [];
-                  if (order.assigned_vehicle_detail.image) {
-                    imgs.push(order.assigned_vehicle_detail.image);
-                    seen.add(order.assigned_vehicle_detail.image);
-                  }
-                  if (Array.isArray(order.assigned_vehicle_detail.images)) {
-                    order.assigned_vehicle_detail.images.forEach((img) => {
-                      if (img?.image && !seen.has(img.image)) {
-                        imgs.push(img.image);
-                        seen.add(img.image);
-                      }
-                    });
-                  }
-                  if (!imgs.length) return null;
-                  return (
-                    <div style={{ marginTop: 10 }}>
-                      <Image.PreviewGroup>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {imgs.map((src, i) => (
-                            <Image
-                              key={i} width={72} height={72} src={src}
-                              style={{ objectFit: 'cover', borderRadius: 10 }}
-                            />
-                          ))}
-                        </div>
-                      </Image.PreviewGroup>
-                    </div>
-                  );
-                })()}
+                <CommentOutlined style={{ color: '#8b5cf6', fontSize: 13 }} />
+                {t('adminOrderDetail.details')}
               </div>
-            )}
-          </div>
-
-          <Divider style={{ borderColor: 'var(--border-color)' }} />
-
-          {/* Assign Driver */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <UserOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
-              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                {t('adminOrderDetail.assignDriver')}
-              </Text>
-            </div>
-            {!order.assigned_vehicle ? (
-              <Alert
-                type="info"
-                showIcon
-                message={t('adminOrderDetail.assignVehicleFirst')}
-                style={{ borderRadius: 10 }}
-              />
-            ) : (
-              <>
-                <Select
-                  style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
-                  size={isMobile ? 'large' : 'middle'}
-                  value={order.assigned_driver || undefined}
-                  placeholder={t('adminOrderDetail.selectDriver')}
-                  allowClear
-                  showSearch
-                  filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-                  onChange={handleDriverAssign}
-                  disabled={isTerminal}
-                  options={eligibleDrivers.map((d) => ({
-                    value: d.id,
-                    label: `${d.full_name} — ${d.license_number}${d.is_busy ? ' · busy' : ''}`,
-                  }))}
-                  notFoundContent={t('adminOrderDetail.noEligibleDrivers')}
-                />
-                {order.assigned_driver_detail && (
-                  <div style={{
-                    marginTop: 10, padding: '12px 14px',
-                    background: 'var(--accent-bg)', borderRadius: 12,
-                    border: '1px solid var(--accent-bg-strong)',
-                    display: 'flex', alignItems: 'center', gap: 14,
-                  }}>
-                    {order.assigned_driver_detail.photo ? (
-                      <img
-                        src={order.assigned_driver_detail.photo}
-                        alt={order.assigned_driver_detail.full_name}
-                        style={{
-                          width: 52, height: 52, borderRadius: '50%',
-                          objectFit: 'cover', flexShrink: 0,
-                          border: '2px solid var(--card-bg)',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                        }}
-                      />
-                    ) : (
-                      <div style={{
-                        width: 52, height: 52, borderRadius: '50%',
-                        background: 'var(--accent-bg-strong)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: 'var(--accent)', fontSize: 20, flexShrink: 0,
-                      }}>
-                        <UserOutlined />
-                      </div>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {order.assigned_driver_detail.full_name}
-                      </div>
-                      <div style={{
-                        fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4,
-                        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-                      }}>
-                        {order.assigned_driver_detail.phone && (
-                          <a
-                            href={`tel:${order.assigned_driver_detail.phone}`}
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 4,
-                              color: 'var(--accent)', fontWeight: 600, textDecoration: 'none',
-                            }}
-                          >
-                            <PhoneOutlined style={{ fontSize: 11 }} />
-                            {order.assigned_driver_detail.phone}
-                          </a>
-                        )}
-                        {order.assigned_driver_detail.license_number && (
-                          <span>· {order.assigned_driver_detail.license_number}</span>
-                        )}
-                        {order.assigned_driver_detail.license_categories && (
-                          <Tag style={{ margin: 0 }}>{order.assigned_driver_detail.license_categories}</Tag>
-                        )}
-                        {order.assigned_driver_detail.status_display && (
-                          <Tag style={{ margin: 0 }}>{order.assigned_driver_detail.status_display}</Tag>
-                        )}
-                      </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {order.description && (
+                  <div>
+                    <div style={{
+                      fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)',
+                      textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4,
+                    }}>
+                      {t('orders.description')}
+                    </div>
+                    <div style={{ fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                      {order.description}
                     </div>
                   </div>
                 )}
-              </>
-            )}
-          </div>
-
-          <Divider style={{ borderColor: 'var(--border-color)' }} />
-
-          {/* Scheduled Window */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <ClockCircleOutlined style={{ color: 'var(--accent)', fontSize: 14 }} />
-              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                {t('adminOrderDetail.scheduledWindow')}
-              </Text>
-            </div>
-            <DatePicker.RangePicker
-              style={{ width: '100%', maxWidth: isMobile ? '100%' : 420, borderRadius: 10 }}
-              size={isMobile ? 'large' : 'middle'}
-              showTime={{ format: 'HH:mm' }}
-              format="YYYY-MM-DD HH:mm"
-              value={[
-                order.scheduled_from ? dayjs(order.scheduled_from) : null,
-                order.scheduled_to ? dayjs(order.scheduled_to) : null,
-              ]}
-              onChange={handleScheduleChange}
-              disabled={isTerminal}
-            />
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
-              {t('adminOrderDetail.scheduleHint')}
-            </div>
-          </div>
-
-          <Divider style={{ borderColor: 'var(--border-color)' }} />
-
-          {/* Set Price */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <DollarOutlined style={{ color: '#10b981', fontSize: 14 }} />
-              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                {t('adminOrderDetail.setPrice')}
-              </Text>
-              {order.status === 'new' || order.status === 'under_review' ? (
-                <Tag color="orange" style={{ margin: 0, borderRadius: 6 }}>
-                  {t('adminOrderDetail.priceRequiredTag')}
-                </Tag>
-              ) : null}
-            </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <InputNumber
-                style={{ width: isMobile ? '100%' : 200 }}
-                size={isMobile ? 'large' : 'middle'}
-                value={priceDraft ?? undefined}
-                onChange={(val) => setPriceDraft(val === null || val === undefined ? null : Math.round(Number(val)))}
-                min={0}
-                step={10}
-                precision={0}
-                disabled={isTerminal}
-                placeholder={t('adminOrderDetail.priceInputPlaceholder')}
-                prefix={<span style={{ color: 'var(--text-tertiary)' }}>{currency.symbol}</span>}
-              />
-              {showSavePriceButton && (
-                <Button
-                  onClick={handlePriceSave}
-                  disabled={isTerminal}
-                  size={isMobile ? 'large' : 'middle'}
-                  style={{
-                    borderRadius: 10, fontWeight: 600,
-                    border: '1px solid var(--border-color)',
-                    ...(isMobile ? { width: '100%', height: 44 } : {}),
-                  }}
-                >
-                  {t('adminOrderDetail.savePrice')}
-                </Button>
-              )}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
-              {showSavePriceButton ? t('adminOrderDetail.priceHint') : t('adminOrderDetail.priceHintPreOffer')}
-            </div>
-          </div>
-
-          <Divider style={{ borderColor: 'var(--border-color)' }} />
-
-          {/* Set Priority */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <ThunderboltOutlined style={{ color: '#f59e0b', fontSize: 14 }} />
-              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                {t('adminOrderDetail.setPriority')}
-              </Text>
-            </div>
-            <Select
-              style={{ width: '100%', maxWidth: isMobile ? '100%' : 340 }}
-              size={isMobile ? 'large' : 'middle'}
-              value={order.urgency}
-              onChange={handleUrgencyChange}
-              disabled={isTerminal}
-              options={[
-                { value: 'low', label: t('urgency.low') },
-                { value: 'normal', label: t('urgency.normal') },
-                { value: 'high', label: t('urgency.high') },
-                { value: 'urgent', label: t('urgency.urgent') },
-              ]}
-            />
-          </div>
-
-          <Divider style={{ borderColor: 'var(--border-color)' }} />
-
-          {/* Change Status */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <SyncOutlined style={{ color: '#06b6d4', fontSize: 14 }} />
-              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                {t('adminOrderDetail.changeStatus')}
-              </Text>
-            </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <Select
-                style={{ width: isMobile ? '100%' : 200 }}
-                size={isMobile ? 'large' : 'middle'}
-                value={newStatus}
-                onChange={setNewStatus}
-                disabled={isTerminal}
-                options={statusOptionsForOrder}
-              />
-              <Button
-                type="primary"
-                loading={updating}
-                onClick={handleStatusChange}
-                disabled={isTerminal}
-                size={isMobile ? 'large' : 'middle'}
-                style={{
-                  background: 'var(--accent)',
-                  borderColor: 'var(--accent)',
-                  borderRadius: 10,
-                  fontWeight: 600,
-                  ...(isMobile ? { width: '100%', height: 44 } : {}),
-                }}
-              >
-                {t('adminOrderDetail.updateStatus')}
-              </Button>
-            </div>
-            {awaitingAcceptance && (
-              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 8 }}>
-                {t('adminOrderDetail.inProgressLockedHint')}
+                {order.cargo_details && (
+                  <div>
+                    <div style={{
+                      fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)',
+                      textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4,
+                    }}>
+                      {t('newOrder.cargoDetails')}
+                    </div>
+                    <div style={{ fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                      {order.cargo_details}
+                    </div>
+                  </div>
+                )}
+                {order.user_note && (
+                  <div>
+                    <div style={{
+                      fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)',
+                      textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4,
+                    }}>
+                      {t('newOrder.notes')}
+                    </div>
+                    <div style={{ fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                      {order.user_note}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-
-          <Divider style={{ borderColor: 'var(--border-color)' }} />
-
-          {/* Admin Comment */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <CommentOutlined style={{ color: '#f59e0b', fontSize: 14 }} />
-              <Text style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                {t('adminOrderDetail.adminCommentLabel')}
-              </Text>
-              {newStatus === 'rejected' && (
-                <Tag color="red" style={{ margin: 0, borderRadius: 6 }}>
-                  {t('adminOrderDetail.required')}
-                </Tag>
-              )}
             </div>
-            {newStatus === 'rejected' && (
-              <Alert
-                type="warning"
-                showIcon
-                message={t('adminOrderDetail.rejectCommentRequired')}
-                style={{ borderRadius: 10, marginBottom: 10 }}
-              />
-            )}
-            <TextArea
-              rows={3}
-              value={comment || order.admin_comment || ''}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder={t('adminOrderDetail.addComment')}
-              status={newStatus === 'rejected' && !(comment || order.admin_comment || '').trim() ? 'error' : undefined}
-              disabled={isTerminal}
-              style={{ borderRadius: 10 }}
-            />
-            <Button
-              onClick={handleCommentSave}
-              disabled={isTerminal}
-              style={{
-                marginTop: 10, borderRadius: 10,
-                fontWeight: 600, border: '1px solid var(--border-color)',
-              }}
-            >
-              {t('adminOrderDetail.saveComment')}
-            </Button>
+          )}
+
+          {/* Timestamps footer */}
+          <div style={{
+            paddingTop: 16, fontSize: 11, color: 'var(--text-tertiary)',
+            display: 'flex', flexWrap: 'wrap', gap: 14,
+          }}>
+            <span>{t('adminOrderDetail.created')}: {new Date(order.created_at).toLocaleString()}</span>
+            <span>·</span>
+            <span>{t('adminOrderDetail.updated')}: {new Date(order.updated_at).toLocaleString()}</span>
           </div>
+
         </div>
       </div>
 
+      {!isWide && adminActionsSection}
+
       {/* Map */}
       {mapMarkers.length > 0 && (
-        <div style={sectionStyle}>
+        <div style={{
+          ...sectionStyle,
+          marginBottom: 0,
+          ...(isWide ? { gridColumn: 1 } : {}),
+        }}>
           <div style={sectionHeaderStyle}>
             <EnvironmentOutlined style={{ color: '#10b981', fontSize: 15 }} />
             <Text style={sectionTitleStyle}>{t('adminOrderDetail.locationMap')}</Text>
@@ -1199,7 +1519,11 @@ export default function AdminOrderDetailPage() {
 
       {/* Images */}
       {order.images?.length > 0 && (
-        <div style={sectionStyle}>
+        <div style={{
+          ...sectionStyle,
+          marginBottom: 0,
+          ...(isWide ? { gridColumn: 1 } : {}),
+        }}>
           <div style={sectionHeaderStyle}>
             <PictureOutlined style={{ color: 'var(--accent)', fontSize: 15 }} />
             <Text style={sectionTitleStyle}>{t('adminOrderDetail.uploadedImages')}</Text>
@@ -1224,7 +1548,11 @@ export default function AdminOrderDetailPage() {
 
       {/* Status History */}
       {order.status_history?.length > 0 && (
-        <div style={sectionStyle}>
+        <div style={{
+          ...sectionStyle,
+          marginBottom: 0,
+          ...(isWide ? { gridColumn: 1 } : {}),
+        }}>
           <div style={sectionHeaderStyle}>
             <HistoryOutlined style={{ color: '#06b6d4', fontSize: 15 }} />
             <Text style={sectionTitleStyle}>{t('orders.statusHistory')}</Text>
@@ -1269,6 +1597,16 @@ export default function AdminOrderDetailPage() {
           </div>
         </div>
       )}
+
+      </div>{/* /left column */}
+
+      {isWide && (
+        <div style={{ width: 380, flexShrink: 0 }}>
+          {adminActionsSection}
+        </div>
+      )}
+
+      </div>{/* /outer flex */}
 
       {/* Edit Details Modal */}
       <Modal

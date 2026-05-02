@@ -477,6 +477,8 @@ export const translations = {
     // ── Admin Order Detail ──
     adminOrderDetail: {
       orderInfo: 'Order Information',
+      schedule: 'Schedule',
+      details: 'Details',
       customer: 'Customer',
       selectedCategory: 'Selected Category',
       suggestedCategory: 'Suggested Category',
@@ -1407,6 +1409,8 @@ export const translations = {
 
     adminOrderDetail: {
       orderInfo: 'შეკვეთის ინფორმაცია',
+      schedule: 'გრაფიკი',
+      details: 'დეტალები',
       customer: 'მომხმარებელი',
       selectedCategory: 'არჩეული კატეგორია',
       suggestedCategory: 'შემოთავაზებული კატეგორია',
@@ -2327,6 +2331,8 @@ export const translations = {
 
     adminOrderDetail: {
       orderInfo: 'Информация о заказе',
+      schedule: 'Расписание',
+      details: 'Подробности',
       customer: 'Клиент',
       selectedCategory: 'Выбранная категория',
       suggestedCategory: 'Предложенная категория',

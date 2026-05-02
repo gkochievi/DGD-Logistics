@@ -96,7 +96,7 @@ export default function AdminOrdersPage({ historyMode = false }) {
     }
     const handler = setTimeout(() => fetchOrders(1), 350);
     return () => clearTimeout(handler);
-  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search]); // eslint-disable-line
 
   useRealtimeRefresh(useCallback(() => {
     fetchOrders(pagination.current, { silent: true });
