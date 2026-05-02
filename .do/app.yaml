@@ -1,0 +1,155 @@
+# Digital Ocean App Platform spec for DGD Logistics.
+#
+# Deploy with:
+#   doctl apps create --spec .do/app.yaml
+#   doctl apps update <APP_ID> --spec .do/app.yaml
+#
+# Before first deploy, fill in:
+#   - services[].github.repo  (e.g. "your-org/DGD-Logistics")
+#   - services[].github.branch
+#   - DJANGO_SECRET_KEY value (set via dashboard or `doctl apps update` — keep out of git)
+#
+# Caveats vs. local docker-compose:
+#   - App Platform containers are ephemeral. The local `media_data` volume has no
+#     equivalent — uploaded order images will be lost on each deploy. For prod, switch
+#     Django's DEFAULT_FILE_STORAGE to DO Spaces (django-storages + boto3).
+#   - Static files: Django's `collectstatic` runs in the build, but the backend
+#     container must serve them. Add WhiteNoise to MIDDLEWARE, or front them via a
+#     CDN. Spec below assumes WhiteNoise.
+
+name: dgd-logistics
+region: fra  # change to your preferred region (nyc, sfo, ams, sgp, etc.)
+
+# ---------------------------------------------------------------------------
+# Managed Postgres — bound into the backend service via ${db.*} vars below.
+# ---------------------------------------------------------------------------
+databases:
+  - name: db
+    engine: PG
+    version: "16"
+    production: false      # bump to true (and pick a paid size) for prod
+    cluster_name: dgd-pg
+
+# ---------------------------------------------------------------------------
+# Backend: Django + Gunicorn, built from backend/Dockerfile
+# ---------------------------------------------------------------------------
+services:
+  - name: backend
+    dockerfile_path: backend/Dockerfile
+    source_dir: backend
+    github:
+      repo: REPLACE_WITH_GITHUB_OWNER/REPLACE_WITH_REPO_NAME
+      branch: main
+      deploy_on_push: true
+    http_port: 8000
+    instance_count: 1
+    instance_size_slug: basic-xxs   # bump for prod (e.g. professional-xs)
+
+    run_command: >-
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+
+    health_check:
+      http_path: /api/categories/
+      initial_delay_seconds: 20
+      period_seconds: 15
+
+    # Routes handled by the backend. Everything else falls through to the
+    # static_sites entry below (React SPA).
+    routes:
+      - path: /api
+      - path: /django-admin
+      - path: /staticfiles
+      - path: /media
+
+    envs:
+      # --- Postgres (bound from the managed `db` component above) ---
+      - key: POSTGRES_DB
+        value: ${db.DATABASE}
+        scope: RUN_TIME
+      - key: POSTGRES_USER
+        value: ${db.USERNAME}
+        scope: RUN_TIME
+      - key: POSTGRES_PASSWORD
+        value: ${db.PASSWORD}
+        scope: RUN_TIME
+        type: SECRET
+      - key: POSTGRES_HOST
+        value: ${db.HOSTNAME}
+        scope: RUN_TIME
+      - key: POSTGRES_PORT
+        value: ${db.PORT}
+        scope: RUN_TIME
+      - key: POSTGRES_SSLMODE
+        value: require
+        scope: RUN_TIME
+      - key: DATABASE_URL
+        value: ${db.DATABASE_URL}
+        scope: RUN_TIME
+        type: SECRET
+
+      # --- Django ---
+      - key: DJANGO_SECRET_KEY
+        # Set the real value in the dashboard or via `doctl apps update`.
+        # Leaving as a placeholder marker keeps it out of git.
+        value: REPLACE_ME_VIA_DASHBOARD
+        scope: RUN_TIME
+        type: SECRET
+      - key: DJANGO_DEBUG
+        value: "False"
+        scope: RUN_TIME
+      - key: DJANGO_ALLOWED_HOSTS
+        value: ${APP_DOMAIN},.ondigitalocean.app
+        scope: RUN_TIME
+
+      # --- JWT ---
+      - key: JWT_ACCESS_TOKEN_LIFETIME_MINUTES
+        value: "60"
+        scope: RUN_TIME
+      - key: JWT_REFRESH_TOKEN_LIFETIME_DAYS
+        value: "7"
+        scope: RUN_TIME
+
+      # --- CORS (locked to the deployed origin) ---
+      - key: CORS_ALLOW_ALL_ORIGINS
+        value: "False"
+        scope: RUN_TIME
+      - key: CORS_ALLOWED_ORIGINS
+        value: ${APP_URL}
+        scope: RUN_TIME
+
+# ---------------------------------------------------------------------------
+# Frontend: React SPA, built by App Platform and served from its CDN.
+# REACT_APP_* must be BUILD_TIME — CRA inlines them into the bundle.
+# ---------------------------------------------------------------------------
+static_sites:
+  - name: frontend
+    source_dir: frontend
+    github:
+      repo: REPLACE_WITH_GITHUB_OWNER/REPLACE_WITH_REPO_NAME
+      branch: main
+      deploy_on_push: true
+    build_command: npm ci && npm run build
+    output_dir: build
+    index_document: index.html
+    # SPA fallback so client-side routes resolve to index.html
+    catchall_document: index.html
+
+    envs:
+      - key: REACT_APP_API_URL
+        value: ${APP_URL}/api
+        scope: BUILD_TIME
+      - key: REACT_APP_NOTIFICATION_POLL_MS
+        value: "15000"
+        scope: BUILD_TIME
+
+    # No `routes:` block → static_sites act as the catch-all when service
+    # routes (/api, /django-admin, /staticfiles, /media) don't match.
+
+# ---------------------------------------------------------------------------
+# Optional: custom domain. Uncomment and set after pointing DNS at the app.
+# ---------------------------------------------------------------------------
+# domains:
+#   - domain: dgd-logistics.example.com
+#     type: PRIMARY
